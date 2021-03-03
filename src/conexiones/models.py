@@ -31,6 +31,7 @@ class Conexion(models.Model):
         ('API', 'API')
     )
     id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=100, unique=True)
     conexion_type = models.CharField(max_length=10, choices=CONEXION_TYPE_CHOICES)
     host = models.CharField(max_length=100)
     port = models.PositiveIntegerField()
@@ -135,7 +136,7 @@ class GAView(models.Model):
         ('API', 'API')
     )
     id = models.AutoField(primary_key=True)
-    nombre = models.CharField(max_length=100)
+    nombre = models.CharField(max_length=100, unique=True)
     conexion = models.ForeignKey(Conexion, on_delete=models.DO_NOTHING)
     columns = models.TextField(validators=[validate_json])
     view_type = models.CharField(max_length=10, choices=VIEW_TYPE_CHOICES)
@@ -149,7 +150,7 @@ class GAView(models.Model):
             inspector = inspect(engine)
             columns = inspector.get_columns(conexion.table)
             self.columns = json.dumps([columns['name'] for columns in columns])
-        if self.view_type == 'API':
+        elif self.view_type == 'API':
             f = lambda d: repr(d)[0] in '{[' and sum(
                 [[str(k)] + ['%s.' % k + q for q in f(v)] for k, v in (enumerate, dict.items)['{' < repr(d)](d)],
                 []) or []
