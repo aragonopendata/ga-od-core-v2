@@ -25,16 +25,24 @@ def validate_json(value: str):
             )
 
 
-class ConexionDB(models.Model):
+class Conexion(models.Model):
+    CONEXION_TYPE_CHOICES = (
+        ('DB', 'DB'),
+        ('API', 'API')
+    )
+    id = models.AutoField(primary_key=True)
+    conexion_type = models.CharField(max_length=10, choices=CONEXION_TYPE_CHOICES)
+    host = models.CharField(max_length=100)
+    port = models.PositiveIntegerField()
+
+
+class ConexionDB(Conexion):
     DB_TYPE_CHOICES = (
         ('postgresql+psycopg2', 'PostgreSQL'),
         ('mysql+mysqlconnector', 'MySQL'),
         ('oracle+cx_oracle', 'Oracle'),
     )
 
-    id = models.AutoField(primary_key=True)
-    host = models.CharField(max_length=100)
-    port = models.PositiveIntegerField()
     db_type = models.CharField(max_length=100, choices=DB_TYPE_CHOICES)
     username = models.CharField(max_length=100)
     password = models.CharField(max_length=100)
@@ -62,12 +70,13 @@ class ConexionDB(models.Model):
                 raise error
 
     def save(self, *args, **kwargs):
+        self.conexion_type = 'DB'
         self.sqla_string = '{db_type}://{username}:{password}@{host}:{port}/{database}'.format(**vars(self))
         self.full_clean()
         super(ConexionDB, self).save(*args, **kwargs)
 
 
-class ConexionAPI(models.Model):
+class ConexionAPI(Conexion):
     REST_OPERATION_CHOICES = (
         ('GET', 'GET'),
         ('POST', 'POST'),
@@ -75,9 +84,6 @@ class ConexionAPI(models.Model):
         ('DELETE', 'DELETE'),
     )
 
-    id = models.AutoField(primary_key=True)
-    host = models.CharField(max_length=100)
-    port = models.PositiveIntegerField(default=80)
     endpoint = models.CharField(max_length=200)
     url = models.CharField(max_length=500)
     method = models.CharField(max_length=10, choices=REST_OPERATION_CHOICES)
@@ -89,7 +95,7 @@ class ConexionAPI(models.Model):
 
     def clean(self):
         auth = None
-        if self.username is not '' and self.password is not '':
+        if self.username != '' and self.password != '':
             auth = (self.username, self.password)
 
         error = None
@@ -117,6 +123,7 @@ class ConexionAPI(models.Model):
                 raise error
 
     def save(self, *args, **kwargs):
+        self.conexion_type = 'API'
         self.url = 'http://{host}:{port}{endpoint}'.format(**vars(self))
         self.full_clean()
         super(ConexionAPI, self).save(*args, **kwargs)
