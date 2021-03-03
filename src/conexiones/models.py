@@ -9,6 +9,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from requests.exceptions import RequestException
 
+# TODO: Add ERROR and DEBUG logs
+
 logger = logging.getLogger(__name__)
 
 
