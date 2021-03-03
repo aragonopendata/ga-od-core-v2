@@ -1,16 +1,18 @@
 import json
 import logging
+import requests
 
 from django.core.validators import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
+from requests.exceptions import RequestException
 
 logger = logging.getLogger(__name__)
 
 
-def validate_connect_args(value: str):
+def validate_json(value: str):
     if value is not None:
         try:
             json.loads(value)
@@ -36,7 +38,7 @@ class ConexionDB(models.Model):
     password = models.CharField(max_length=100)
     database = models.CharField(max_length=100)
     table = models.CharField(max_length=100)
-    connect_args = models.TextField(default='{}', validators=[validate_connect_args])
+    connect_args = models.TextField(default='{}', validators=[validate_json])
     sqla_string = models.CharField(max_length=500, null=True)
 
     def clean(self):
@@ -61,3 +63,58 @@ class ConexionDB(models.Model):
         self.sqla_string = '{db_type}://{username}:{password}@{host}:{port}/{database}'.format(**vars(self))
         self.full_clean()
         super(ConexionDB, self).save(*args, **kwargs)
+
+
+class ConexionAPI(models.Model):
+    REST_OPERATION_CHOICES = (
+        ('GET', 'GET'),
+        ('POST', 'POST'),
+        ('PUT', 'PUT'),
+        ('DELETE', 'DELETE'),
+    )
+
+    id = models.AutoField(primary_key=True)
+    host = models.CharField(max_length=100)
+    port = models.PositiveIntegerField(default=80)
+    endpoint = models.CharField(max_length=200)
+    url = models.CharField(max_length=500)
+    method = models.CharField(max_length=10, choices=REST_OPERATION_CHOICES)
+    params = models.TextField(default='{}', validators=[validate_json])
+    headers = models.TextField(default='{"Content-Type": "application/json"}', validators=[validate_json])
+    data = models.TextField(default='{}', validators=[validate_json])
+    username = models.CharField(max_length=100, blank=True)
+    password = models.CharField(max_length=100, blank=True)
+
+    def clean(self):
+        auth = None
+        if self.username is not '' and self.password is not '':
+            auth = (self.username, self.password)
+
+        error = None
+        try:
+            r = requests.request(url=self.url, method=self.method, params=json.loads(self.params),
+                                 data=json.loads(self.data), headers=json.loads(self.headers), auth=auth)
+            if not r.ok:
+                error = ValidationError(
+                    _('%(url)s request error.'),
+                    params={'url': self.url}
+                )
+            else:
+                r.json()
+        except RequestException:
+            error = ValidationError(
+                _('Error establishing connection with URL %(url)s.'),
+                params={'url': self.url}
+            )
+        except ValueError:
+            error = ValidationError(
+                _('Response is not JSON serializable.')
+            )
+        finally:
+            if error is not None:
+                raise error
+
+    def save(self, *args, **kwargs):
+        self.url = 'http://{host}:{port}{endpoint}'.format(**vars(self))
+        self.full_clean()
+        super(ConexionAPI, self).save(*args, **kwargs)
