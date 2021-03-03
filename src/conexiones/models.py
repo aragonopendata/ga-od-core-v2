@@ -1,13 +1,13 @@
 import json
 import logging
-import requests
 
+import requests
 from django.core.validators import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from sqlalchemy import create_engine
-from sqlalchemy.exc import SQLAlchemyError
 from requests.exceptions import RequestException
+from sqlalchemy import create_engine, inspect
+from sqlalchemy.exc import SQLAlchemyError
 
 # TODO: Add ERROR and DEBUG logs
 
@@ -127,3 +127,38 @@ class ConexionAPI(Conexion):
         self.url = 'http://{host}:{port}{endpoint}'.format(**vars(self))
         self.full_clean()
         super(ConexionAPI, self).save(*args, **kwargs)
+
+
+class GAView(models.Model):
+    VIEW_TYPE_CHOICES = (
+        ('DB', 'DB'),
+        ('API', 'API')
+    )
+    id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=100)
+    conexion = models.ForeignKey(Conexion, on_delete=models.DO_NOTHING)
+    columns = models.TextField(validators=[validate_json])
+    view_type = models.CharField(max_length=10, choices=VIEW_TYPE_CHOICES)
+
+    def save(self, *args, **kwargs):
+        self.view_type = self.conexion.conexion_type
+        if self.view_type == 'DB':
+            conexion = ConexionDB.objects.get(id=self.conexion.id)
+            sqla_string = conexion.sqla_string
+            engine = create_engine(sqla_string)
+            inspector = inspect(engine)
+            columns = inspector.get_columns(conexion.table)
+            self.columns = json.dumps([columns['name'] for columns in columns])
+        if self.view_type == 'API':
+            f = lambda d: repr(d)[0] in '{[' and sum(
+                [[str(k)] + ['%s.' % k + q for q in f(v)] for k, v in (enumerate, dict.items)['{' < repr(d)](d)],
+                []) or []
+            conexion = ConexionAPI.objects.get(id=self.conexion.id)
+            auth = None
+            if conexion.username != '' and conexion.password != '':
+                auth = (conexion.username, conexion.password)
+            r = requests.request(url=conexion.url, method=conexion.method, params=json.loads(conexion.params),
+                                 data=json.loads(conexion.data), headers=json.loads(conexion.headers), auth=auth)
+            columns = f(r.json())
+            self.columns = json.dumps(columns)
+        super(GAView, self).save(*args, **kwargs)

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import ConexionDB, ConexionAPI
+from .models import ConexionDB, ConexionAPI, GAView
 
 
 class ConexionDBSerializer(serializers.ModelSerializer):
@@ -15,3 +15,10 @@ class ConexionAPISerializer(serializers.ModelSerializer):
         model = ConexionAPI
         read_only_fields = ['id', 'conexion_type']
         exclude = ['url']
+
+
+class GAViewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GAView
+        fields = '__all__'
+        read_only_fields = ['id', 'view_type', 'columns']
