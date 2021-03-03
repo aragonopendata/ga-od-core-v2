@@ -5,6 +5,7 @@ from django.core.validators import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +35,27 @@ class ConexionDB(models.Model):
     username = models.CharField(max_length=100)
     password = models.CharField(max_length=100)
     database = models.CharField(max_length=100)
-    sqla_string = models.CharField(max_length=500, null=True)
+    table = models.CharField(max_length=100)
     connect_args = models.TextField(default='{}', validators=[validate_connect_args])
+    sqla_string = models.CharField(max_length=500, null=True)
 
     def clean(self):
+        error = None
         engine = create_engine(self.sqla_string, connect_args=json.loads(self.connect_args))
         try:
-            with engine.connect() as connection:
-                r = connection.execute('select 1 as is_alive;')
-        except Exception:
-            raise ValidationError(
+            if not engine.dialect.has_table(engine, self.table):
+                error = ValidationError(
+                    _('Table %(table)s does not exist.'),
+                    params={'table': self.table}
+                )
+        except SQLAlchemyError:
+            error = ValidationError(
                 _('Error establishing connection with string %(sqla_string)s.'),
                 params={'sqla_string': self.sqla_string}
             )
+        finally:
+            if error is not None:
+                raise error
 
     def save(self, *args, **kwargs):
         self.sqla_string = '{db_type}://{username}:{password}@{host}:{port}/{database}'.format(**vars(self))
