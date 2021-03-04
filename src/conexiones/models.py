@@ -117,7 +117,8 @@ class ConexionAPI(Conexion):
             )
         except ValueError:
             error = ValidationError(
-                _('Response is not JSON serializable.')
+                _('Response from %(url)s is not JSON serializable.'),
+                params={'url': self.url}
             )
         finally:
             if error is not None:
