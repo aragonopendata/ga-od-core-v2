@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'conexiones',
+    'gaodcore',
     'drf_yasg',
     'rest_framework',
 ]
@@ -54,7 +54,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'gaodcore.urls'
+ROOT_URLCONF = 'gaodcore_project.urls'
 
 TEMPLATES = [
     {
@@ -72,7 +72,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'gaodcore.wsgi.application'
+WSGI_APPLICATION = 'gaodcore_project.wsgi.application'
 
 
 # Database
@@ -131,5 +131,47 @@ STATIC_URL = '/static/'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ),
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser'
+    ],
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+        'rest_framework_yaml.renderers.YAMLRenderer',
+        'rest_framework_xml.renderers.XMLRenderer',
+        'drf_renderer_xlsx.renderers.XLSXRenderer',
+        'rest_framework_csv.renderers.CSVRenderer',
+
+    ),
+}
+
+
+LOGGING = {
+    'disable_existing_loggers': False,
+    'version': 1,
+    'handlers': {
+        'console': {
+            # logging handler that outputs log messages to terminal
+            'class': 'logging.StreamHandler',
+            'level': 'DEBUG', # message level to be written to console
+        },
+    },
+    'loggers': {
+        '': {
+            # this sets root level logger to log debug and higher level
+            # logs to console. All other loggers inherit settings from
+            # root level logger.
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': False, # this tells logger to send logging message
+                                # to its parent (will send if set to True)
+        },
+        'django.db': {
+            # django also has database level logging
+            'level': 'DEBUG',
+        },
+    },
 }
