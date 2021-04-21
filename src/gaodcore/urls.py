@@ -1,40 +1,20 @@
-"""gaodcore URL Configuration
+from rest_framework import routers
+from django.urls import path
+from rest_framework.urlpatterns import format_suffix_patterns
 
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/3.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
-# from django.contrib import admin
-from django.urls import path, re_path, include
-from drf_yasg import openapi
-from drf_yasg.views import get_schema_view
-from rest_framework import permissions
+from gaodcore.views import ConnectorConfigView, ResourceConfigView, DownloadView, ValidatorView, ShowColumnsView, \
+    ResourcesView
 
-schema_view = get_schema_view(
-    openapi.Info(
-        title='GA OD Core API',
-        default_version='v1',
-        description='GA OD Core API Swagger',
-        terms_of_service='https://opendata.aragon.es/terminos/',
-        contact=openapi.Contact(email='opendata@aragon.es'),
-        license=openapi.License(name='EUPL License'),
-    ),
-    public=True,
-    permission_classes=(permissions.AllowAny,),
-)
+router = routers.SimpleRouter()
+router.register(r'connector-config', ConnectorConfigView)
+router.register(r'resource-config', ResourceConfigView)
 
-urlpatterns = [
-    # path('admin/', admin.site.urls),
-    re_path(r'^docs/swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
-    re_path(r'^docs/swagger/$', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
-    path('v1/conexiones/', include('conexiones.urls')),
-]
+
+urlpatterns = format_suffix_patterns([
+    *router.urls,
+    path('views', ResourcesView.as_view()),
+    path('validator', ValidatorView.as_view()),
+    path('download', DownloadView.as_view()),
+    path('preview', DownloadView.as_view()),
+    path('show_columns', ShowColumnsView.as_view()),
+], allowed=['json', 'xml', 'csv', 'yaml', 'xlsx'])
