@@ -1,4 +1,5 @@
 import json
+from json.decoder import JSONDecodeError
 from typing import List
 
 from django.core.serializers.json import DjangoJSONEncoder
@@ -90,8 +91,8 @@ class DownloadView(XLSXFileMixin, APIView):
                               type=openapi.TYPE_NUMBER),
             openapi.Parameter('view_id', openapi.IN_QUERY, description="Alias of resource_id.",
                               type=openapi.TYPE_NUMBER),
-            openapi.Parameter('filters', openapi.IN_QUERY, description='matching conditions to select, e.g '
-                                                                       '{“key1”: “a”, “key2”: “b”}.',
+            # openapi.Parameter('filters', openapi.IN_QUERY, description='matching conditions to select, e.g '
+            #                                                            '{“key1”: “a”, “key2”: “b”}.',
                               type=openapi.TYPE_ARRAY),
             openapi.Parameter('offset', openapi.IN_QUERY, description="Offset this number of rows.",
                               type=openapi.TYPE_INTEGER),
@@ -116,11 +117,16 @@ class DownloadView(XLSXFileMixin, APIView):
 
         fields = request.query_params.getlist('fields') or request.query_params.getlist('columns', [])
 
+        try:
+            filters = json.loads(request.query_params.get('filters'))
+        except JSONDecodeError:
+            raise ValidationError('Invalid JSON.', 400)
+
         resource_config = ResourceConfig.objects.select_related().get(
             id=resource_id, enabled=True, connector_config__enabled=True)
         data = get_resource_data(uri=resource_config.connector_config.uri,
                                  object_location=resource_config.object_location,
-                                 filter_by={},
+                                 filters={},
                                  offset=offset,
                                  fields=fields)
 
