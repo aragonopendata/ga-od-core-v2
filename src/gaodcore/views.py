@@ -93,7 +93,7 @@ class DownloadView(XLSXFileMixin, APIView):
                               type=openapi.TYPE_NUMBER),
             # openapi.Parameter('filters', openapi.IN_QUERY, description='matching conditions to select, e.g '
             #                                                            '{“key1”: “a”, “key2”: “b”}.',
-                              type=openapi.TYPE_ARRAY),
+            #                   type=openapi.TYPE_ARRAY),
             openapi.Parameter('offset', openapi.IN_QUERY, description="Offset this number of rows.",
                               type=openapi.TYPE_INTEGER),
             openapi.Parameter('fields', openapi.IN_QUERY,
