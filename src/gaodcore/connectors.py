@@ -47,7 +47,7 @@ def validate_resource(*, uri: str, object_location: Optional[str]):
 
     try:
         return get_resource_data(uri=uri, object_location=object_location, filters={},
-                          fields=[], cache=False)
+                                 fields=[], cache=False)
     except sqlalchemy.exc.NoSuchTableError as err:
         raise NoObjectError(str(err))
     except sqlalchemy.exc.OperationalError as err:
