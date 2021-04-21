@@ -124,7 +124,7 @@ class DownloadView(XLSXFileMixin, APIView):
                                  offset=offset,
                                  fields=fields)
 
-        return Response(get_return_list(data), content_type='text/csv')
+        return Response(get_return_list(data))
 
     def get_serializer(self, *args, **kwargs):
         ser = DictSerializer(*args, **kwargs, data=self.response.data)

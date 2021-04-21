@@ -46,7 +46,7 @@ def validate_resource(*, uri: str, object_location: Optional[str]):
     Model = Table(object_location, connector_conf.meta_data, autoload=True, autoload_with=connector_conf.engine)
 
     try:
-        return get_resource_data(uri=uri, object_location=object_location, filter_by={},
+        return get_resource_data(uri=uri, object_location=object_location, filters={},
                           fields=[], cache=False)
     except sqlalchemy.exc.NoSuchTableError as err:
         raise NoObjectError(str(err))
