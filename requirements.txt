@@ -9,7 +9,6 @@ djangorestframework-yaml
 djangorestframework-xml
 drf-renderer-xlsx
 djangorestframework-csv
-django-rest-witchcraft
 pytest-django
 pytest-docker-fixtures
 pytest-docker-fixtures[mysql]

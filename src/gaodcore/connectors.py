@@ -2,15 +2,24 @@ from dataclasses import dataclass
 from typing import Optional, Dict, List, Any
 from urllib.parse import urlparse
 
+import sqlalchemy.exc
 from sqlalchemy import create_engine, Table, MetaData
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import sessionmaker, load_only
+from sqlalchemy.orm import sessionmaker
 
 DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql', 'oracle'}
 HTTP_SCHEMAS = {'http', 'https'}
 
 
 class NotImplementedSchemaError(Exception):
+    pass
+
+
+class DriverConnectionError(Exception):
+    pass
+
+
+class NoObjectError(Exception):
     pass
 
 
@@ -32,13 +41,26 @@ def get_resource_columns(uri: str, object_location: Optional[str], cache=True):
     ]
 
 
-def get_resource_data(*, uri: str, object_location: Optional[str], filter_by: Dict[str, str], fields: List[str], cache: bool=True) -> List[
-    Dict[str, Any]]:
+def validate_resource(*, uri: str, object_location: Optional[str]):
+    connector_conf = get_connector_conf(uri=uri, cache=False)
+    Model = Table(object_location, connector_conf.meta_data, autoload=True, autoload_with=connector_conf.engine)
+
+    try:
+        return get_resource_data(uri=uri, object_location=object_location, filter_by={},
+                          fields=[], cache=False)
+    except sqlalchemy.exc.NoSuchTableError as err:
+        raise NoObjectError(str(err))
+    except sqlalchemy.exc.OperationalError as err:
+        raise DriverConnectionError(str(err))
+
+
+def get_resource_data(*, uri: str, object_location: Optional[str], filters: Dict[str, str], fields: List[str], offset: int = 0,
+                      cache: bool = True) -> List[Dict[str, Any]]:
     connector_conf = get_connector_conf(uri=uri, cache=cache)
     Model = Table(object_location, connector_conf.meta_data, autoload=True, autoload_with=connector_conf.engine)
     columns = [column for column in Model.columns if not fields or column.name in fields]
     session = connector_conf.session_maker()
-    data = session.query(Model).with_entities(*columns).filter_by(**filter_by).all()
+    data = session.query(Model).with_entities(*columns).filter_by(**filters).offset(offset).all()
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
     # FIXME: XML serializer fail if returns a generator :(
@@ -48,8 +70,11 @@ def get_resource_data(*, uri: str, object_location: Optional[str], filter_by: Di
 
 
 def validate_uri(uri: str) -> None:
-    with get_connector_conf(uri).engine.connect() as _:
-        pass
+    try:
+        with get_connector_conf(uri, cache=False).engine.connect() as _:
+            pass
+    except sqlalchemy.exc.OperationalError as err:
+        raise DriverConnectionError(str(err))
 
 
 def get_connector_conf(uri: str, cache: bool = True) -> ConnectorConf:

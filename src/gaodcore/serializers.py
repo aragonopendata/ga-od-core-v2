@@ -5,7 +5,7 @@ from rest_framework import serializers
 from rest_framework.fields import Field
 
 from gaodcore import connectors
-from gaodcore.connectors import get_resource_data
+from gaodcore.connectors import NotImplementedSchemaError, DriverConnectionError, validate_resource, NoObjectError
 from gaodcore.models import ConnectorConfig, ResourceConfig
 
 
@@ -19,8 +19,8 @@ class ConnectorConfigSerializer(serializers.ModelSerializer):
     def validate_uri(uri: str):
         try:
             connectors.validate_uri(uri)
-        except Exception as err:  # TODO: improve bare exception
-            raise ValidationError(str(err))
+        except (NotImplementedSchemaError, DriverConnectionError) as err:
+            raise ValidationError(str(err), 400)
         return uri
 
 
@@ -31,10 +31,7 @@ class ResourceConfigSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def validate(self, data):
-        try:
-            get_resource_data(uri=data['connector_config'].uri, object_location=data['object_location'], filter_by={}, fields=[])
-        except Exception as err:  # TODO: improve bare exception
-            raise ValidationError(str(err))
+        validate_resource(uri=data['connector_config'].uri, object_location=data['object_location'])
         return data
 
 
