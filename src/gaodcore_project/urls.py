@@ -37,4 +37,5 @@ urlpatterns = [
     re_path(r'^docs/swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     re_path(r'^docs/swagger/$', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('gaodcore/', include('gaodcore.urls')),
+    path('apireader/', include('api_reader.urls')),
 ]
