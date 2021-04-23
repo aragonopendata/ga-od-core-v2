@@ -9,11 +9,7 @@ djangorestframework-yaml
 djangorestframework-xml
 drf-renderer-xlsx
 djangorestframework-csv
-pytest-django
-pytest-docker-fixtures
-pytest-docker-fixtures[mysql]
-pytest-docker-fixtures[pg]
-pytest-rerunfailures
+gunicorn
 
 # Modules BBDD
 SQLAlchemy~=1.4
