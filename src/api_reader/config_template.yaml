@@ -1,3 +1,13 @@
-usuario : 
-contr : 
-customerId : 
+transporte_aragon:
+  usuario : 
+  contr : 
+  customerId : 
+
+  host_aragon : https://api.masternautconnect.com/
+  api_base_url : connect-webservices/services/public/v1/customer/{customerId}/
+
+  api_list_vehicles : vehicle
+  api_list_driver : driver
+  api_live_position_latest : tracking/live/latest
+  api_vehicle_journey_history_latest : tracking/history/vehicle/latest?fromDateTime={fromDateTime}&vehicleId={vehicleIds}
+  api_distance_travelled : tracking/journey/summary?startDate={startDate}&endDate={endDate}&vehicleIds={vehicleIds}

@@ -29,17 +29,17 @@ def get_return_list(data: List[dict]) -> ReturnList:
 
     return return_list
 
-def get_config(campo):
+def get_config(campo1,campo2):
     with open(r'./api_reader/config.yaml') as file:
     # The FullLoader parameter handles the conversion from YAML
     # scalar values to Python the dictionary format
         conf = yaml.load(file, Loader=yaml.FullLoader)
-        return conf[campo]
+        return conf[campo1][campo2]
 
 def get_vehicles():
-    url='https://api.masternautconnect.com/connect-webservices/services/public/v1/customer/{customerId}/vehicle'
-    r = requests.get(url.format(customerId=get_config('customerId')), 
-                                    auth=(get_config('usuario'), get_config('contr')))
+    url = get_config('transporte_aragon','host_aragon') + get_config('transporte_aragon','api_base_url') + get_config('transporte_aragon','api_list_vehicles')
+    r = requests.get(url.format(customerId=get_config('transporte_aragon','customerId')), 
+                                    auth=(get_config('transporte_aragon','usuario'), get_config('transporte_aragon','contr')))
     return r
 
 # Create your views here.
@@ -47,7 +47,6 @@ class ListVehicleView(APIView):
     """
     List all snippets, or create a new snippet.
     """
-
     def get(self, request: Request, format=None):    
         data = pd.json_normalize(get_vehicles().json()['items']).replace({np.nan:None}).to_dict('records')
         return Response(get_return_list(data))
@@ -61,11 +60,10 @@ class ListDriverView(APIView):
     """
     List all snippets, or create a new snippet.
     """
-
     def get(self, request: Request, format=None):
-        url='https://api.masternautconnect.com/connect-webservices/services/public/v1/customer/{customerId}/driver'
-        r = requests.get(url.format(customerId=get_config('customerId')), 
-                                    auth=(get_config('usuario'), get_config('contr')))
+        url = get_config('transporte_aragon','host_aragon') + get_config('transporte_aragon','api_base_url') + get_config('transporte_aragon','api_list_driver')
+        r = requests.get(url.format(customerId=get_config('transporte_aragon','customerId')), 
+                                    auth=(get_config('transporte_aragon','usuario'), get_config('transporte_aragon','contr')))
         data = pd.json_normalize(r.json()['items']).replace({np.nan:None}).to_dict('records')
 
         return Response(get_return_list(data))
@@ -79,12 +77,10 @@ class LivePositionLatestView(APIView):
     """
     List all snippets, or create a new snippet.
     """
-
-
     def get(self, request: Request, format=None):     
-        url='https://api.masternautconnect.com/connect-webservices/services/public/v1/customer/{customerId}/tracking/live/latest'
-        r = requests.get(url.format(customerId=get_config('customerId')), 
-                                    auth=(get_config('usuario'), get_config('contr')))
+        url = get_config('transporte_aragon','host_aragon') + get_config('transporte_aragon','api_base_url') + get_config('transporte_aragon','api_live_position_latest')
+        r = requests.get(url.format(customerId=get_config('transporte_aragon','customerId')), 
+                                    auth=(get_config('transporte_aragon','usuario'), get_config('transporte_aragon','contr')))
         data = pd.json_normalize(r.json()['items']).replace({np.nan:None}).to_dict('records')
 
         return Response(get_return_list(data))
@@ -108,10 +104,11 @@ class VehicleJourneyHistoryLatestView(APIView):
 
         df = []
         for vehicleIds in list_vehicleIds:
-            url = 'https://api.masternautconnect.com/connect-webservices/services/public/v1/customer/{customerId}/tracking/history/vehicle/latest'
-            url += '?fromDateTime={fromDateTime}&vehicleId={vehicleIds}'.format(fromDateTime=fromDateTime,vehicleIds=vehicleIds)
-            r = requests.get(url.format(customerId=get_config('customerId')), 
-                            auth=(get_config('usuario'), get_config('contr')))
+            url = get_config('transporte_aragon','host_aragon') + get_config('transporte_aragon','api_base_url') + get_config('transporte_aragon','api_vehicle_journey_history_latest')
+            r = requests.get(url.format(customerId=get_config('transporte_aragon','customerId'),
+                                        fromDateTime=fromDateTime,
+                                        vehicleIds=vehicleIds), 
+                            auth=(get_config('transporte_aragon','usuario'), get_config('transporte_aragon','contr')))
             tmp = pd.json_normalize(r.json()['items'])
             tmp['vehicleIds'] = vehicleIds
             df.append(tmp)
@@ -140,10 +137,12 @@ class DistanceTravelledView(APIView):
 
         df = []
         for vehicleIds in list_vehicleIds:
-            url = 'https://api.masternautconnect.com/connect-webservices/services/public/v1/customer/{customerId}/tracking/journey/summary'
-            url += '?startDate={startDate}&endDate={endDate}&vehicleIds={vehicleIds}'.format(startDate=startDate,endDate=endDate,vehicleIds=vehicleIds)
-            r = requests.get(url.format(customerId=get_config('customerId')), 
-                            auth=(get_config('usuario'), get_config('contr')))
+            url = get_config('transporte_aragon','host_aragon') + get_config('transporte_aragon','api_base_url') + get_config('transporte_aragon','api_distance_travelled')
+            r = requests.get(url.format(customerId = get_config('transporte_aragon','customerId'),
+                                        startDate = startDate,
+                                        endDate = endDate,
+                                        vehicleIds = vehicleIds), 
+                            auth=(get_config('transporte_aragon','usuario'), get_config('transporte_aragon','contr')))
             tmp = pd.json_normalize(r.json())
             tmp['vehicleIds'] = vehicleIds
             df.append(tmp)
