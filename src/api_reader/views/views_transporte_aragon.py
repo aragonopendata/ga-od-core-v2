@@ -20,19 +20,13 @@ from datetime import datetime, timedelta
 
 def get_return_list(data: List[dict]) -> ReturnList:
     return_list = ReturnList(serializer=DictSerializer)
-
-    # FIXME: this convert dates to string, in some renders like xlsx produce a bad representation.
-    #  This is required to fixit and find a better solution. :(
     parsed_data = json.loads(json.dumps(data, cls=DjangoJSONEncoder))
     for item in parsed_data:
         return_list.append(item)
-
     return return_list
 
 def get_config(campo1,campo2):
     with open(r'./api_reader/config.yaml') as file:
-    # The FullLoader parameter handles the conversion from YAML
-    # scalar values to Python the dictionary format
         conf = yaml.load(file, Loader=yaml.FullLoader)
         return conf[campo1][campo2]
 
@@ -44,9 +38,6 @@ def get_vehicles():
 
 # Create your views here.
 class ListVehicleView(APIView):
-    """
-    List all snippets, or create a new snippet.
-    """
     def get(self, request: Request, format=None):    
         data = pd.json_normalize(get_vehicles().json()['items']).replace({np.nan:None}).to_dict('records')
         return Response(get_return_list(data))
@@ -55,45 +46,32 @@ class ListVehicleView(APIView):
         ser = DictSerializer(*args, **kwargs, data=self.response.data)
         return ser
 
-
 class ListDriverView(APIView):
-    """
-    List all snippets, or create a new snippet.
-    """
     def get(self, request: Request, format=None):
         url = get_config('transporte_aragon','host_aragon') + get_config('transporte_aragon','api_base_url') + get_config('transporte_aragon','api_list_driver')
         r = requests.get(url.format(customerId=get_config('transporte_aragon','customerId')), 
                                     auth=(get_config('transporte_aragon','usuario'), get_config('transporte_aragon','contr')))
         data = pd.json_normalize(r.json()['items']).replace({np.nan:None}).to_dict('records')
-
         return Response(get_return_list(data))
 
     def get_serializer(self, *args, **kwargs):
         ser = DictSerializer(*args, **kwargs, data=self.response.data)
         return ser
 
-
 class LivePositionLatestView(APIView):
-    """
-    List all snippets, or create a new snippet.
-    """
     def get(self, request: Request, format=None):     
         url = get_config('transporte_aragon','host_aragon') + get_config('transporte_aragon','api_base_url') + get_config('transporte_aragon','api_live_position_latest')
         r = requests.get(url.format(customerId=get_config('transporte_aragon','customerId')), 
                                     auth=(get_config('transporte_aragon','usuario'), get_config('transporte_aragon','contr')))
         data = pd.json_normalize(r.json()['items']).replace({np.nan:None}).to_dict('records')
-
         return Response(get_return_list(data))
 
     def get_serializer(self, *args, **kwargs):
         ser = DictSerializer(*args, **kwargs, data=self.response.data)
         return ser
 
-
 class VehicleJourneyHistoryLatestView(APIView):
-    """
-    List all snippets, or create a new snippet.
-    """
+
     #TODO: Tarda alrededor de 1.5 min en generar los resultados
 
     def get(self, request: Request, format=None):
@@ -120,11 +98,8 @@ class VehicleJourneyHistoryLatestView(APIView):
         ser = DictSerializer(*args, **kwargs, data=self.response.data)
         return ser
 
-
 class DistanceTravelledView(APIView):
-    """
-    List all snippets, or create a new snippet.
-    """
+
     #TODO: Tarda alrededor de 1.5 min en generar los resultados
 
     def get(self, request: Request, format=None):
