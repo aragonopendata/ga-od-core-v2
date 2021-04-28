@@ -8,6 +8,7 @@ from django.test import Client
     "/apireader/transportes/aragon/live-position-latest.json",
     "/apireader/transportes/aragon/vehicle-journey-history-latest.json",
     "/apireader/transportes/aragon/distance-travelled.json",
+    
     "/apireader/transportes/zaragoza/lines.json",
     "/apireader/transportes/zaragoza/stops.json",
     "/apireader/transportes/zaragoza/routes.json",
@@ -23,7 +24,7 @@ from django.test import Client
     "/apireader/transportes/zaragoza/arrival_ori_des.json",
     "/apireader/transportes/zaragoza/sae.json"])
 @pytest.mark.django_db #para ejecutar eso antes de la función
-def test_zaragoza_views(client: Client, url: str):
+def test_transporte_views(client: Client, url: str):
     """
 Con esto tenemos una instancia cliente.
 Podremos realizar simulación de llamadas (lo que realizamos con request)
