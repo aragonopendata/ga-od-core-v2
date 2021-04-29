@@ -8,8 +8,7 @@ class Migration(migrations.Migration):
 
     initial = True
 
-    dependencies = [
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(
@@ -32,7 +31,8 @@ class Migration(migrations.Migration):
                 ('object_location', models.CharField(max_length=255)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('connector_config', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='gaodcore.connectorconfig')),
+                ('connector_config',
+                 models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='gaodcore.connectorconfig')),
             ],
         ),
     ]

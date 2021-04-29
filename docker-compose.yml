@@ -1,12 +1,8 @@
-version: "3.9"
-
 services:
-  web:
+  ga-od-core:
     build: .
-    command: /bin/sh -c "python manage.py makemigrations && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    command: /bin/sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     container_name: ga-od-core
-    volumes:
-      - gaodcore:/usr/src/app
     ports:
       - "8001:8000"
 volumes:
