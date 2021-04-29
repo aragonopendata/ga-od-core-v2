@@ -12,7 +12,6 @@ def get_allowed_formats(renderers: List[BaseRenderer]):
 
 
 class LegacyContentNegotiation(DefaultContentNegotiation):
-
     def select_renderer(self, request: Request, renderers: List[BaseRenderer], format_suffix=None):
         """
         Given a request and a list of renderers, return a two-tuple of:

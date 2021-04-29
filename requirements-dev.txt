@@ -1,0 +1,11 @@
+-r requirements.txt
+pytest-cov
+pytest-xdist
+pytest-django
+pytest-docker-fixtures
+pytest-docker-fixtures[mysql]
+pytest-docker-fixtures[pg]
+pytest-rerunfailures
+pytest-mock
+tox
+yapf

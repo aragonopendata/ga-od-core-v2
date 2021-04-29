@@ -1,12 +1,10 @@
 from typing import Dict, Any, List
 
-from django.core.exceptions import ValidationError
 from rest_framework import serializers
 from rest_framework.fields import Field
 
-from gaodcore import connectors
-from gaodcore.connectors import NotImplementedSchemaError, DriverConnectionError, validate_resource, NoObjectError
 from gaodcore.models import ConnectorConfig, ResourceConfig
+from gaodcore.validators import uri_validator, resource_validator
 
 
 class ConnectorConfigSerializer(serializers.ModelSerializer):
@@ -17,10 +15,7 @@ class ConnectorConfigSerializer(serializers.ModelSerializer):
 
     @staticmethod
     def validate_uri(uri: str):
-        try:
-            connectors.validate_uri(uri)
-        except (NotImplementedSchemaError, DriverConnectionError) as err:
-            raise ValidationError(str(err), 400)
+        uri_validator(uri)
         return uri
 
 
@@ -31,7 +26,7 @@ class ResourceConfigSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def validate(self, data):
-        validate_resource(uri=data['connector_config'].uri, object_location=data['object_location'])
+        resource_validator(uri=data['connector_config'].uri, object_location=data['object_location'])
         return data
 
 

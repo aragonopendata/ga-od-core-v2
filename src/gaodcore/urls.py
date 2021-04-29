@@ -9,7 +9,6 @@ router = routers.SimpleRouter()
 router.register(r'connector-config', ConnectorConfigView)
 router.register(r'resource-config', ResourceConfigView)
 
-
 urlpatterns = format_suffix_patterns([
     *router.urls,
     path('views', ResourcesView.as_view()),
@@ -17,4 +16,5 @@ urlpatterns = format_suffix_patterns([
     path('download', DownloadView.as_view()),
     path('preview', DownloadView.as_view()),
     path('show_columns', ShowColumnsView.as_view()),
-], allowed=['json', 'xml', 'csv', 'yaml', 'xlsx'])
+],
+                                     allowed=['json', 'xml', 'csv', 'yaml', 'xlsx'])
