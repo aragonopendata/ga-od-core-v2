@@ -1,3 +1,4 @@
+import pytest as pytest
 import datetime
 
 from django.db.models import Model
@@ -5,7 +6,10 @@ from django.test import Client
 from sqlalchemy import create_engine, Column, Integer, String, BigInteger, Float, Numeric, Boolean, Date, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+pytest_plugins = ['pytest_docker_fixtures']
 
+
+@pytest.fixture
 def auth_client(client: Client, django_user_model: Model):
     username = "user"
     password = "password"
@@ -15,10 +19,12 @@ def auth_client(client: Client, django_user_model: Model):
     return client
 
 
+@pytest.fixture
 def get_uri(host: str, port: str) -> str:
     return f"postgresql://postgres:@{host}:{port}/guillotina"
 
 
+@pytest.fixture
 def create_connector_ga_od_core(client: Client, test_name: str, uri: str):
     return client.post('/GA_OD_Core/gaodcore-manager/connector-config/', {
         "name": test_name,
@@ -27,6 +33,7 @@ def create_connector_ga_od_core(client: Client, test_name: str, uri: str):
     })
 
 
+@pytest.fixture
 def create_table(uri: str, test_name: str):
     engine = create_engine(uri, echo=True)
 
@@ -64,6 +71,7 @@ def create_table(uri: str, test_name: str):
     session.close()
 
 
+@pytest.fixture
 def create_view(client, test_name: str, connector_data):
     return client.post('/GA_OD_Core/gaodcore-manager/resource-config/', {
         "name": test_name,
@@ -73,6 +81,7 @@ def create_view(client, test_name: str, connector_data):
     })
 
 
+@pytest.fixture
 def create_full_example(client, host: str, port: str, test_name: str):
     uri = get_uri(host, port)
     connector_data = create_connector_ga_od_core(client, test_name, uri)

@@ -1,14 +1,14 @@
 import pytest
 
-from gaodcore.tests.helpers import get_auth_client, create_full_example
+from gaodcore.tests.helpers import auth_client, create_full_example
 
 
 @pytest.mark.django_db
 def test_show_columns(client, django_user_model, pg, request):
-    client = get_auth_client(client=client, django_user_model=django_user_model)
+    client = auth_client(client=client, django_user_model=django_user_model)
     view_response = create_full_example(client, *pg, request.node.name)
     view_data = view_response.json()
-    download_response = client.get(f'/gaodcore/show_columns.json', {'resource_id': view_data['id']})
+    download_response = client.get(f'/GA_OD_Core/show_columns.json', {'resource_id': view_data['id']})
     assert download_response.json() == [{
         'COLUMN_NAME': 'id',
         'DATA_TYPE': 'INTEGER'

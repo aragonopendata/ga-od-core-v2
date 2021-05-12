@@ -1,15 +1,15 @@
 import pytest
 
-from gaodcore.tests.helpers import get_auth_client, get_uri, create_connector_ga_od_core
+from gaodcore.tests.helpers import auth_client, get_uri, create_connector_ga_od_core
 
 
 @pytest.mark.django_db
 def test_resource_config_error(client, django_user_model, pg, request):
-    client = get_auth_client(client=client, django_user_model=django_user_model)
+    client = auth_client(client=client, django_user_model=django_user_model)
     uri = get_uri(*pg)
     connector_data = create_connector_ga_od_core(client, request.node.name, uri)
     response = client.post(
-        '/gaodcore/resource-config/', {
+        '/GA_OD_Core/gaodcore-manager/resource-config/', {
             "name": request.node.name,
             "enabled": True,
             "connector_config": connector_data.json()['id'],

@@ -17,7 +17,6 @@ Including another URLconf
 from django.urls import path, re_path, include
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
-from rest_framework import permissions
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -29,13 +28,16 @@ schema_view = get_schema_view(
         license=openapi.License(name='EUPL License'),
     ),
     public=True,
-    permission_classes=(permissions.AllowAny, ),
 )
 
 urlpatterns = [
-    # path('admin/', admin.site.urls),
-    re_path(r'^docs/swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
-    re_path(r'^docs/swagger/$', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
-    path('gaodcore/', include('gaodcore.urls')),
-    path('apireader/', include('api_reader.urls')),
+    re_path(
+        r'^GA_OD_Core/',
+        include([
+            path('', include('gaodcore.urls')),
+            path('gaodcore-transports/', include('gaodcore_transports.urls')),
+            path('gaodcore-manager/', include('gaodcore_manager.urls')),
+            re_path(r'^ui(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
+            re_path(r'^ui/$', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+        ]))
 ]
