@@ -1,5 +1,5 @@
 from django.apps import AppConfig
 
 
-class GA_OD_CORE(AppConfig):
+class GAODCORE(AppConfig):
     name = 'GA_OD_CORE'
