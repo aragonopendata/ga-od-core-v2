@@ -2,7 +2,6 @@ from typing import List
 
 from rest_framework.exceptions import ValidationError
 from rest_framework.negotiation import DefaultContentNegotiation
-
 from rest_framework.renderers import BaseRenderer
 from rest_framework.request import Request
 

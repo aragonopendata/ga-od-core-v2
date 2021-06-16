@@ -1,5 +1,5 @@
 """
-ASGI config for gaodcore project.
+ASGI config_data for gaodcore project.
 
 It exposes the ASGI callable as a module-level variable named ``application``.
 
