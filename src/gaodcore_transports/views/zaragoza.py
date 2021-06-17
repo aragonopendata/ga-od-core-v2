@@ -46,12 +46,14 @@ async def _download_processor(configs: List[DownloadProcessorConfig]) -> List[Di
 
 
 def _get_origins() -> List[Dict[str, Any]]:
+    """Returns the list of available origins."""
     url = CONFIG.projects.transport.zaragoza.get_url('origins')
     download(url)
     return download(url)['origins']
 
 
 def _get_origins_destinations() -> List[Dict[str, Any]]:
+    """Returns the list of available destinations for each origin."""
     origins_ids = [origin['id'] for origin in _get_origins()]
     config = [
         DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url('destinations', id=origin_id),
@@ -62,6 +64,7 @@ def _get_origins_destinations() -> List[Dict[str, Any]]:
 
 
 def _get_routes():
+    """Returns the list of available stops for each line."""
     configs = [
         DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url('routes', id=line['id']),
                                 root_name='routes',
@@ -73,10 +76,12 @@ def _get_routes():
 
 
 def _get_stops():
+    """Returns the list of available stops."""
     return download(CONFIG.projects.transport.zaragoza.get_url('stops'))['stops']
 
 
 def get_lines():
+    """Returns the list of available lines."""
     return download(CONFIG.projects.transport.zaragoza.get_url('lines'))['lines']
 
 
