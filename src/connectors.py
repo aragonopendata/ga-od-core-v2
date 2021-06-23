@@ -1,15 +1,18 @@
+import urllib.request
 from dataclasses import dataclass
 from typing import Optional, Dict, List, Any, Iterable
 from urllib.parse import urlparse
 
+import pandas as pd
 import sqlalchemy.exc
 from sqlalchemy import create_engine, Table, MetaData, Column
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
-DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql', 'oracle', 'sqlite'}
-HTTP_SCHEMAS = {'http', 'https'}
-RESOURCE_MAX_ROWS = 250000
+_DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql', 'oracle', 'sqlite'}
+_HTTP_SCHEMAS = {'http', 'https'}
+_RESOURCE_MAX_ROWS = 250000
+_TEMPORAL_TABLE_NAME = 'temporal_table'
 
 
 class NotImplementedSchemaError(Exception):
@@ -47,36 +50,35 @@ class OrderBy:
     ascending: bool
 
 
-@dataclass
-class ConnectorConf:
-    """Defines connection configuration."""
-    engine: Engine
-    meta_data: MetaData
-    session_maker: sessionmaker
-
-
-connectors_conf: Dict[str, ConnectorConf] = {}
+def _get_model(*, engine: Engine, object_location: str, object_location_schema: str) -> Table:
+    # Note: if object_location is None meaning that original data is not in a database so is writen in a temporarily
+    #  table.
+    object_location = object_location or _TEMPORAL_TABLE_NAME
+    meta_data = MetaData(bind=engine)
+    try:
+        return Table(object_location,
+                     meta_data,
+                     autoload=True,
+                     autoload_with=engine,
+                     schema=object_location_schema)
+    except sqlalchemy.exc.NoSuchTableError as err:
+        raise NoObjectError(str(err))
 
 
 def get_resource_columns(uri: str,
                          object_location: Optional[str],
-                         object_location_schema: Optional[str],
-                         cache=True) -> Iterable[Dict[str, str]]:
+                         object_location_schema: Optional[str]) -> Iterable[Dict[str, str]]:
     """From resource get a list of dictionaries with column name and data type.
 
     @param cache: if not exists connection save on cache.
     @return: list of dictionaries with column name and data type
     """
-    connector_conf = _get_connector_conf(uri=uri, cache=cache)
-    try:
-        Model = Table(object_location,
-                      connector_conf.meta_data,
-                      autoload=True,
-                      autoload_with=connector_conf.engine,
-                      schema=object_location_schema)
-    except sqlalchemy.exc.NoSuchTableError as err:
-        raise NoObjectError(str(err))
-    return ({"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)} for column in Model.columns)
+    engine = _get_engine(uri)
+    Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+
+    data = ({"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)} for column in Model.columns)
+    engine.dispose()
+    return data
 
 
 def validate_resource(*, uri: str, object_location: Optional[str],
@@ -89,25 +91,22 @@ def validate_resource(*, uri: str, object_location: Optional[str],
                              object_location_schema=object_location_schema,
                              filters={},
                              fields=[],
-                             cache=False,
                              sort=[])
 
 
 def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_location_schema: Optional[str]):
     """Validate if resource have less rows than allowed."""
-    connector_conf = _get_connector_conf(uri=uri, cache=False)
-    try:
-        Model = Table(object_location,
-                      connector_conf.meta_data,
-                      autoload=True,
-                      autoload_with=connector_conf.engine,
-                      schema=object_location_schema)
-    except sqlalchemy.exc.NoSuchTableError as err:
-        raise NoObjectError(str(err))
-    session = connector_conf.session_maker()
-    if session.query(Model).count() > RESOURCE_MAX_ROWS:
+    engine = _get_engine(uri)
+    session_maker = sessionmaker(bind=engine)
+
+    Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+
+    session = session_maker()
+    if session.query(Model).count() > _RESOURCE_MAX_ROWS:
         raise TooManyRowsError()
     session.close()
+    session_maker.close_all()
+    engine.dispose()
 
 
 def get_resource_data(*,
@@ -118,30 +117,30 @@ def get_resource_data(*,
                       fields: List[str],
                       sort: List[OrderBy],
                       limit: Optional[int] = None,
-                      offset: int = 0,
-                      cache: bool = True) -> Iterable[Dict[str, Any]]:
-    connector_conf = _get_connector_conf(uri=uri, cache=cache)
+                      offset: int = 0) -> Iterable[Dict[str, Any]]:
     """Return a iterable of dictionaries with data of resource."""
-    try:
-        Model = Table(object_location,
-                      connector_conf.meta_data,
-                      autoload=True,
-                      autoload_with=connector_conf.engine,
-                      schema=object_location_schema)
-    except sqlalchemy.exc.NoSuchTableError as err:
-        raise NoObjectError(str(err))
+    engine = _get_engine(uri)
+    session_maker = sessionmaker(bind=engine)
+
+    Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+
     column_dict = {column.name: column for column in Model.columns}
     columns = _get_columns(column_dict, fields)
     sort_methods = _get_sort_methods(column_dict, sort)
-    session = connector_conf.session_maker()
+    session = session_maker()
     data = session.query(Model).filter_by(**filters).order_by(*sort_methods).with_entities(
         *columns).offset(offset).limit(limit).all()
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
     # FIXME: XML serializer fail if returns a generator :(
-    session.close()
     columns_names = [column.name for column in columns]
-    return (dict(zip(columns_names, row)) for row in data)
+    data = (dict(zip(columns_names, row)) for row in data)
+
+    session.close()
+    session_maker.close_all()
+    engine.dispose()
+
+    return data
 
 
 def _get_columns(columns_dict: Dict[str, Column], column_names: List[str]) -> Iterable[Column]:
@@ -174,36 +173,24 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
 def validate_uri(uri: str) -> None:
     """Validate if URI is available as resource."""
     try:
-        with _get_connector_conf(uri, cache=False).engine.connect() as _:
+        with _get_engine(uri).connect() as _:
             pass
     except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError) as err:
         raise DriverConnectionError(str(err))
 
 
-def _get_connector_conf(uri: str, cache: bool = True) -> ConnectorConf:
-
-    if connector_conf := connectors_conf.get(uri):
-        return connector_conf
-
-    engine = _get_engine(uri)
-    meta_data = MetaData(bind=engine)
-    session_maker = sessionmaker(bind=engine)
-    connector_conf = ConnectorConf(engine=engine, meta_data=meta_data, session_maker=session_maker)
-    if cache:
-        connectors_conf[uri] = connector_conf
-
-    return connector_conf
-
-
 def _get_engine(uri: str) -> Engine:
     uri_parsed = urlparse(uri)
-    if uri_parsed.scheme in DATABASE_SCHEMAS:
+    if uri_parsed.scheme in _DATABASE_SCHEMAS:
         try:
             return create_engine(uri)
         except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError) as err:
             raise DriverConnectionError(str(err))
-    elif uri_parsed.scheme in HTTP_SCHEMAS:
-        # TODO: is required to create a loader for each content-type [csv,...] and create a database with a sqlite with
-        #  this data. Is required to create a method and attributes in ConnectorConf to clear this temp database.
-        pass
+    elif uri_parsed.scheme in _HTTP_SCHEMAS:
+        with urllib.request.urlopen(uri) as f:
+            df = pd.read_csv(f)
+
+        engine = create_engine("sqlite:///:memory:", echo=True, future=True)
+        df.to_sql(_TEMPORAL_TABLE_NAME, engine)
+        return engine
     raise NotImplementedSchemaError(f'Schema: "{uri_parsed.scheme}" is not implemented.')
