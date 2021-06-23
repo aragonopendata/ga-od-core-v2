@@ -8,6 +8,7 @@ import pandas as pd
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -190,11 +191,10 @@ class LinesOriDesView(APIViewMixin):
         return Response(get_return_list(data))
 
 
-@method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
+@method_decorator(name='get', decorator=swagger_auto_schema(manual_parameters=[openapi.Parameter('time_sec', openapi.IN_QUERY, description="Time in seconds", type=openapi.TYPE_NUMBER)], tags=['transports']))
 class TimesRouteView(APIViewMixin):
-    """Returns the complete route if it is a theoretical route, or from where the bus is located, showing the times it will cost in each of them, for the current date."""
     _DEFAULT_BUS = 0
-    _DEFAULT_DEPARTURE_TIME = 43200
+    _DEFAULT_DEPARTURE_TIME = 82800
     # TODO: introducir el tiempo de salida (12:00) - Habría que hacerlo con la consulta
     #  ExpOriDesView
     _DIRECTIONS = [0, 1]
@@ -202,19 +202,20 @@ class TimesRouteView(APIViewMixin):
 
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(self, _: Request, **_kwargs):
+        time_sec = self.request.query_params.get('time_sec', 82800)
         configs = [
             DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url(
                 'times_route',
                 id_linea=line['id'],
                 bus=self._DEFAULT_BUS,
-                departure_time=self._DEFAULT_DEPARTURE_TIME,
+                departure_time=time_sec,
                 direction=direction),
                                     root_name=self._ROOT_NAME,
                                     extra_data={
                                         'line_id': line['id'],
                                         'direction': direction,
                                         'bus': self._DEFAULT_BUS,
-                                        'departure_time': self._DEFAULT_DEPARTURE_TIME
+                                        'departure_time': time_sec
                                     }) for line in get_lines() for direction in self._DIRECTIONS
         ]
 
