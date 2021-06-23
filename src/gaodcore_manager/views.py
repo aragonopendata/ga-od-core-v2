@@ -29,7 +29,7 @@ class ConnectorConfigView(XLSXFileMixin, viewsets.ModelViewSet):
     serializer_class = ConnectorConfigSerializer
     queryset = ConnectorConfig.objects.all()
     renderer_classes = (JSONRenderer, XLSXRenderer, YAMLRenderer, XMLRenderer, CSVRenderer)
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
 
 @method_decorator(name='create', decorator=swagger_auto_schema(tags=['manager']))
@@ -42,12 +42,12 @@ class ResourceConfigView(XLSXFileMixin, viewsets.ModelViewSet):
     serializer_class = ResourceConfigSerializer
     queryset = ResourceConfig.objects.all()
     renderer_classes = (JSONRenderer, XLSXRenderer, YAMLRenderer, XMLRenderer, CSVRenderer)
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
 
 class ValidatorView(XLSXFileMixin, APIView):
     renderer_classes = (JSONRenderer, XLSXRenderer, YAMLRenderer, XMLRenderer, CSVRenderer)
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
     @swagger_auto_schema(
         tags=['manager'],

@@ -21,13 +21,13 @@ from drf_yasg.views import get_schema_view
 schema_view = get_schema_view(
     openapi.Info(
         title='GA OD Core API',
-        default_version='v1',
+        default_version='v2',
         description='GA OD Core API Swagger',
-        terms_of_service='https://opendata.aragon.es/terminos/',
+        terms_of_service='https://opendata.aragon.es/informacion/terminos-de-uso-licencias',
         contact=openapi.Contact(email='opendata@aragon.es'),
         license=openapi.License(name='EUPL License'),
     ),
-    public=True,
+    public=False,
 )
 
 urlpatterns = [
