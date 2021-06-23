@@ -28,7 +28,7 @@ class Migration(migrations.Migration):
                 ('id', models.AutoField(primary_key=True, serialize=False)),
                 ('name', models.CharField(max_length=255, unique=True)),
                 ('enabled', models.BooleanField()),
-                ('object_location', models.CharField(max_length=255)),
+                ('object_location', models.CharField(max_length=255, null=True)),
                 ('object_location_schema', models.CharField(max_length=255, null=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),

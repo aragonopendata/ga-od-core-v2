@@ -260,7 +260,7 @@ def test_download_extension(client, django_user_model, pg, request, extension):
 
 @pytest.mark.django_db
 def test_download_too_many_rows(client, django_user_model, pg, request, mocker):
-    mocker.patch.object(connectors, 'RESOURCE_MAX_ROWS', 1)
+    mocker.patch.object(connectors, '_RESOURCE_MAX_ROWS', 1)
     client = auth_client(client=client, django_user_model=django_user_model)
     view_response = create_full_example(client, *pg, request.node.name)
 
@@ -310,10 +310,26 @@ def test_download_postgresql_view(client, django_user_model, pg, request):
     cursor.execute(f"""CREATE view {request.node.name} as SELECT * FROM {table_name};""")
     connection.commit()
 
-    view_response = client.post('/GA_OD_Core/gaodcore-manager/resource-config/', {
+    resource_response = client.post('/GA_OD_Core/gaodcore-manager/resource-config/', {
         "name": request.node.name,
         "connector_config": connector_data.json()['id'],
         "object_location": request.node.name
     })
 
-    assert view_response.status_code == 201
+    assert resource_response.status_code == 201
+
+
+def test_download_api(client, request, django_user_model):
+    client = auth_client(client=client, django_user_model=django_user_model)
+    connector_data = create_connector_ga_od_core(client, request.node.name, 'https://people.sc.fsu.edu/~jburkardt/data/csv/crash_catalonia.csv')
+    resource_response = client.post('/GA_OD_Core/gaodcore-manager/resource-config/', {
+        "name": request.node.name,
+        "connector_config": connector_data.json()['id'],
+        "enabled": True
+    })
+
+    assert resource_response.status_code == 201
+
+    response = client.get(f'/GA_OD_Core/download.json', {'resource_id': resource_response.json()['id']})
+    assert response.status_code == 200
+
