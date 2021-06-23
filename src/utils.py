@@ -67,6 +67,7 @@ async def download_async(session: aiohttp.ClientSession(), url: str,
 
 async def gather_limited(concurrency_limit: int, tasks: Iterable[Coroutine]):
     semaphore = asyncio.Semaphore(concurrency_limit)
+
     async def sem_task(task):
         async with semaphore:
             return await task
