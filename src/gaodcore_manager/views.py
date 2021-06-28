@@ -28,7 +28,6 @@ from utils import get_return_list
 class ConnectorConfigView(XLSXFileMixin, viewsets.ModelViewSet):
     serializer_class = ConnectorConfigSerializer
     queryset = ConnectorConfig.objects.all()
-    renderer_classes = (JSONRenderer, XLSXRenderer, YAMLRenderer, XMLRenderer, CSVRenderer)
     permission_classes = (IsAuthenticated,)
 
 
@@ -41,12 +40,10 @@ class ConnectorConfigView(XLSXFileMixin, viewsets.ModelViewSet):
 class ResourceConfigView(XLSXFileMixin, viewsets.ModelViewSet):
     serializer_class = ResourceConfigSerializer
     queryset = ResourceConfig.objects.all()
-    renderer_classes = (JSONRenderer, XLSXRenderer, YAMLRenderer, XMLRenderer, CSVRenderer)
     permission_classes = (IsAuthenticated,)
 
 
 class ValidatorView(XLSXFileMixin, APIView):
-    renderer_classes = (JSONRenderer, XLSXRenderer, YAMLRenderer, XMLRenderer, CSVRenderer)
     permission_classes = (IsAuthenticated,)
 
     @swagger_auto_schema(
