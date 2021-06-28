@@ -26,7 +26,6 @@ from views import APIViewMixin
 class DownloadView(XLSXFileMixin, APIViewMixin):
     """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón."""
 
-    renderer_classes = (JSONRenderer, XLSXRenderer, YAMLRenderer, XMLRenderer, CSVRenderer)
     content_negotiation_class = LegacyContentNegotiation
 
     @swagger_auto_schema(tags=['default'],
@@ -214,7 +213,6 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
 
 class ShowColumnsView(XLSXFileMixin, APIView):
     """This view allows to get datatype of each column from a resource."""
-    renderer_classes = (JSONRenderer, XLSXRenderer, YAMLRenderer, XMLRenderer, CSVRenderer)
 
     @swagger_auto_schema(tags=['default'],
                          manual_parameters=[
@@ -249,7 +247,6 @@ class ShowColumnsView(XLSXFileMixin, APIView):
 
 class ResourcesView(XLSXFileMixin, APIView):
     """This view allow to get a list of public resources."""
-    renderer_classes = (JSONRenderer, XLSXRenderer, YAMLRenderer, XMLRenderer, CSVRenderer)
 
     @swagger_auto_schema(
         tags=['default'], )
