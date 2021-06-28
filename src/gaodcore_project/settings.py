@@ -161,9 +161,7 @@ LOGGING = {
 
 CACHES = {
     'default': {
-        # TODO: is not the greatest idea use this backend due that each process will not use the same cache. Best way
-        #  is use a memcache service.
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'django_cache',
     }
 }
