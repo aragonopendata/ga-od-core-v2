@@ -11,6 +11,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from rest_framework.request import Request
 from rest_framework.response import Response
+from datetime import datetime
 
 from gaodcore_project.settings import CONFIG
 from utils import get_return_list, download, download_async, gather_limited
@@ -194,7 +195,7 @@ class LinesOriDesView(APIViewMixin):
 @method_decorator(name='get', decorator=swagger_auto_schema(manual_parameters=[openapi.Parameter('time_sec', openapi.IN_QUERY, description="Time in seconds", type=openapi.TYPE_NUMBER)], tags=['transports']))
 class TimesRouteView(APIViewMixin):
     _DEFAULT_BUS = 0
-    _DEFAULT_DEPARTURE_TIME = 82800
+    _DEFAULT_DEPARTURE_TIME = datetime.now().hour * 3600
     # TODO: introducir el tiempo de salida (12:00) - Habría que hacerlo con la consulta
     #  ExpOriDesView
     _DIRECTIONS = [0, 1]
@@ -202,7 +203,7 @@ class TimesRouteView(APIViewMixin):
 
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(self, _: Request, **_kwargs):
-        time_sec = self.request.query_params.get('time_sec', 82800)
+        time_sec = self.request.query_params.get('time_sec', self._DEFAULT_DEPARTURE_TIME)
         configs = [
             DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url(
                 'times_route',
