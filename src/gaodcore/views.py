@@ -245,8 +245,9 @@ class ShowColumnsView(XLSXFileMixin, APIView):
         return Response(get_return_list(data))
 
 
-class ResourcesView(APIViewMixin):
+class ResourcesView(XLSXFileMixin, APIView):
     """This view allow to get a list of public resources."""
+    renderer_classes = (JSONRenderer, XLSXRenderer, YAMLRenderer, XMLRenderer, CSVRenderer)
 
     @swagger_auto_schema(
         tags=['default'], )
