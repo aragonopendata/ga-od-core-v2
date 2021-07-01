@@ -3,17 +3,13 @@ from json.decoder import JSONDecodeError
 from typing import Optional, Dict, Any, List
 
 from drf_renderer_xlsx.mixins import XLSXFileMixin
-from drf_renderer_xlsx.renderers import XLSXRenderer
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.exceptions import ValidationError
-from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_csv.renderers import CSVRenderer
-from rest_framework_xml.renderers import XMLRenderer
-from rest_framework_yaml.renderers import YAMLRenderer
+
 
 from connectors import get_resource_data, get_resource_columns, NoObjectError, DriverConnectionError, \
     NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError
@@ -211,7 +207,7 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
         return sort
 
 
-class ShowColumnsView(XLSXFileMixin, APIView):
+class ShowColumnsView(XLSXFileMixin, APIViewMixin):
     """This view allows to get datatype of each column from a resource."""
 
     @swagger_auto_schema(tags=['default'],
@@ -245,7 +241,7 @@ class ShowColumnsView(XLSXFileMixin, APIView):
         return Response(get_return_list(data))
 
 
-class ResourcesView(XLSXFileMixin, APIView):
+class ResourcesView(XLSXFileMixin, APIViewMixin):
     """This view allow to get a list of public resources."""
 
     @swagger_auto_schema(
