@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 import yaml
 from pydantic import BaseModel
 
+
 try:
     _CONFIG_PATH = os.environ['CONFIG_PATH']
 except KeyError:

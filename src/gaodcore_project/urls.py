@@ -18,6 +18,8 @@ from django.urls import path, re_path, include
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 
+from django.contrib import admin
+
 schema_view = get_schema_view(
     openapi.Info(
         title='GA OD Core API',
@@ -36,7 +38,14 @@ urlpatterns = [
         include([
             path('', include('gaodcore.urls')),
             path('gaodcore-transports/', include('gaodcore_transports.urls')),
-            path('gaodcore-manager/', include('gaodcore_manager.urls')),
+            re_path(r'^ui(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
+            re_path(r'^ui/$', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+        ])),
+    re_path(
+        r'^GA_OD_Core_admin/',
+        include([
+            path('admin/', admin.site.urls),
+            path('manager/', include('gaodcore_manager.urls')),
             re_path(r'^ui(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),
             re_path(r'^ui/$', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
         ]))
