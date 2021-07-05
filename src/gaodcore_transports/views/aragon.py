@@ -8,11 +8,12 @@ import requests.auth
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from drf_yasg.utils import swagger_auto_schema
+from flatten_json import flatten
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from gaodcore_project.settings import CONFIG
-from utils import download, download_bulk, get_return_list
+from utils import download, download_bulk, get_return_list, flatten_object
 from views import APIViewMixin
 
 
@@ -28,6 +29,11 @@ class APIViewGetDataMixin(APIViewMixin, metaclass=ABCMeta):
     def _ENDPOINT(self) -> str:
         pass
 
+    @property
+    @abstractmethod
+    def _FLATTEN(self) -> str:
+        pass
+
     def _get_default_endpoint_data(self) -> List[Dict[str, Any]]:
         url = CONFIG.projects.transport.aragon.get_url(
             self._ENDPOINT, customer_id=CONFIG.projects.transport.aragon.customer_id)
@@ -40,7 +46,10 @@ class APIViewGetDataMixin(APIViewMixin, metaclass=ABCMeta):
         return data[self._DATA_FIELD]
 
     def _get_data(self) -> Iterable[Dict[str, Any]]:
-        return self._get_default_endpoint_data()
+        data = self._get_default_endpoint_data()
+        if self._FLATTEN:
+            data = (flatten_object(row) for row in data)
+        return data
 
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(self, _request: Request, **_kwargs):
@@ -54,6 +63,7 @@ class ListVehicleView(APIViewGetDataMixin):
     _FIELD_TAGS = 'tags'
     _FIELD_STATUS = 'status'
     _FIELD_STATUS_SOLD = 'SOLD'
+    _FLATTEN = True
 
     def _get_data(self) -> Iterable[Dict[str, Any]]:
         data = super()._get_data()
@@ -71,12 +81,14 @@ class ListVehicleView(APIViewGetDataMixin):
 class ListDriverView(APIViewGetDataMixin):
     """Returns details for all drivers and the group they have been assigned to."""
     _ENDPOINT = 'drivers'
+    _FLATTEN = True
 
 
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
 class LivePositionLatestView(APIViewGetDataMixin):
     """Returns the live position and status for a resource (driver or vehicle). The live position for a vehicle on a private journey is not returned."""
     _ENDPOINT = 'live_position_latest'
+    _FLATTEN = True
 
 
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
@@ -85,6 +97,7 @@ class VehicleJourneyHistoryLatestView(APIViewGetDataMixin):
     _ENDPOINT = 'vehicles'
     _TIMEDELTA = {"weeks": 2}
     _VEHICLE_JOURNEY_HISTORY_LATEST = 'vehicle_journey_history_latest'
+    _FLATTEN = False
 
     def _get_data(self):
         urls = {
@@ -108,6 +121,7 @@ class DistanceTravelledView(APIViewGetDataMixin):
     """Returns the distance traveled (in kilometers) by a vehicle for the last day made."""
     _ENDPOINT = 'vehicles'
     _DISTANCE_TRAVELED = 'distance_travelled'
+    _FLATTEN = False
 
     def _get_data(self):
         url = CONFIG.projects.transport.aragon.get_url(
