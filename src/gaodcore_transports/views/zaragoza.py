@@ -3,8 +3,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 import aiohttp
-import numpy as np
-import pandas as pd
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from drf_yasg.utils import swagger_auto_schema

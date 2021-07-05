@@ -20,7 +20,7 @@ def get_uri(host: str, port: str) -> str:
 
 
 def create_connector_ga_od_core(client: Client, test_name: str, uri: str):
-    return client.post('/GA_OD_Core/gaodcore-manager/connector-config/', {
+    return client.post('/GA_OD_Core_admin/manager/connector-config/', {
         "name": test_name,
         "enabled": True,
         "uri": uri
@@ -65,7 +65,7 @@ def create_table(uri: str, test_name: str):
 
 
 def create_view(client, test_name: str, connector_data):
-    return client.post('/GA_OD_Core/gaodcore-manager/resource-config/', {
+    return client.post('/GA_OD_Core_admin/manager/resource-config/', {
         "name": test_name,
         "enabled": True,
         "connector_config": connector_data.json()['id'],

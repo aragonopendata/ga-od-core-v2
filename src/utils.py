@@ -72,3 +72,22 @@ async def gather_limited(concurrency_limit: int, tasks: Iterable[Coroutine]):
         async with semaphore:
             return await task
     return await asyncio.gather(*(sem_task(task) for task in tasks))
+
+
+def flatten_object(data_dict: dict) -> dict:
+    out = {}
+
+    def flatten(x, name=''):
+        if type(x) is dict:
+            for a in x:
+                flatten(x[a], name + a + '_')
+        elif type(x) is list:
+            i = 0
+            for a in x:
+                flatten(a, name + str(i) + '_')
+                i += 1
+        else:
+            out[name[:-1]] = x
+
+    flatten(data_dict)
+    return out

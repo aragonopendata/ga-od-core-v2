@@ -9,7 +9,7 @@ def test_resource_config_error(client, django_user_model, pg, request):
     uri = get_uri(*pg)
     connector_data = create_connector_ga_od_core(client, request.node.name, uri)
     response = client.post(
-        '/GA_OD_Core/gaodcore-manager/resource-config/', {
+        '/GA_OD_Core_admin/manager/resource-config/', {
             "name": request.node.name,
             "enabled": True,
             "connector_config": connector_data.json()['id'],
