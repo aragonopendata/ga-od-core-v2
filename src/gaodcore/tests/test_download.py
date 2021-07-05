@@ -126,6 +126,65 @@ def test_download_limit(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
+def test_download_pagination(client, django_user_model, pg, request):
+    client = auth_client(client=client, django_user_model=django_user_model)
+    view_response = create_full_example(client, *pg, request.node.originalname)
+
+    download_response = client.get(f'/GA_OD_Core/download.json', {
+        'resource_id': view_response.json()['id'],
+        '_page': "1",
+        '_page_size': "1"
+    })
+
+    with open(os.path.join(os.path.dirname(__file__), f"data.json"), r'rb') as f:
+        data = json.loads(f.read())
+        response_data = json.loads(download_response.content)
+        assert data[1:2] == response_data
+
+
+@pytest.mark.django_db
+def test_download_pagination_overflow(client, django_user_model, pg, request):
+    client = auth_client(client=client, django_user_model=django_user_model)
+    view_response = create_full_example(client, *pg, request.node.originalname)
+
+    download_response = client.get(f'/GA_OD_Core/download.json', {
+        'resource_id': view_response.json()['id'],
+        '_page': "2",
+        '_page_size': "1"
+    })
+
+    assert [] == json.loads(download_response.content)
+
+
+@pytest.mark.django_db
+def test_download_pagination_fail_page(client, django_user_model, pg, request):
+    client = auth_client(client=client, django_user_model=django_user_model)
+    view_response = create_full_example(client, *pg, request.node.originalname)
+
+    download_response = client.get(f'/GA_OD_Core/download.json', {
+        'resource_id': view_response.json()['id'],
+        '_page': "a",
+        '_page_size': "1"
+    })
+
+    assert 'Value of _page is not a number.' == json.loads(download_response.content)[0]
+
+
+@pytest.mark.django_db
+def test_download_pagination_fail_page_size(client, django_user_model, pg, request):
+    client = auth_client(client=client, django_user_model=django_user_model)
+    view_response = create_full_example(client, *pg, request.node.originalname)
+
+    download_response = client.get(f'/GA_OD_Core/download.json', {
+        'resource_id': view_response.json()['id'],
+        '_page': "1",
+        '_page_size': "a"
+    })
+
+    assert 'Value of _page_size is not a number.' == json.loads(download_response.content)[0]
+
+
+@pytest.mark.django_db
 def test_download_limit_error(client, django_user_model, pg, request):
     client = auth_client(client=client, django_user_model=django_user_model)
     view_response = create_full_example(client, *pg, request.node.originalname)

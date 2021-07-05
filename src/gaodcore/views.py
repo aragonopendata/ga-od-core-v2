@@ -71,6 +71,14 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
                                                openapi.IN_QUERY,
                                                description='Force name of file to download.',
                                                type=openapi.TYPE_STRING),
+                             openapi.Parameter('_page',
+                                               openapi.IN_QUERY,
+                                               description='Deprecated. Number of the page.',
+                                               type=openapi.TYPE_INTEGER,),
+                             openapi.Parameter('_pageSize',
+                                               openapi.IN_QUERY,
+                                               description='Deprecated. Number of results in each page.',
+                                               type=openapi.TYPE_INTEGER),
                          ])
     def get(self, request: Request, **_kwargs) -> Response:
         """This method allows get serialized public data from databases or APIs of Gobierno de Aragón."""
@@ -132,16 +140,35 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
         return resource_id
 
     @staticmethod
-    def _get_offset(request: Request) -> int:
+    def _get_int_field(request: Request, field) -> int:
+        """Get interger field from query string.
+
+        @param request: Django response instance.
+        @return: SQL offset value.
+        """
+        value = request.query_params.get(field)
+        if value:
+            try:
+                value = int(request.query_params.get(field))
+            except ValueError:
+                raise ValidationError(f"Value of {field} is not a number.", 400)
+
+        return value
+
+    def _get_offset(self, request: Request) -> int:
         """Get offset from query string.
 
         @param request: Django response instance.
         @return: SQL offset value.
         """
-        try:
-            offset = int(request.query_params.get('offset') or 0)
-        except ValueError:
-            raise ValidationError("Value of offset is not a number.", 400)
+
+        offset = self._get_int_field(request, 'offset')
+        page = self._get_int_field(request, '_page')
+        page_size = self._get_int_field(request, '_page_size')
+
+        if page and page_size:
+            offset = page * page_size
+
         return offset
 
     def _get_limit(self, request: Request) -> Optional[int]:
@@ -151,6 +178,8 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
         @return: SQL limit value.
         """
         limit = request.query_params.get('limit') or None
+        page_size = self._get_int_field(request, '_page_size')
+
         if limit:
             try:
                 limit = int(limit)
@@ -163,6 +192,8 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
 
         elif request.get_full_path().startswith('/preview'):
             limit = self._PREVIEW_LIMIT
+        elif page_size:
+            limit = page_size
 
         return limit
 
