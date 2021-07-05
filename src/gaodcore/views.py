@@ -8,7 +8,6 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
 
 from connectors import get_resource_data, get_resource_columns, NoObjectError, DriverConnectionError, \
@@ -21,6 +20,7 @@ from views import APIViewMixin
 
 class DownloadView(XLSXFileMixin, APIViewMixin):
     """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón."""
+    _PREVIEW_LIMIT = 1000
 
     content_negotiation_class = LegacyContentNegotiation
 
@@ -144,9 +144,8 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
             raise ValidationError("Value of offset is not a number.", 400)
         return offset
 
-    @staticmethod
-    def _get_limit(request: Request) -> Optional[int]:
-        """Get limit from query string.
+    def _get_limit(self, request: Request) -> Optional[int]:
+        """Get limit from query string. If preview, limit number of rows.
 
         @param request: Django response instance.
         @return: SQL limit value.
@@ -157,6 +156,14 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
                 limit = int(limit)
             except ValueError:
                 raise ValidationError("Value of limit is not a number.", 400)
+
+            if request.get_full_path().startswith('/preview'):
+                if limit > self._PREVIEW_LIMIT:
+                    limit = self._PREVIEW_LIMIT
+
+        elif request.get_full_path().startswith('/preview'):
+            limit = self._PREVIEW_LIMIT
+
         return limit
 
     @staticmethod
