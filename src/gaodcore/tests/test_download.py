@@ -80,9 +80,7 @@ def test_download_format_error(client, django_user_model, pg, request):
     })
 
     assert download_response.status_code == 400
-    assert download_response.json() == [
-        'Formato: "dj" is not allowed. Allowed values: [\'json\', \'xlsx\', \'yaml\', \'xml\', \'csv\']'
-    ]
+    assert 'Formato: "dj" is not allowed' in download_response.json()[0]
 
 
 @pytest.mark.django_db
@@ -310,7 +308,7 @@ def test_download_postgresql_view(client, django_user_model, pg, request):
     cursor.execute(f"""CREATE view {request.node.name} as SELECT * FROM {table_name};""")
     connection.commit()
 
-    resource_response = client.post('/GA_OD_Core/gaodcore-manager/resource-config/', {
+    resource_response = client.post('/GA_OD_Core_admin/manager/resource-config/', {
         "name": request.node.name,
         "connector_config": connector_data.json()['id'],
         "object_location": request.node.name
@@ -322,7 +320,7 @@ def test_download_postgresql_view(client, django_user_model, pg, request):
 def test_download_api(client, request, django_user_model):
     client = auth_client(client=client, django_user_model=django_user_model)
     connector_data = create_connector_ga_od_core(client, request.node.name, 'https://people.sc.fsu.edu/~jburkardt/data/csv/crash_catalonia.csv')
-    resource_response = client.post('/GA_OD_Core/gaodcore-manager/resource-config/', {
+    resource_response = client.post('/GA_OD_Core_admin/manager/resource-config/', {
         "name": request.node.name,
         "connector_config": connector_data.json()['id'],
         "enabled": True
