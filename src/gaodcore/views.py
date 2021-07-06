@@ -21,6 +21,7 @@ from views import APIViewMixin
 class DownloadView(XLSXFileMixin, APIViewMixin):
     """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón."""
     _PREVIEW_LIMIT = 1000
+    _DOWNLOAD_ENDPOINT = ('/GA_OD_Core/download', '/GA_OD_Core/download')
 
     content_negotiation_class = LegacyContentNegotiation
 
@@ -116,12 +117,15 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
 
         response = Response(get_return_list(data))
 
-        if request.get_full_path().startswith('/download'):
+        if self.is_download_endpoint(request):
             filename = request.query_params.get('nameRes') or resource_config.name
             disposition = f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
             response['Content-Disposition'] = disposition
 
         return response
+
+    def is_download_endpoint(self, request: Request):
+        return any((request.get_full_path().startswith(endpoint) for endpoint in self._DOWNLOAD_ENDPOINT))
 
     @staticmethod
     def _get_resource_id(request: Request) -> int:
