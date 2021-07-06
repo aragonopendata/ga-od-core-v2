@@ -62,7 +62,7 @@ class ListVehicleView(APIViewGetDataMixin):
     _FIELD_TAGS = 'tags'
     _FIELD_STATUS = 'status'
     _FIELD_STATUS_SOLD = 'SOLD'
-    _FLATTEN = True
+    _FLATTEN = False
 
     def _get_data(self) -> Iterable[Dict[str, Any]]:
         data = super()._get_data()
@@ -72,6 +72,7 @@ class ListVehicleView(APIViewGetDataMixin):
         for row in data:
             if self._FIELD_TAGS in row:
                 del row[self._FIELD_TAGS]
+            row = flatten_object(row)
             if row[self._FIELD_STATUS] != self._FIELD_STATUS_SOLD:
                 yield row
 
@@ -87,7 +88,18 @@ class ListDriverView(APIViewGetDataMixin):
 class LivePositionLatestView(APIViewGetDataMixin):
     """Returns the live position and status for a resource (driver or vehicle). The live position for a vehicle on a private journey is not returned."""
     _ENDPOINT = 'live_position_latest'
-    _FLATTEN = True
+    _FLATTEN = False
+    _FIELD_TAGS = 'tags'
+
+    def _get_data(self) -> Iterable[Dict[str, Any]]:
+        data = super()._get_data()
+        return self._process(data)
+
+    def _process(self, data: Iterable[Dict[str, Any]]) -> Iterable[Dict[str, Any]]:
+        for row in data:
+            if self._FIELD_TAGS in row:
+                del row[self._FIELD_TAGS]
+            yield flatten_object(row)
 
 
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
