@@ -43,6 +43,11 @@ class SortFieldNoExistsError(Exception):
     pass
 
 
+class TypeDocumentError(Exception):
+    """Type of document is not csv or excel."""
+    pass
+
+
 @dataclass
 class OrderBy:
     """Defines field and is ascending sort. This is used to generate SQL queries."""
@@ -188,7 +193,13 @@ def _get_engine(uri: str) -> Engine:
             raise DriverConnectionError(str(err))
     elif uri_parsed.scheme in _HTTP_SCHEMAS:
         with urllib.request.urlopen(uri) as f:
-            df = pd.read_csv(f)
+            try:
+                df = pd.read_csv(f)
+            except:
+                try:
+                    df = pd.read_excel(f)
+                except:
+                    raise TypeDocumentError('Type of document is not csv or excel')
 
         engine = create_engine("sqlite:///:memory:", echo=True, future=True)
         df.to_sql(_TEMPORAL_TABLE_NAME, engine)
