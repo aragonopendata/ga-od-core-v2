@@ -2,6 +2,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Optional, Dict, List, Any, Iterable
 from urllib.parse import urlparse
+from http import HTTPStatus
 
 import pandas as pd
 import sqlalchemy.exc
@@ -47,6 +48,10 @@ class TypeDocumentError(Exception):
     """Type of document is not csv or excel."""
     pass
 
+class TypeReachedUrl (Exception):
+    """The url could not be reached."""
+    pass
+
 
 @dataclass
 class OrderBy:
@@ -78,7 +83,12 @@ def get_resource_columns(uri: str,
     @param cache: if not exists connection save on cache.
     @return: list of dictionaries with column name and data type
     """
-    engine = _get_engine(uri)
+    try:
+        engine = _get_engine(uri)
+    except TypeDocumentError as err:
+        raise TypeDocumentError(err)
+    except TypeReachedUrl as err:
+        raise TypeReachedUrl(err)
     Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
 
     data = ({"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)} for column in Model.columns)
@@ -90,7 +100,12 @@ def validate_resource(*, uri: str, object_location: Optional[str],
                       object_location_schema: Optional[str]) -> Iterable[Dict[str, Any]]:
     """Validate if resource is available and have less rows than allowed. Return data of resource, a iterable of
     dictionaries."""
-    _validate_max_rows_allowed(uri, object_location, object_location_schema=object_location_schema)
+    try:
+        _validate_max_rows_allowed(uri, object_location, object_location_schema=object_location_schema)
+    except TypeDocumentError as err:
+        raise TypeDocumentError(err)
+    except TypeReachedUrl as err:
+        raise TypeReachedUrl(err)
     return get_resource_data(uri=uri,
                              object_location=object_location,
                              object_location_schema=object_location_schema,
@@ -101,7 +116,12 @@ def validate_resource(*, uri: str, object_location: Optional[str],
 
 def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_location_schema: Optional[str]):
     """Validate if resource have less rows than allowed."""
-    engine = _get_engine(uri)
+    try:
+        engine = _get_engine(uri)
+    except TypeDocumentError as err:
+        raise TypeDocumentError(err)
+    except TypeReachedUrl as err:
+        raise TypeReachedUrl(err)
     session_maker = sessionmaker(bind=engine)
 
     Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
@@ -124,7 +144,12 @@ def get_resource_data(*,
                       limit: Optional[int] = None,
                       offset: int = 0) -> Iterable[Dict[str, Any]]:
     """Return a iterable of dictionaries with data of resource."""
-    engine = _get_engine(uri)
+    try:
+        engine = _get_engine(uri)
+    except TypeDocumentError as err:
+        raise TypeDocumentError(err)
+    except TypeReachedUrl as err:
+        raise TypeReachedUrl(err)
     session_maker = sessionmaker(bind=engine)
 
     Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
@@ -182,6 +207,11 @@ def validate_uri(uri: str) -> None:
             pass
     except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError) as err:
         raise DriverConnectionError(str(err))
+    except TypeDocumentError as err:
+        raise TypeDocumentError(err)
+    except TypeReachedUrl as err:
+        raise TypeReachedUrl(err)
+
 
 
 def _get_engine(uri: str) -> Engine:
@@ -193,13 +223,15 @@ def _get_engine(uri: str) -> Engine:
             raise DriverConnectionError(str(err))
     elif uri_parsed.scheme in _HTTP_SCHEMAS:
         with urllib.request.urlopen(uri) as f:
-            try:
-                df = pd.read_csv(f)
-            except:
-                try:
+            if f.getcode() == HTTPStatus.OK:
+                if f.info()['Content-Type'] == 'text/csv':
+                    df = pd.read_csv(f)
+                elif f.info()['Content-Type'] == 'text/xml,application/xml':
                     df = pd.read_excel(f)
-                except:
-                    raise TypeDocumentError('Type of document is not csv or excel')
+                else:
+                    raise TypeDocumentError('Type of document is not csv or excel.')
+            else:
+                raise TypeReachedUrl('The url could not be reached.')
 
         engine = create_engine("sqlite:///:memory:", echo=True, future=True)
         df.to_sql(_TEMPORAL_TABLE_NAME, engine)
