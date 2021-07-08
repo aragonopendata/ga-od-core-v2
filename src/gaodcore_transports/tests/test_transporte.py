@@ -35,8 +35,6 @@ def test_transport_views_json(client: Client, url: str):
             assert type(value) in [int, str, float, bool]
 
 
-
-
 @pytest.mark.parametrize("url,", [
     "/GA_OD_Core/gaodcore-transports/aragon/vehicles.xlsx",
     "/GA_OD_Core/gaodcore-transports/aragon/drivers.xlsx",
