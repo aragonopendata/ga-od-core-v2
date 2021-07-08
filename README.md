@@ -1,6 +1,8 @@
-# GAODCORE
+# GAODCore
 
 _"Gobierno de Aragón Open Data Core"_ is an app that allow to interact with public resources of _Gobierno de Aragón_.
+
+![Aragón Open Data](docs/images/aragon-open-data.svg)
 
 ## Terminology
 
@@ -26,14 +28,58 @@ swagger: [https://opendata.aragon.es/GA_OD_Core/ui/](https://opendata.aragon.es/
 ## Usage
 
 ### Authentication
+
 Currently, it is allowed Session and Basic authentication.
 
 #### Session Authentication
-This is util to show **manager** app in swagger. You can authenticate graphically here: []()
+
+This is util to show **manager** app in swagger. You can authenticate graphically here:
+[/GA_OD_Core_admin/admin/](/GA_OD_Core_admin/admin/)
 
 #### Basic Authentication
-This is util to deal with manager app. For more information: [https://en.wikipedia.org/wiki/Basic_access_authentication](https://en.wikipedia.org/wiki/Basic_access_authentication)
+
+This is util to deal with manager app and integrate other app with GAODCore. For more information:
+[https://en.wikipedia.org/wiki/Basic_access_authentication](https://en.wikipedia.org/wiki/Basic_access_authentication)
 
 ### Create a new resource
 
-#### Create
+#### Validate a new Resource
+
+It is posible to get data without create any configuration to test if data is correct before create any configuration.
+Take care that when you create a `ConnectorConfig` or `ResourceConfig` will check if resource is available. Not availability 
+of a resource will raise an error.
+
+In [/GA_OD_Core_admin/manager/validator/](/GA_OD_Core_admin/manager/validator/) you must send a GET
+authenticated request with following data:
+![validator](docs/images/swagger/validator.png)
+
+Swagger
+URL: [/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_validator_list](/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_validator_list)
+
+
+#### Create a new ConnectorConfig
+Create a `ConnectorConfig` is the way to explain how GAODCore must connect with an external resource: api or database.
+This step not include retrieval of data.
+
+In [/GA_OD_Core_admin/manager/connector-config/](/GA_OD_Core_admin/manager/connector-config/) you must send a POST
+authenticated request with following data:
+
+![connector config creation](docs/images/swagger/connector-config-creation.png)
+Swagger
+URL: [/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_resource-config_create](/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_resource-config_create)
+
+#### Create a new ResourceConfig
+
+Create a `ResourceConfig` is the way to explain what data GAODCore must retrieve. 
+
+In [/GA_OD_Core_admin/manager/resource-config/](/GA_OD_Core_admin/manager/resource-config/) you must send a POST 
+authenticated request with following data:
+
+![resource config creation](docs/images/swagger/resource-config-creation.png)
+Swagger
+URL: [/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_resource-config_create](/GA_OD_Core/ui/operations-manager-GA_OD_Core_admin_manager_resource-config_create)
+
+### Data retrieval 
+
+To discover all endpoints please check following
+swagger: [GA_OD_Core/ui/](GA_OD_Core/ui/)

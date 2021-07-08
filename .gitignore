@@ -147,7 +147,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# pytype static type analyzer
+# pytype images type analyzer
 .pytype/
 
 # profiling data
@@ -299,7 +299,7 @@ modules.xml
 
 # Pyre type checker
 
-# pytype static type analyzer
+# pytype images type analyzer
 
 # profiling data
 

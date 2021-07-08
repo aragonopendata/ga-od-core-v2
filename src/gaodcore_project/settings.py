@@ -133,7 +133,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.1/howto/static-files/
 
-STATIC_URL = '/GA_OD_Core/static/'
+STATIC_URL = '/GA_OD_Core/images/'
 
 # Django REST framework Settings
 # https://www.django-rest-framework.org/api-guide/settings/
