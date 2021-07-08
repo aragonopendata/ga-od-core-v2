@@ -3,7 +3,7 @@ from typing import Any, Dict, Iterable, Optional
 from rest_framework.exceptions import ValidationError
 
 from connectors import validate_resource, NoObjectError, DriverConnectionError, TooManyRowsError, validate_uri, \
-    NotImplementedSchemaError
+    NotImplementedSchemaError, TypeDocumentError, TypeReachedUrl
 
 
 def uri_validator(uri):
@@ -17,6 +17,11 @@ def uri_validator(uri):
         raise ValidationError('Connection is not available.', 400)
     except NotImplementedSchemaError as err:
         raise ValidationError(str(err), 400)
+    except TypeDocumentError as err:
+        raise TypeDocumentError(err)
+    except TypeReachedUrl as err:
+        raise TypeReachedUrl(err)
+
 
 
 def resource_validator(uri: str, object_location: str,
@@ -36,3 +41,7 @@ def resource_validator(uri: str, object_location: str,
         raise ValidationError('This resource have too many rows. For security reason this is not allowed.', 400)
     except NotImplementedSchemaError as err:
         raise ValidationError(str(err), 400)
+    except TypeDocumentError as err:
+        raise TypeDocumentError(err)
+    except TypeReachedUrl as err:
+        raise TypeReachedUrl(err)

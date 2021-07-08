@@ -11,7 +11,7 @@ from rest_framework.response import Response
 
 
 from connectors import get_resource_data, get_resource_columns, NoObjectError, DriverConnectionError, \
-    NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError
+    NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError, TypeDocumentError, TypeReachedUrl
 from gaodcore.negotations import LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list
@@ -113,6 +113,10 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
         except DriverConnectionError:
             raise ValidationError('Connection is not available.', 500)
         except NotImplementedSchemaError as err:
+            raise ValidationError(str(err), 500)
+        except TypeDocumentError as err:
+            raise ValidationError(str(err), 500)
+        except TypeReachedUrl as err:
             raise ValidationError(str(err), 500)
 
         response = Response(get_return_list(data))
@@ -278,6 +282,10 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
         except DriverConnectionError:
             raise ValidationError('Connection is not available.', 500)
         except NotImplementedSchemaError as err:
+            raise ValidationError(str(err), 500)
+        except TypeDocumentError as err:
+            raise ValidationError(str(err), 500)
+        except TypeReachedUrl as err:
             raise ValidationError(str(err), 500)
 
         return Response(get_return_list(data))
