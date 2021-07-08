@@ -9,7 +9,6 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-
 from connectors import get_resource_data, get_resource_columns, NoObjectError, DriverConnectionError, \
     NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError
 from gaodcore.negotations import LegacyContentNegotiation
@@ -18,7 +17,7 @@ from utils import get_return_list
 from views import APIViewMixin
 
 
-class DownloadView(XLSXFileMixin, APIViewMixin):
+class DownloadView(APIViewMixin):
     """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón."""
     _PREVIEW_LIMIT = 1000
     _DOWNLOAD_ENDPOINT = ('/GA_OD_Core/download', '/GA_OD_Core/download')
@@ -38,7 +37,7 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
                              openapi.Parameter('filters',
                                                openapi.IN_QUERY,
                                                description='Matching conditions to select, e.g '
-                                               '{“key1”: “a”, “key2”: “b”}.',
+                                                           '{“key1”: “a”, “key2”: “b”}.',
                                                type=openapi.TYPE_OBJECT),
                              openapi.Parameter('offset',
                                                openapi.IN_QUERY,
@@ -61,7 +60,7 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
                              openapi.Parameter('sort',
                                                openapi.IN_QUERY,
                                                description="Comma separated field names with ordering e.g: "
-                                               "“fieldname1, fieldname2 desc”.",
+                                                           "“fieldname1, fieldname2 desc”.",
                                                type=openapi.TYPE_ARRAY,
                                                items=openapi.Items(type=openapi.TYPE_STRING)),
                              openapi.Parameter('formato',
@@ -72,10 +71,14 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
                                                openapi.IN_QUERY,
                                                description='Force name of file to download.',
                                                type=openapi.TYPE_STRING),
+                             openapi.Parameter('name',
+                                               openapi.IN_QUERY,
+                                               description='Force name of file to download.',
+                                               type=openapi.TYPE_STRING),
                              openapi.Parameter('_page',
                                                openapi.IN_QUERY,
                                                description='Deprecated. Number of the page.',
-                                               type=openapi.TYPE_INTEGER,),
+                                               type=openapi.TYPE_INTEGER, ),
                              openapi.Parameter('_pageSize',
                                                openapi.IN_QUERY,
                                                description='Deprecated. Number of results in each page.',
@@ -117,12 +120,16 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
 
         response = Response(get_return_list(data))
 
-        if self.is_download_endpoint(request):
-            filename = request.query_params.get('nameRes') or resource_config.name
+        if self.is_download_endpoint(request) or response.accepted_renderer.format == "xlsx":
+            filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
             disposition = f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
-            response['Content-Disposition'] = disposition
+            response["content-disposition"] = disposition
 
         return response
+
+    def get_filename(self, request: Request, resource_config: ResourceConfig):
+        """Note: this is import due that replace XLSX Render method that forcer his own filename"""
+        return request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
 
     def is_download_endpoint(self, request: Request):
         return any((request.get_full_path().startswith(endpoint) for endpoint in self._DOWNLOAD_ENDPOINT))
