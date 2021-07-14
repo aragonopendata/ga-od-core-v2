@@ -15,13 +15,8 @@ def uri_validator(uri):
         validate_uri(uri)
     except DriverConnectionError:
         raise ValidationError('Connection is not available.', 400)
-    except NotImplementedSchemaError as err:
+    except (NotImplementedSchemaError, TypeDocumentError, TypeReachedUrl) as err:
         raise ValidationError(str(err), 400)
-    except TypeDocumentError as err:
-        raise TypeDocumentError(err)
-    except TypeReachedUrl as err:
-        raise TypeReachedUrl(err)
-
 
 
 def resource_validator(uri: str, object_location: str,
@@ -39,9 +34,5 @@ def resource_validator(uri: str, object_location: str,
         raise ValidationError('Connection is not available.', 400)
     except TooManyRowsError:
         raise ValidationError('This resource have too many rows. For security reason this is not allowed.', 400)
-    except NotImplementedSchemaError as err:
+    except (NotImplementedSchemaError, TypeDocumentError, TypeReachedUrl) as err:
         raise ValidationError(str(err), 400)
-    except TypeDocumentError as err:
-        raise TypeDocumentError(err)
-    except TypeReachedUrl as err:
-        raise TypeReachedUrl(err)
