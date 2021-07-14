@@ -1,5 +1,6 @@
 import urllib.request
 from dataclasses import dataclass
+from enum import Enum
 from http import HTTPStatus
 from typing import Optional, Dict, List, Any, Iterable
 from urllib.parse import urlparse
@@ -14,6 +15,12 @@ _DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql', 'oracle', 'sqlite'}
 _HTTP_SCHEMAS = {'http', 'https'}
 _RESOURCE_MAX_ROWS = 250000
 _TEMPORAL_TABLE_NAME = 'temporal_table'
+
+
+class MimeType(Enum):
+    CSV = 'text/csv',
+    XLSX = 'application/xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+
 
 
 class NotImplementedSchemaError(Exception):
@@ -214,7 +221,6 @@ def validate_uri(uri: str) -> None:
         raise TypeReachedUrl(err)
 
 
-
 def _get_engine(uri: str) -> Engine:
     uri_parsed = urlparse(uri)
     if uri_parsed.scheme in _DATABASE_SCHEMAS:
@@ -225,12 +231,17 @@ def _get_engine(uri: str) -> Engine:
     elif uri_parsed.scheme in _HTTP_SCHEMAS:
         with urllib.request.urlopen(uri) as f:
             if f.getcode() == HTTPStatus.OK:
-                if f.info()['Content-Type'] == 'text/csv':
+                mime_type = f.info()['Content-Type'].split(';')[0]
+                if mime_type in MimeType.CSV.value:
+
                     df = pd.read_csv(f)
-                elif f.info()['Content-Type'] == 'text/xml,application/xml':
-                    df = pd.read_excel(f)
+                elif mime_type in MimeType.XLSX.value:
+                    try:
+                        df = pd.read_excel(f.read())
+                    except ValueError:
+                        raise TypeDocumentError('Type of document is not allowed.')
                 else:
-                    raise TypeDocumentError('Type of document is not csv or excel.')
+                    raise TypeDocumentError('Type of document is not allowed.')
             else:
                 raise TypeReachedUrl('The url could not be reached.')
 

@@ -1,6 +1,7 @@
 import datetime
 
 import pytest as pytest
+from _pytest.fixtures import FixtureRequest
 from django.db.models import Model
 from django.test import Client
 from sqlalchemy import create_engine, Column, Integer, String, BigInteger, Float, Numeric, Boolean, Date, DateTime, Text
@@ -88,7 +89,7 @@ def create_view(client, test_name: str, connector_data):
     })
 
 
-def create_full_example(auth_client, pg, request: str):
+def create_full_example(auth_client, pg, request: FixtureRequest):
     uri = get_uri(*pg)
     connector_data = create_connector_ga_od_core(auth_client, request.node.originalname, uri)
     create_table(uri, request.node.originalname)
