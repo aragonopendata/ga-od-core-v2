@@ -9,3 +9,4 @@ pytest-rerunfailures
 pytest-mock
 tox
 yapf
+pytest-httpserver
