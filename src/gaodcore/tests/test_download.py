@@ -1,42 +1,22 @@
 import json
 import os
+from typing import Tuple
+from unittest import mock
 
 import psycopg2
 import pytest
+from django.contrib.auth.models import User
+from django.test.client import Client
+from rest_framework.response import Response
 
 import connectors
-from gaodcore.tests.helpers import get_uri, create_connector_ga_od_core, create_table, auth_client, \
-    create_full_example
+from conftest import auth_client, create_full_example, get_uri, create_connector_ga_od_core, create_table
 
 
 @pytest.mark.django_db
-def test_download_fields(auth_client, pg, request):
-    view_response = create_full_example(auth_client, *pg, request.node.originalname)
-    download_response = auth_client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
-        "fields": ["id", "name"]
-    })
-
-    assert download_response.json() == [{'id': 1, 'name': 'RX-78-2 Gundam'}, {'id': 2, 'name': 'Half Gundam'}]
-
-
-@pytest.mark.django_db
-def test_download_nameres(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
-        "nameRes": 'test'
-    })
-    # TODO: django client not return headers
-
-
-@pytest.mark.django_db
-def test_download_field(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_field(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         "fields": ["id"]
     })
 
@@ -44,11 +24,19 @@ def test_download_field(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_non_existent_field_error(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_fields(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
+        "fields": ["id", "name"]
+    })
+
+    assert download_response.json() == [{'id': 1, 'name': 'RX-78-2 Gundam'}, {'id': 2, 'name': 'Half Gundam'}]
+
+
+@pytest.mark.django_db
+def test_download_non_existent_field_error(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         "fields": ["non_existent_field"]
     })
 
@@ -56,12 +44,27 @@ def test_download_non_existent_field_error(client, django_user_model, pg, reques
 
 
 @pytest.mark.django_db
-def test_download_format(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
+def test_download_name(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
+        "nameRes": 'download_name'
+    })
+    assert 'attachment; filename="download_name.json"' == download_response['content-disposition']
 
-    download_response = client.get(f'/GA_OD_Core/download.xml', {
-        'resource_id': view_response.json()['id'],
+
+@pytest.mark.django_db
+def test_download_name_res(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
+        "nameRes": 'download_name_res'
+    })
+    assert 'attachment; filename="download_name_res.json"' == download_response['content-disposition']
+
+
+@pytest.mark.django_db
+def test_download_format(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.xml', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'formato': "csv"
     })
 
@@ -70,12 +73,9 @@ def test_download_format(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_format_error(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.xml', {
-        'resource_id': view_response.json()['id'],
+def test_download_format_error(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.xml', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'formato': "dj"
     })
 
@@ -84,12 +84,9 @@ def test_download_format_error(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_offset(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_offset(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'offset': "1"
     })
 
@@ -98,12 +95,9 @@ def test_download_offset(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_offset_error(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_offset_error(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'offset': "a"
     })
 
@@ -112,12 +106,9 @@ def test_download_offset_error(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_limit(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_limit(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'limit': "1"
     })
 
@@ -126,12 +117,9 @@ def test_download_limit(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_pagination(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_pagination(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         '_page': "1",
         '_page_size': "1"
     })
@@ -143,12 +131,9 @@ def test_download_pagination(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_pagination_overflow(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_pagination_overflow(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         '_page': "2",
         '_page_size': "1"
     })
@@ -157,12 +142,9 @@ def test_download_pagination_overflow(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_pagination_fail_page(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_pagination_fail_page(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         '_page': "a",
         '_page_size': "1"
     })
@@ -171,12 +153,9 @@ def test_download_pagination_fail_page(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_pagination_fail_page_size(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_pagination_fail_page_size(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         '_page': "1",
         '_page_size': "a"
     })
@@ -185,12 +164,9 @@ def test_download_pagination_fail_page_size(client, django_user_model, pg, reque
 
 
 @pytest.mark.django_db
-def test_download_limit_error(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_limit_error(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'limit': "a"
     })
 
@@ -199,12 +175,9 @@ def test_download_limit_error(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_filters(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_filters(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'filters': '{"description": null}'
     })
 
@@ -213,30 +186,24 @@ def test_download_filters(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_filters_json_error(client, django_user_model):
-    client = auth_client(client=client, django_user_model=django_user_model)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {'resource_id': 1, 'filters': 'a'})
+def test_download_filters_json_error(auth_client_fixture, django_user_model):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {'resource_id': 1, 'filters': 'a'})
     assert download_response.status_code == 400
     assert download_response.json() == ['Invalid JSON.']
 
 
 @pytest.mark.django_db
-def test_download_filters_value_error(client, django_user_model):
-    client = auth_client(client=client, django_user_model=django_user_model)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {'resource_id': 1, 'filters': '{"a": []}'})
+def test_download_filters_value_error(auth_client_fixture, django_user_model):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json',
+                                                {'resource_id': 1, 'filters': '{"a": []}'})
     assert download_response.status_code == 400
     assert download_response.json() == [f'Value [] is not a String, Integer, Float, Bool, Null or None']
 
 
 @pytest.mark.django_db
-def test_download_sort(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_sort(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'sort': 'name desc, description, acceleration asc'
     })
 
@@ -245,12 +212,9 @@ def test_download_sort(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_sort(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_sort(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'sort': 'name desc, description, acceleration asc'
     })
 
@@ -259,11 +223,9 @@ def test_download_sort(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_sort(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_sort(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'sort': 'name desc, description, max_acceleration asc'
     })
 
@@ -274,11 +236,10 @@ def test_download_sort(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_sort_mode_error(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_sort_mode_errorauth_client_fixture(auth_client_fixture: Client,
+                                                     create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'sort': 'name none'
     })
 
@@ -286,11 +247,9 @@ def test_download_sort_mode_error(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_download_sort_too_many_arguments_error(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.originalname)
-    download_response = client.get(f'/GA_OD_Core/download.json', {
-        'resource_id': view_response.json()['id'],
+def test_download_sort_too_many_arguments_error(auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
+        'resource_id': create_full_example_fixture.json()['id'],
         'sort': 'name none asd'
     })
 
@@ -298,7 +257,7 @@ def test_download_sort_too_many_arguments_error(client, django_user_model, pg, r
 
 
 @pytest.mark.django_db
-def test_download_object_location_error(client):
+def test_download_resource_not_exists(client):
     download_response = client.get(f'/GA_OD_Core/download.json', {'resource_id': 96, "fields": ["id", "name"]})
     assert download_response.status_code == 400
     assert download_response.json() == ['Resource not exists or is not available']
@@ -306,87 +265,9 @@ def test_download_object_location_error(client):
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("extension,", ["json", "xml", "csv", "yaml"])
-def test_download_extension(client, django_user_model, pg, request, extension):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, f"{request.node.originalname}_{extension}")
-    download_response = client.get(f'/GA_OD_Core/download.{extension}', {'resource_id': view_response.json()['id']})
+def test_download_extension(extension, auth_client_fixture: Client, create_full_example_fixture: Response):
+    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.{extension}',
+                                                {'resource_id': create_full_example_fixture.json()['id']})
 
     with open(os.path.join(os.path.dirname(__file__), f"data.{extension}"), r'rb') as f:
         assert f.read() == download_response.content
-
-
-@pytest.mark.django_db
-def test_download_too_many_rows(client, django_user_model, pg, request, mocker):
-    mocker.patch.object(connectors, '_RESOURCE_MAX_ROWS', 1)
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.name)
-
-    assert view_response.json() == {
-        'non_field_errors': ['This resource have too many rows. For security reason this is not allowed.']
-    }
-
-
-@pytest.mark.django_db
-def test_download_postgresql_table(client, django_user_model, request, pg):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.name)
-    download_response = client.get('/GA_OD_Core/download', {'resource_id': view_response.json()['id']})
-    assert download_response.json() == [{
-        "id": 1,
-        "name": "RX-78-2 Gundam",
-        "size": 18,
-        "max_acceleration": 0.93,
-        "weight": "60.0",
-        "description": "The RX-78-2 Gundam is the titular mobile suit of Mobile Suit Gundam television series",
-        "discover_date": "0079-09-18",
-        "destroyed_date": "0079-12-31T12:01:01",
-        "destroyed": True
-    }, {
-        "id": 2,
-        "name": "Half Gundam",
-        "size": None,
-        "max_acceleration": None,
-        "weight": None,
-        "description": None,
-        "discover_date": None,
-        "destroyed_date": None,
-        "destroyed": None
-    }]
-
-
-@pytest.mark.django_db
-def test_download_postgresql_view(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    uri = get_uri(*pg)
-    connector_data = create_connector_ga_od_core(client, request.node.name, uri)
-    table_name = request.node.name + '_table'
-    create_table(uri, table_name)
-
-    connection = psycopg2.connect(uri)
-    cursor = connection.cursor()
-    cursor.execute(f"""CREATE view {request.node.name} as SELECT * FROM {table_name};""")
-    connection.commit()
-
-    resource_response = client.post('/GA_OD_Core_admin/manager/resource-config/', {
-        "name": request.node.name,
-        "connector_config": connector_data.json()['id'],
-        "object_location": request.node.name
-    })
-
-    assert resource_response.status_code == 201
-
-
-def test_download_api(client, request, django_user_model):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    connector_data = create_connector_ga_od_core(client, request.node.name, 'https://people.sc.fsu.edu/~jburkardt/data/csv/crash_catalonia.csv')
-    resource_response = client.post('/GA_OD_Core_admin/manager/resource-config/', {
-        "name": request.node.name,
-        "connector_config": connector_data.json()['id'],
-        "enabled": True
-    })
-
-    assert resource_response.status_code == 201
-
-    response = client.get(f'/GA_OD_Core/download.json', {'resource_id': resource_response.json()['id']})
-    assert response.status_code == 200
-
