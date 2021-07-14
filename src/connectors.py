@@ -90,12 +90,7 @@ def get_resource_columns(uri: str,
     @param cache: if not exists connection save on cache.
     @return: list of dictionaries with column name and data type
     """
-    try:
-        engine = _get_engine(uri)
-    except TypeDocumentError as err:
-        raise TypeDocumentError(err)
-    except TypeReachedUrl as err:
-        raise TypeReachedUrl(err)
+    engine = _get_engine(uri)
     Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
 
     data = ({"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)} for column in Model.columns)
@@ -107,12 +102,7 @@ def validate_resource(*, uri: str, object_location: Optional[str],
                       object_location_schema: Optional[str]) -> Iterable[Dict[str, Any]]:
     """Validate if resource is available and have less rows than allowed. Return data of resource, a iterable of
     dictionaries."""
-    try:
-        _validate_max_rows_allowed(uri, object_location, object_location_schema=object_location_schema)
-    except TypeDocumentError as err:
-        raise TypeDocumentError(err)
-    except TypeReachedUrl as err:
-        raise TypeReachedUrl(err)
+    _validate_max_rows_allowed(uri, object_location, object_location_schema=object_location_schema)
     return get_resource_data(uri=uri,
                              object_location=object_location,
                              object_location_schema=object_location_schema,
@@ -123,12 +113,7 @@ def validate_resource(*, uri: str, object_location: Optional[str],
 
 def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_location_schema: Optional[str]):
     """Validate if resource have less rows than allowed."""
-    try:
-        engine = _get_engine(uri)
-    except TypeDocumentError as err:
-        raise TypeDocumentError(err)
-    except TypeReachedUrl as err:
-        raise TypeReachedUrl(err)
+    engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
     Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
@@ -151,12 +136,7 @@ def get_resource_data(*,
                       limit: Optional[int] = None,
                       offset: int = 0) -> Iterable[Dict[str, Any]]:
     """Return a iterable of dictionaries with data of resource."""
-    try:
-        engine = _get_engine(uri)
-    except TypeDocumentError as err:
-        raise TypeDocumentError(err)
-    except TypeReachedUrl as err:
-        raise TypeReachedUrl(err)
+    engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
     Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
@@ -214,10 +194,6 @@ def validate_uri(uri: str) -> None:
             pass
     except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError) as err:
         raise DriverConnectionError(str(err))
-    except TypeDocumentError as err:
-        raise TypeDocumentError(err)
-    except TypeReachedUrl as err:
-        raise TypeReachedUrl(err)
 
 
 def _get_engine(uri: str) -> Engine:
