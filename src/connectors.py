@@ -50,13 +50,8 @@ class SortFieldNoExistsError(Exception):
     pass
 
 
-class TypeDocumentError(Exception):
+class MimeTypeError(Exception):
     """Type of document is not csv or excel."""
-    pass
-
-
-class TypeReachedUrl (Exception):
-    """The url could not be reached."""
     pass
 
 
@@ -79,7 +74,7 @@ def _get_model(*, engine: Engine, object_location: str, object_location_schema: 
                      autoload_with=engine,
                      schema=object_location_schema)
     except sqlalchemy.exc.NoSuchTableError as err:
-        raise NoObjectError(str(err))
+        raise NoObjectError("Object not available.") from err
 
 
 def get_resource_columns(uri: str,
@@ -119,10 +114,14 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
     Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
 
     session = session_maker()
-    if session.query(Model).count() > _RESOURCE_MAX_ROWS:
-        raise TooManyRowsError()
+    try:
+        num_rows = session.query(Model).count()
+    except sqlalchemy.exc.ProgrammingError as err:
+        raise NoObjectError("Object not available.") from err
+
+    if num_rows > _RESOURCE_MAX_ROWS:
+        raise TooManyRowsError('This resource have too many rows. For security reason this is not allowed.')
     session.close()
-    session_maker.close_all()
     engine.dispose()
 
 
@@ -154,7 +153,6 @@ def get_resource_data(*,
     data = (dict(zip(columns_names, row)) for row in data)
 
     session.close()
-    session_maker.close_all()
     engine.dispose()
 
     return data
@@ -189,20 +187,18 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
 
 def validate_uri(uri: str) -> None:
     """Validate if URI is available as resource."""
+    engine = _get_engine(uri)
     try:
-        with _get_engine(uri).connect() as _:
+        with engine.connect() as _:
             pass
-    except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError) as err:
-        raise DriverConnectionError(str(err))
+    except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError, sqlalchemy.exc.ProgrammingError) as err:
+        raise DriverConnectionError("Connection not available.") from err
 
 
 def _get_engine(uri: str) -> Engine:
     uri_parsed = urlparse(uri)
     if uri_parsed.scheme in _DATABASE_SCHEMAS:
-        try:
-            return create_engine(uri)
-        except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError) as err:
-            raise DriverConnectionError(str(err))
+        return create_engine(uri)
     elif uri_parsed.scheme in _HTTP_SCHEMAS:
         with urllib.request.urlopen(uri) as f:
             if f.getcode() == HTTPStatus.OK:
@@ -214,11 +210,11 @@ def _get_engine(uri: str) -> Engine:
                     try:
                         df = pd.read_excel(f.read())
                     except ValueError:
-                        raise TypeDocumentError('Type of document is not allowed.')
+                        raise MimeTypeError('Type of document is not allowed.')
                 else:
-                    raise TypeDocumentError('Type of document is not allowed.')
+                    raise MimeTypeError('Type of document is not allowed.')
             else:
-                raise TypeReachedUrl('The url could not be reached.')
+                raise DriverConnectionError('The url could not be reached.')
 
         engine = create_engine("sqlite:///:memory:", echo=True, future=True)
         df.to_sql(_TEMPORAL_TABLE_NAME, engine)

@@ -1,16 +1,9 @@
 import json
 import os
-from typing import Tuple
-from unittest import mock
 
-import psycopg2
 import pytest
-from django.contrib.auth.models import User
 from django.test.client import Client
 from rest_framework.response import Response
-
-import connectors
-from conftest import auth_client, create_full_example, get_uri, create_connector_ga_od_core, create_table
 
 
 @pytest.mark.django_db

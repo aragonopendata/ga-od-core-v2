@@ -49,7 +49,7 @@ async def download_async_bulk(urls: Iterable[str], auth: Optional[aiohttp.BasicA
     return data
 
 
-async def download_async(session: aiohttp.ClientSession(), url: str,
+async def download_async(session: aiohttp.ClientSession, url: str,
                          auth: Optional[aiohttp.BasicAuth] = None) -> Dict[str, Any]:
     try:
         response = await session.get(url, auth=auth)
