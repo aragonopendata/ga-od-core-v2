@@ -115,11 +115,7 @@ class DownloadView(APIViewMixin):
             raise ValidationError(f'Object "{resource_config.object_location}" is not available.', 500)
         except DriverConnectionError:
             raise ValidationError('Connection is not available.', 500)
-        except NotImplementedSchemaError as err:
-            raise ValidationError(str(err), 500)
-        except TypeDocumentError as err:
-            raise ValidationError(str(err), 500)
-        except TypeReachedUrl as err:
+        except (NotImplementedSchemaError, TypeDocumentError, TypeReachedUrl) as err:
             raise ValidationError(str(err), 500)
 
         response = Response(get_return_list(data))
@@ -288,11 +284,7 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
             raise ValidationError(f'Object "{resource_config.object_location}" is not available.', 500)
         except DriverConnectionError:
             raise ValidationError('Connection is not available.', 500)
-        except NotImplementedSchemaError as err:
-            raise ValidationError(str(err), 500)
-        except TypeDocumentError as err:
-            raise ValidationError(str(err), 500)
-        except TypeReachedUrl as err:
+        except (NotImplementedSchemaError, TypeDocumentError, TypeReachedUrl) as err:
             raise ValidationError(str(err), 500)
 
         return Response(get_return_list(data))
