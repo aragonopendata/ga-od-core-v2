@@ -1,8 +1,8 @@
 import urllib.request
 from dataclasses import dataclass
+from http import HTTPStatus
 from typing import Optional, Dict, List, Any, Iterable
 from urllib.parse import urlparse
-from http import HTTPStatus
 
 import pandas as pd
 import sqlalchemy.exc
@@ -47,6 +47,7 @@ class SortFieldNoExistsError(Exception):
 class TypeDocumentError(Exception):
     """Type of document is not csv or excel."""
     pass
+
 
 class TypeReachedUrl (Exception):
     """The url could not be reached."""
