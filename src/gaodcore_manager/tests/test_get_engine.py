@@ -5,7 +5,7 @@ from _pytest.fixtures import FixtureRequest
 from pytest_httpserver import HTTPServer
 
 from conftest import PROJECT_DIR
-from src.connectors import _get_engine, TypeDocumentError
+from src.connectors import _get_engine, MimeTypeError
 
 
 def _get_data_url(httpserver: HTTPServer, request: FixtureRequest, filepath: str, content_type: str) -> str:
@@ -32,11 +32,11 @@ def test_get_engine_excel(httpserver: HTTPServer, request: FixtureRequest):
 
 def test_get_engine_not_allowed_content_type_error(httpserver: HTTPServer, request: FixtureRequest):
     path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'data.json')
-    with pytest.raises(TypeDocumentError):
+    with pytest.raises(MimeTypeError):
         _get_engine(_get_data_url(httpserver, request, path, 'application/json'))
 
 
 def test_get_engine_xlsx_bad_content_type_error(httpserver: HTTPServer, request: FixtureRequest):
     path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'data.json')
-    with pytest.raises(TypeDocumentError):
+    with pytest.raises(MimeTypeError):
         _get_engine(_get_data_url(httpserver, request, path, 'application/xlsx'))

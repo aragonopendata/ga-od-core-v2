@@ -38,4 +38,4 @@ def test_connector_config_schema_error(auth_client_fixture: Client, request: Fix
     uri = f"test://postgres:postgres@localhost:1/guillotina"
     response = auth_client_fixture.post('/GA_OD_Core_admin/manager/connector-config/', {"name": request.node.name, "uri": uri})
     assert response.status_code == 400
-    assert response.json() == {'uri': ['Schema: "test" is not implemented.']}
+    assert response.json() == {'uri': ['Connection is not available.']}

@@ -1,6 +1,7 @@
 import json
+from functools import partial
 from json.decoder import JSONDecodeError
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 
 from drf_renderer_xlsx.mixins import XLSXFileMixin
 from drf_yasg import openapi
@@ -10,11 +11,26 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from connectors import get_resource_data, get_resource_columns, NoObjectError, DriverConnectionError, \
-    NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError, TypeDocumentError, TypeReachedUrl
+    NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError, MimeTypeError
 from gaodcore.negotations import LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list
 from views import APIViewMixin
+
+
+def _get_data_public_error(func: Callable, *args, **kwargs) -> List[Dict[str, Any]]:
+    try:
+        return func(*args, **kwargs)
+    except (FieldNoExistsError, SortFieldNoExistsError) as err:
+        raise ValidationError(err, 400)
+    except NoObjectError:
+        raise ValidationError(f'Object is not available.', 500)
+    except DriverConnectionError:
+        raise ValidationError('Connection is not available.', 500)
+    except NotImplementedSchemaError:
+        raise ValidationError("Unexpected error: schema is not implemented.", 500)
+    except MimeTypeError:
+        raise ValidationError("Unexpected error: mimetype of input file is not implemented.", 500)
 
 
 class DownloadView(APIViewMixin):
@@ -100,23 +116,14 @@ class DownloadView(APIViewMixin):
         except ResourceConfig.DoesNotExist:
             raise ValidationError("Resource not exists or is not available", 400)
 
-        try:
-            data = get_resource_data(uri=resource_config.connector_config.uri,
-                                     object_location=resource_config.object_location,
-                                     object_location_schema=resource_config.object_location_schema,
-                                     filters=filters,
-                                     limit=limit,
-                                     offset=offset,
-                                     fields=fields,
-                                     sort=sort)
-        except (FieldNoExistsError, SortFieldNoExistsError) as err:
-            raise ValidationError(err, 400)
-        except NoObjectError:
-            raise ValidationError(f'Object "{resource_config.object_location}" is not available.', 500)
-        except DriverConnectionError:
-            raise ValidationError('Connection is not available.', 500)
-        except (NotImplementedSchemaError, TypeDocumentError, TypeReachedUrl) as err:
-            raise ValidationError(str(err), 500)
+        data = _get_data_public_error(get_resource_data, uri=resource_config.connector_config.uri,
+                                      object_location=resource_config.object_location,
+                                      object_location_schema=resource_config.object_location_schema,
+                                      filters=filters,
+                                      limit=limit,
+                                      offset=offset,
+                                      fields=fields,
+                                      sort=sort)
 
         response = Response(get_return_list(data))
 
@@ -276,16 +283,9 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
         resource_config = ResourceConfig.objects.select_related().get(id=resource_id,
                                                                       enabled=True,
                                                                       connector_config__enabled=True)
-        try:
-            data = get_resource_columns(uri=resource_config.connector_config.uri,
-                                        object_location=resource_config.object_location,
-                                        object_location_schema=resource_config.object_location_schema)
-        except NoObjectError:
-            raise ValidationError(f'Object "{resource_config.object_location}" is not available.', 500)
-        except DriverConnectionError:
-            raise ValidationError('Connection is not available.', 500)
-        except (NotImplementedSchemaError, TypeDocumentError, TypeReachedUrl) as err:
-            raise ValidationError(str(err), 500)
+        data = _get_data_public_error(get_resource_columns, uri=resource_config.connector_config.uri,
+                                      object_location=resource_config.object_location,
+                                      object_location_schema=resource_config.object_location_schema)
 
         return Response(get_return_list(data))
 
