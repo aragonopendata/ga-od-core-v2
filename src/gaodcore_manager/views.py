@@ -8,7 +8,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from gaodcore_manager.serializers import ConnectorConfigSerializer, ResourceConfigSerializer
 from gaodcore_manager.validators import resource_validator

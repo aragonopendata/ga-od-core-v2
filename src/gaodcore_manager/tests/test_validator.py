@@ -3,13 +3,13 @@ import os
 import pytest
 
 import connectors
-from gaodcore.tests.helpers import auth_client, create_full_example, get_uri
+from conftest import auth_client, create_full_example, get_uri
 
 
 @pytest.mark.django_db
 def test_validator(client, django_user_model, pg, request):
     client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.name)
+    view_response = create_full_example(client, pg, request)
     view_data = view_response.json()
     download_response = client.get(f'/GA_OD_Core_admin/manager/validator.json', {
         'object_location': view_data['object_location'],
@@ -44,7 +44,7 @@ def test_validator_object_database_error(client, django_user_model, pg):
 @pytest.mark.django_db
 def test_validator_too_many_rows(client, django_user_model, pg, request, mocker):
     client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, *pg, request.node.name)
+    view_response = create_full_example(client, pg, request)
     view_data = view_response.json()
     mocker.patch.object(connectors, '_RESOURCE_MAX_ROWS', 1)
     download_response = client.get(f'/GA_OD_Core_admin/manager/validator.json', {
