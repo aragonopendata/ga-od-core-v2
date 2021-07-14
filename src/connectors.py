@@ -22,7 +22,6 @@ class MimeType(Enum):
     XLSX = 'application/xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 
 
-
 class NotImplementedSchemaError(Exception):
     """Schema of the URI is not implemented. Schema examples: http, https, postgresql, ftp, etc."""
     pass

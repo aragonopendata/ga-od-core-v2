@@ -1,4 +1,5 @@
 import datetime
+import os
 
 import pytest as pytest
 from _pytest.fixtures import FixtureRequest
@@ -12,6 +13,8 @@ pytest_plugins = ['pytest_docker_fixtures']
 
 USERNAME = "user"
 PASSWORD = "password"
+
+PROJECT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
 
 
 def auth_client(client: Client, django_user_model: Model) -> Client:
@@ -73,9 +76,8 @@ def create_table(uri: str, test_name: str):
             TestData(name='Half Gundam', )])
         session.commit()
     except IntegrityError:
-        # In cases that is using parametrize in pytest try to duplicate rows
+        # In cases that is using parametrize in pytest, it try to duplicate rows
         pass
-
 
     session.close()
 
