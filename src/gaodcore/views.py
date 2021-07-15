@@ -298,8 +298,8 @@ class ResourcesView(XLSXFileMixin, APIViewMixin):
     def get(self, _: Request, **_kwargs) -> Response:
         """This view allow to get a list of public resources."""
         resources = ({
-            'resource_id': resource.id,
-            'resource_name': resource.name,
+            'id': resource.id,
+            'name': resource.name,
             'available': resource.enabled,
-        } for resource in ResourceConfig.objects.all())
+        } for resource in ResourceConfig.objects.order_by("name").prefetch_related('connector_config').all())
         return Response(get_return_list(resources))
