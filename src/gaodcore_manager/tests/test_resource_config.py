@@ -24,14 +24,14 @@ def test_resource_config_error(client, django_user_model, pg, request):
             "object_location": 'fail'
         })
     assert response.status_code == 400
-    assert response.json() == {'non_field_errors': ['Object "fail" is not available.']}
+    assert response.json() == {'non_field_errors': ['Resource is not available.']}
 
 
 @pytest.mark.django_db
 def test_resource_too_many_rows(mock_resource_max_rows, create_full_example_fixture: Response):
 
     assert create_full_example_fixture.json() == {
-        'non_field_errors': ['This resource have too many rows. For security reason this is not allowed.']
+        'non_field_errors': ['Resource is not available.']
     }
 
 
