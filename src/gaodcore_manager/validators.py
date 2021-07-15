@@ -3,7 +3,7 @@ from typing import Any, Dict, Iterable, Optional
 from rest_framework.exceptions import ValidationError
 
 from connectors import validate_resource, NoObjectError, DriverConnectionError, TooManyRowsError, validate_uri, \
-    NotImplementedSchemaError, TypeDocumentError, TypeReachedUrl
+    NotImplementedSchemaError, MimeTypeError
 
 
 def uri_validator(uri):
@@ -13,10 +13,8 @@ def uri_validator(uri):
     """
     try:
         validate_uri(uri)
-    except DriverConnectionError:
-        raise ValidationError('Connection is not available.', 400)
-    except (NotImplementedSchemaError, TypeDocumentError, TypeReachedUrl) as err:
-        raise ValidationError(str(err), 400)
+    except (DriverConnectionError, NotImplementedSchemaError, MimeTypeError) as err:
+        raise ValidationError('Connection is not available.', 400) from err
 
 
 def resource_validator(uri: str, object_location: str,
@@ -28,11 +26,5 @@ def resource_validator(uri: str, object_location: str,
         return validate_resource(uri=uri,
                                  object_location=object_location,
                                  object_location_schema=object_location_schema)
-    except NoObjectError:
-        raise ValidationError(f'Object "{object_location}" is not available.', 400)
-    except DriverConnectionError:
-        raise ValidationError('Connection is not available.', 400)
-    except TooManyRowsError:
-        raise ValidationError('This resource have too many rows. For security reason this is not allowed.', 400)
-    except (NotImplementedSchemaError, TypeDocumentError, TypeReachedUrl) as err:
-        raise ValidationError(str(err), 400)
+    except (DriverConnectionError, NotImplementedSchemaError, MimeTypeError, NoObjectError, TooManyRowsError) as err:
+        raise ValidationError('Resource is not available.', 400) from err
