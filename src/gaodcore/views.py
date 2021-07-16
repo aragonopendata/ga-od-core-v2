@@ -300,6 +300,6 @@ class ResourcesView(XLSXFileMixin, APIViewMixin):
         resources = ({
             'id': resource.id,
             'name': resource.name,
-            'available': resource.enabled,
-        } for resource in ResourceConfig.objects.order_by("name").prefetch_related('connector_config').all())
+            'available': resource.enabled and resource.connector_config.enabled,
+        } for resource in ResourceConfig.objects.order_by("id").prefetch_related('connector_config').all())
         return Response(get_return_list(resources))
