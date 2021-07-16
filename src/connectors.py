@@ -1,3 +1,4 @@
+import logging
 import urllib.request
 from dataclasses import dataclass
 from enum import Enum
@@ -74,6 +75,7 @@ def _get_model(*, engine: Engine, object_location: str, object_location_schema: 
                      autoload_with=engine,
                      schema=object_location_schema)
     except sqlalchemy.exc.NoSuchTableError as err:
+        logging.exception("Object not available.")
         raise NoObjectError("Object not available.") from err
 
 
@@ -117,6 +119,7 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
     try:
         num_rows = session.query(Model).count()
     except sqlalchemy.exc.ProgrammingError as err:
+        logging.exception("Object not available.")
         raise NoObjectError("Object not available.") from err
 
     if num_rows > _RESOURCE_MAX_ROWS:
@@ -192,6 +195,7 @@ def validate_uri(uri: str) -> None:
         with engine.connect() as _:
             pass
     except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError, sqlalchemy.exc.ProgrammingError) as err:
+        logging.exception("Connection not available.")
         raise DriverConnectionError("Connection not available.") from err
 
 
