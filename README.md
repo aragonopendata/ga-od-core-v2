@@ -25,6 +25,11 @@ swagger: [https://opendata.aragon.es/GA_OD_Core/ui/](https://opendata.aragon.es/
 - **manager**: Private APP that allow to manage _gaodcore_ functionalities. This app is hidden in swagger if you are not
   session authenticated. Directory: [/GA_OD_Core_admin/manager](/GA_OD_Core_admin/manager)
 
+## Despliegue
+
+Es importante poner un timeout generoso 4m ya que si hay alguna peticion no cacheada dara un error. Si se utiliza Apache como proxy revisar timeout https://httpd.apache.org/docs/2.4/mod/mod_proxy.html 
+
+
 ## Usage
 
 ### Authentication
