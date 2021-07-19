@@ -99,6 +99,6 @@ def create_full_example(auth_client, pg, request: FixtureRequest):
 
 
 @pytest.fixture
-def create_full_example_fixture(auth_client_fixture, pg, request):
+def create_full_example_postgresql_fixture(auth_client_fixture, pg, request):
     return create_full_example(auth_client_fixture, pg, request)
 
