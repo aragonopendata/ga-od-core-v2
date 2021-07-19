@@ -127,7 +127,7 @@ class DownloadView(APIViewMixin):
 
         response = Response(get_return_list(data))
 
-        if self.is_download_endpoint(request) or response.accepted_renderer.format == "xlsx":
+        if self.is_download_endpoint(request) or request.accepted_renderer.format == "xlsx":
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
             disposition = f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
             response["content-disposition"] = disposition

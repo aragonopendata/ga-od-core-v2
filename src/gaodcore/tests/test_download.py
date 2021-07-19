@@ -7,9 +7,10 @@ from rest_framework.response import Response
 
 
 @pytest.mark.django_db
-def test_download_field(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_field(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         "fields": ["id"]
     })
 
@@ -17,9 +18,10 @@ def test_download_field(auth_client_fixture: Client, create_full_example_fixture
 
 
 @pytest.mark.django_db
-def test_download_fields(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_fields(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         "fields": ["id", "name"]
     })
 
@@ -27,9 +29,11 @@ def test_download_fields(auth_client_fixture: Client, create_full_example_fixtur
 
 
 @pytest.mark.django_db
-def test_download_non_existent_field_error(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_non_existent_field_error(endpoint: str, auth_client_fixture: Client,
+                                           create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         "fields": ["non_existent_field"]
     })
 
@@ -37,27 +41,30 @@ def test_download_non_existent_field_error(auth_client_fixture: Client, create_f
 
 
 @pytest.mark.django_db
-def test_download_name(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_name(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         "nameRes": 'download_name'
     })
     assert 'attachment; filename="download_name.json"' == download_response['content-disposition']
 
 
 @pytest.mark.django_db
-def test_download_name_res(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_name_res(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         "nameRes": 'download_name_res'
     })
     assert 'attachment; filename="download_name_res.json"' == download_response['content-disposition']
 
 
 @pytest.mark.django_db
-def test_download_format(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.xml', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_format(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         'formato': "csv"
     })
 
@@ -66,9 +73,10 @@ def test_download_format(auth_client_fixture: Client, create_full_example_fixtur
 
 
 @pytest.mark.django_db
-def test_download_format_error(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.xml', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_format_error(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         'formato': "dj"
     })
 
@@ -77,9 +85,10 @@ def test_download_format_error(auth_client_fixture: Client, create_full_example_
 
 
 @pytest.mark.django_db
-def test_download_offset(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_offset(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         'offset': "1"
     })
 
@@ -88,9 +97,10 @@ def test_download_offset(auth_client_fixture: Client, create_full_example_fixtur
 
 
 @pytest.mark.django_db
-def test_download_offset_error(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_offset_error(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         'offset': "a"
     })
 
@@ -99,9 +109,10 @@ def test_download_offset_error(auth_client_fixture: Client, create_full_example_
 
 
 @pytest.mark.django_db
-def test_download_limit(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_limit(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         'limit': "1"
     })
 
@@ -110,9 +121,21 @@ def test_download_limit(auth_client_fixture: Client, create_full_example_fixture
 
 
 @pytest.mark.django_db
-def test_download_pagination(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_limit_error(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
+        'limit': "a"
+    })
+
+    assert download_response.json() == ['Value of limit is not a number.']
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_pagination(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         '_page': "1",
         '_page_size': "1"
     })
@@ -124,9 +147,11 @@ def test_download_pagination(auth_client_fixture: Client, create_full_example_fi
 
 
 @pytest.mark.django_db
-def test_download_pagination_overflow(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_pagination_overflow(endpoint: str, auth_client_fixture: Client,
+                                      create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         '_page': "2",
         '_page_size': "1"
     })
@@ -135,9 +160,11 @@ def test_download_pagination_overflow(auth_client_fixture: Client, create_full_e
 
 
 @pytest.mark.django_db
-def test_download_pagination_fail_page(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_pagination_page_error(endpoint: str, auth_client_fixture: Client,
+                                        create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         '_page': "a",
         '_page_size': "1"
     })
@@ -146,9 +173,11 @@ def test_download_pagination_fail_page(auth_client_fixture: Client, create_full_
 
 
 @pytest.mark.django_db
-def test_download_pagination_fail_page_size(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_pagination_page_size_error(endpoint: str, auth_client_fixture: Client,
+                                             create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         '_page': "1",
         '_page_size': "a"
     })
@@ -157,20 +186,10 @@ def test_download_pagination_fail_page_size(auth_client_fixture: Client, create_
 
 
 @pytest.mark.django_db
-def test_download_limit_error(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
-        'limit': "a"
-    })
-
-    assert download_response.status_code == 400
-    assert download_response.json() == ['Value of limit is not a number.']
-
-
-@pytest.mark.django_db
-def test_download_filters(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_filters(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         'filters': '{"description": null}'
     })
 
@@ -179,47 +198,42 @@ def test_download_filters(auth_client_fixture: Client, create_full_example_fixtu
 
 
 @pytest.mark.django_db
-def test_download_filters_json_error(auth_client_fixture, django_user_model):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {'resource_id': 1, 'filters': 'a'})
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_filters_json_error(endpoint: str, auth_client_fixture, django_user_model):
+    download_response = auth_client_fixture.get(endpoint, {'resource_id': 1, 'filters': 'a'})
     assert download_response.status_code == 400
     assert download_response.json() == ['Invalid JSON.']
 
 
 @pytest.mark.django_db
-def test_download_filters_value_error(auth_client_fixture, django_user_model):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json',
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_filters_value_error(endpoint: str, auth_client_fixture, django_user_model):
+    download_response = auth_client_fixture.get(endpoint,
                                                 {'resource_id': 1, 'filters': '{"a": []}'})
     assert download_response.status_code == 400
     assert download_response.json() == [f'Value [] is not a String, Integer, Float, Bool, Null or None']
 
 
 @pytest.mark.django_db
-def test_download_sort(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
-        'sort': 'name desc, description, acceleration asc'
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_sort_asc(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
+        'sort': 'name asc'
     })
 
     with open(os.path.join(os.path.dirname(__file__), f"data.json"), r'rb') as f:
-        assert json.loads(f.read())[1:2] == json.loads(download_response.content)
+        data = json.loads(f.read())
+        data.sort(key=lambda x: x['name'])
+        assert data == json.loads(download_response.content)
 
 
 @pytest.mark.django_db
-def test_download_sort(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
-        'sort': 'name desc, description, acceleration asc'
-    })
-
-    with open(os.path.join(os.path.dirname(__file__), f"data.json"), r'rb') as f:
-        assert json.loads(f.read())[1] == json.loads(download_response.content)
-
-
-@pytest.mark.django_db
-def test_download_sort(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
-        'sort': 'name desc, description, max_acceleration asc'
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_sort_desc(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
+        'sort': 'name desc'
     })
 
     with open(os.path.join(os.path.dirname(__file__), f"data.json"), r'rb') as f:
@@ -229,10 +243,37 @@ def test_download_sort(auth_client_fixture: Client, create_full_example_fixture:
 
 
 @pytest.mark.django_db
-def test_download_sort_mode_errorauth_client_fixture(auth_client_fixture: Client,
-                                                     create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_sort_n(endpoint: str, auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
+        'sort': 'name asc, description'
+    })
+
+    with open(os.path.join(os.path.dirname(__file__), f"data.json"), r'rb') as f:
+        data = json.loads(f.read())
+        data.sort(key=lambda x: [x['name'], x['description']])
+        assert data == json.loads(download_response.content)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_sort_non_existent_field_error(endpoint: str, auth_client_fixture: Client,
+                                                create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
+        'sort': 'name desc, description, acceleration asc'
+    })
+
+    assert download_response.json() == ['Sort field: "\'acceleration\' not exists.']
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_sort_mode_error(endpoint: str, auth_client_fixture: Client,
+                                  create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         'sort': 'name none'
     })
 
@@ -240,9 +281,11 @@ def test_download_sort_mode_errorauth_client_fixture(auth_client_fixture: Client
 
 
 @pytest.mark.django_db
-def test_download_sort_too_many_arguments_error(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_sort_too_many_arguments_error(endpoint: str, auth_client_fixture: Client,
+                                                create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get(endpoint, {
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         'sort': 'name none asd'
     })
 
@@ -250,17 +293,18 @@ def test_download_sort_too_many_arguments_error(auth_client_fixture: Client, cre
 
 
 @pytest.mark.django_db
-def test_download_resource_not_exists(client):
-    download_response = client.get(f'/GA_OD_Core/download.json', {'resource_id': 96, "fields": ["id", "name"]})
+@pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download.json", "/GA_OD_Core/preview.json"])
+def test_download_resource_not_exists(endpoint: str, client):
+    download_response = client.get(endpoint, {'resource_id': 96, "fields": ["id", "name"]})
     assert download_response.status_code == 400
     assert download_response.json() == ['Resource not exists or is not available']
 
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("extension,", ["json", "xml", "csv", "yaml"])
-def test_download_extension(extension, auth_client_fixture: Client, create_full_example_fixture: Response):
+def test_download_extension(extension, auth_client_fixture: Client, create_full_example_postgresql_fixture):
     download_response = auth_client_fixture.get(f'/GA_OD_Core/download.{extension}',
-                                                {'resource_id': create_full_example_fixture.json()['id']})
+                                                {'resource_id': create_full_example_postgresql_fixture.json()['id']})
 
     with open(os.path.join(os.path.dirname(__file__), f"data.{extension}"), r'rb') as f:
         assert f.read() == download_response.content

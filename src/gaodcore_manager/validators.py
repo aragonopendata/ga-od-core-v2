@@ -13,7 +13,11 @@ def uri_validator(uri):
     """
     try:
         validate_uri(uri)
-    except (DriverConnectionError, NotImplementedSchemaError, MimeTypeError) as err:
+    except NotImplementedSchemaError as err:
+        raise ValidationError('Schema of the URI is not available.', 400) from err
+    except MimeTypeError:
+        raise MimeTypeError("Mimetype of content-type is not allowed. Only allowed: CSV and XLSX mimetypes.")
+    except DriverConnectionError as err:
         raise ValidationError('Connection is not available.', 400) from err
 
 
@@ -26,5 +30,13 @@ def resource_validator(uri: str, object_location: str,
         return validate_resource(uri=uri,
                                  object_location=object_location,
                                  object_location_schema=object_location_schema)
-    except (DriverConnectionError, NotImplementedSchemaError, MimeTypeError, NoObjectError, TooManyRowsError) as err:
-        raise ValidationError('Resource is not available.', 400) from err
+    except NotImplementedSchemaError as err:
+        raise ValidationError('Schema of the URI is not available.', 400) from err
+    except MimeTypeError as err:
+        raise ValidationError("Mimetype of content-type is not allowed. Only allowed: CSV and XLSX mimetypes.") from err
+    except TooManyRowsError as err:
+        raise ValidationError('This resource have too many rows. For security reason this is not allowed.') from err
+    except NoObjectError as err:
+        raise ValidationError('Resource is not available. Table, view, function, etc... not exists.') from err
+    except DriverConnectionError as err:
+        raise ValidationError('Connection is not available.', 400) from err
