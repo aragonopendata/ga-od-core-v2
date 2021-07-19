@@ -27,7 +27,7 @@ def test_validator_object_location_error(client, django_user_model, pg):
         'object_location': 'fail',
         'uri': get_uri(*pg)
     })
-    assert download_response.json() == ['Resource is not available.']
+    assert download_response.json() == ['Resource is not available. Table, view, function, etc... not exists.']
     assert download_response.status_code == 400
 
 
@@ -36,9 +36,9 @@ def test_validator_object_database_error(client, django_user_model, pg):
     client = auth_client(client=client, django_user_model=django_user_model)
     download_response = client.get(f'/GA_OD_Core_admin/manager/validator.json', {
         'object_location': 'fail',
-        'uri': get_uri(*pg)
+        'uri': f"postgresql://postgres:@{pg[0]}:{pg[1]}/fail"
     })
-    assert download_response.json() == ['Resource is not available.']
+    assert download_response.json() == ['Connection is not available.']
 
 
 @pytest.mark.django_db
@@ -51,4 +51,4 @@ def test_validator_too_many_rows(client, django_user_model, pg, request, mocker)
         'object_location': view_data['object_location'],
         'uri': get_uri(*pg)
     })
-    assert download_response.json() == ['Resource is not available.']
+    assert download_response.json() == ['This resource have too many rows. For security reason this is not allowed.']
