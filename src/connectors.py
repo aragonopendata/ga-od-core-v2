@@ -1,3 +1,4 @@
+import logging
 import urllib.request
 from dataclasses import dataclass
 from enum import Enum
@@ -74,7 +75,11 @@ def _get_model(*, engine: Engine, object_location: str, object_location_schema: 
                      autoload_with=engine,
                      schema=object_location_schema)
     except sqlalchemy.exc.NoSuchTableError as err:
+        logging.exception("Object not available.")
         raise NoObjectError("Object not available.") from err
+    except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError, sqlalchemy.exc.ProgrammingError) as err:
+        logging.exception("Connection not available.")
+        raise DriverConnectionError("Connection not available.") from err
 
 
 def get_resource_columns(uri: str,
@@ -117,10 +122,11 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
     try:
         num_rows = session.query(Model).count()
     except sqlalchemy.exc.ProgrammingError as err:
+        logging.exception("Object not available.")
         raise NoObjectError("Object not available.") from err
 
     if num_rows > _RESOURCE_MAX_ROWS:
-        raise TooManyRowsError('This resource have too many rows. For security reason this is not allowed.')
+        raise TooManyRowsError()
     session.close()
     engine.dispose()
 
@@ -192,6 +198,7 @@ def validate_uri(uri: str) -> None:
         with engine.connect() as _:
             pass
     except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError, sqlalchemy.exc.ProgrammingError) as err:
+        logging.exception("Connection not available.")
         raise DriverConnectionError("Connection not available.") from err
 
 
@@ -210,9 +217,9 @@ def _get_engine(uri: str) -> Engine:
                     try:
                         df = pd.read_excel(f.read())
                     except ValueError:
-                        raise MimeTypeError('Type of document is not allowed.')
+                        raise MimeTypeError()
                 else:
-                    raise MimeTypeError('Type of document is not allowed.')
+                    raise MimeTypeError()
             else:
                 raise DriverConnectionError('The url could not be reached.')
 
