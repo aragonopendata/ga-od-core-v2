@@ -33,6 +33,14 @@ def _get_data_public_error(func: Callable, *args, **kwargs) -> List[Dict[str, An
         raise ValidationError("Unexpected error: mimetype of input file is not implemented.", 500)
 
 
+def _get_resource(resource_id: int):
+    try:
+        return ResourceConfig.objects.select_related().get(id=resource_id,
+                                                                      enabled=True,
+                                                                      connector_config__enabled=True)
+    except ResourceConfig.DoesNotExist:
+        raise ValidationError("Resource not exists or is not available", 400)
+
 class DownloadView(APIViewMixin):
     """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón."""
     _PREVIEW_LIMIT = 1000
@@ -109,12 +117,7 @@ class DownloadView(APIViewMixin):
         filters = self._get_filters(request)
         sort = self._get_sort(request)
 
-        try:
-            resource_config = ResourceConfig.objects.select_related().get(id=resource_id,
-                                                                          enabled=True,
-                                                                          connector_config__enabled=True)
-        except ResourceConfig.DoesNotExist:
-            raise ValidationError("Resource not exists or is not available", 400)
+        resource_config = _get_resource(resource_id=resource_id)
 
         data = _get_data_public_error(get_resource_data, uri=resource_config.connector_config.uri,
                                       object_location=resource_config.object_location,
@@ -280,9 +283,7 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
     def get(self, request: Request, **_kwargs) -> Response:
         """This method allows to get datatype of each column from a resource."""
         resource_id = request.query_params.get('resource_id') or request.query_params.get('view_id')
-        resource_config = ResourceConfig.objects.select_related().get(id=resource_id,
-                                                                      enabled=True,
-                                                                      connector_config__enabled=True)
+        resource_config = _get_resource(resource_id=resource_id)
         data = _get_data_public_error(get_resource_columns, uri=resource_config.connector_config.uri,
                                       object_location=resource_config.object_location,
                                       object_location_schema=resource_config.object_location_schema)
