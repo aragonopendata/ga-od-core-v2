@@ -5,8 +5,8 @@ from django.test import Client
 
 
 @pytest.mark.django_db
-def test_show_columns(client, django_user_model_postgresql_fixture, pg):
-    view_data = django_user_model_postgresql_fixture.json()
+def test_show_columns(client, create_full_example_postgresql_fixture):
+    view_data = create_full_example_postgresql_fixture.json()
     download_response = client.get(f'/GA_OD_Core/show_columns.json', {'resource_id': view_data['id']})
     assert download_response.json() == [{
         'COLUMN_NAME': 'id',
