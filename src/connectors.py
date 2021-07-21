@@ -170,7 +170,7 @@ def _get_columns(columns_dict: Dict[str, Column], column_names: List[str]) -> It
         try:
             return [columns_dict[column_name] for column_name in column_names]
         except KeyError as err:
-            raise FieldNoExistsError(f'Field: "{str(err)}" not exists.')
+            raise FieldNoExistsError(f'Field: {err.args[0]} not exists.')
     else:
         return columns_dict.values()
 
@@ -182,7 +182,7 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
         try:
             column = column_dict[item.field]
         except KeyError as err:
-            raise SortFieldNoExistsError(f'Sort field: "{str(err)} not exists.')
+            raise SortFieldNoExistsError(f'Sort field: {err.args[0]} not exists.')
         if item.ascending:
             sort_methods.append(column)
         else:

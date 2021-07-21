@@ -256,9 +256,9 @@ class DownloadView(APIViewMixin):
                 elif clause[1].lower() == 'desc':
                     sort.append(OrderBy(field=clause[0], ascending=False))
                 else:
-                    raise ValidationError(f'Sort value "{item}" is not allowed. Ej: “fieldname1 asc, fieldname2 desc”.')
+                    raise ValidationError(f'Sort value {item} is not allowed. Ej: fieldname1 asc, fieldname2 desc.')
             else:
-                raise ValidationError(f'Sort value "{item}" is not allowed. Too many arguments.')
+                raise ValidationError(f'Sort value {item} is not allowed. Too many arguments.')
 
         return sort
 
