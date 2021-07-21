@@ -22,7 +22,6 @@ from django.test import Client
     "/GA_OD_Core/gaodcore-transports/zaragoza/stops_ori_des.json",
     "/GA_OD_Core/gaodcore-transports/zaragoza/arrival_ori_des.json",
     "/GA_OD_Core/gaodcore-transports/zaragoza/sae.json",
-
 ])
 @pytest.mark.django_db
 def test_transport_views_json(client: Client, url: str):
