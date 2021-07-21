@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 
 from pathlib import Path
 
-from gaodcore_project.config import Config
+from .config import Config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 
@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'gaodcore',
     'gaodcore_manager',
+    'gaodcore_google_analytics',
     'drf_yasg',
     'rest_framework',
     'axes'

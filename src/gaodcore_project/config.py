@@ -5,12 +5,17 @@ from urllib.parse import urljoin
 
 import yaml
 from pydantic import BaseModel
-
+from sys import platform
 
 try:
     _CONFIG_PATH = os.environ['CONFIG_PATH']
 except KeyError:
-    _CONFIG_PATH = '/etc/gaodcore/config-tst.yaml'
+    if platform == "linux" or platform == "linux2":
+        _CONFIG_PATH = '/etc/gaodcore/config-tst.yaml'
+    elif platform == "win32":
+        _CONFIG_PATH = 'C:\\GA-OD-CORE-V2\\config-tst.yaml'
+    else:
+        raise NotImplementedError()
 
 
 class GetURL(metaclass=ABCMeta):
@@ -64,6 +69,33 @@ class ZaragozaTransport(BaseModel, GetURL):
     max_concurrency: int
     endpoints: ZaragozaTransportEndpoints
 
+# Mikel
+
+class GoogleAnalyticsEndpoints(BaseModel):
+    analytics: str
+
+'''
+class GoogleAnalytics(BaseModel, GetURL):
+    start_date: str
+    end_date: str
+    metrics: str
+    dimensions: str
+    filters: str 
+    include_empty_rows: bool 
+    max_results: int  
+    output: str 
+    samplingLevel: str 
+    segment: str 
+    sort: str 
+    start_index: int 
+    fields: str #Selector specifying which fields to include in a partial response.
+    endpoints: GoogleAnalyticsEndpoints
+'''
+class Analytics(BaseModel, GetURL):
+    base_url: str
+    app_path: str
+    key_file: str
+    service_account: str
 
 class Transport(BaseModel):
     aragon: AragonTransport
@@ -72,6 +104,7 @@ class Transport(BaseModel):
 
 class Projects(BaseModel):
     transport: Transport
+    google_analytics: Analytics
 
 
 class Database(BaseModel):
