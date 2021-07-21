@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 
 import pytest as pytest
@@ -99,6 +100,21 @@ def create_full_example(auth_client, pg, request: FixtureRequest):
 
 
 @pytest.fixture
-def create_full_example_fixture(auth_client_fixture, pg, request):
+def create_full_example_postgresql_fixture(auth_client_fixture, pg, request):
     return create_full_example(auth_client_fixture, pg, request)
 
+
+def validate_error(content_error: bytes, error_description: str, mime_type: str):
+    if mime_type == 'text/html':
+        assert content_error
+    elif mime_type == 'application/json':
+        assert content_error == json.dumps([error_description]).encode()
+    elif mime_type == 'text/csv':
+        if ',' in error_description:
+            error_description = f'"{error_description}"'
+        assert content_error == f'""\r\n{error_description}\r\n'.encode()
+    elif mime_type == 'application/xml':
+        error = f'<?xml version="1.0" encoding="utf-8"?>\n<root><list-item>{error_description}</list-item></root>'
+        assert content_error == error.encode()
+    else:
+        raise NotImplementedError
