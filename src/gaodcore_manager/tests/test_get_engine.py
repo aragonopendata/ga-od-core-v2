@@ -16,27 +16,27 @@ def _get_data_url(httpserver: HTTPServer, request: FixtureRequest, filepath: str
 
 
 def test_get_engine_csv_with_charset(httpserver: HTTPServer, request: FixtureRequest):
-    path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'data.csv')
+    path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'download.csv')
     _get_engine(_get_data_url(httpserver, request, path, 'text/csv; charset=utf-8'))
 
 
 def test_get_engine_csv_without_charset(httpserver: HTTPServer, request: FixtureRequest):
-    path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'data.csv')
+    path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'download.csv')
     _get_engine(_get_data_url(httpserver, request, path, 'text/csv'))
 
 
 def test_get_engine_excel(httpserver: HTTPServer, request: FixtureRequest):
-    path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'data.xlsx')
+    path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'download.xlsx')
     _get_engine(_get_data_url(httpserver, request, path, 'application/xlsx'))
 
 
 def test_get_engine_not_allowed_content_type_error(httpserver: HTTPServer, request: FixtureRequest):
-    path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'data.json')
+    path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'download.json')
     with pytest.raises(MimeTypeError):
         _get_engine(_get_data_url(httpserver, request, path, 'application/json'))
 
 
 def test_get_engine_xlsx_bad_content_type_error(httpserver: HTTPServer, request: FixtureRequest):
-    path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'data.json')
+    path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'download.json')
     with pytest.raises(MimeTypeError):
         _get_engine(_get_data_url(httpserver, request, path, 'application/xlsx'))
