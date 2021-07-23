@@ -1,0 +1,10 @@
+COLUMN_NAME,DATA_TYPE
+id,INTEGER
+name,VARCHAR
+size,BIGINT
+max_acceleration,DOUBLE_PRECISION
+weight,NUMERIC
+description,TEXT
+discover_date,DATE
+destroyed_date,TIMESTAMP
+destroyed,BOOLEAN

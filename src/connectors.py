@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from http import HTTPStatus
 from typing import Optional, Dict, List, Any, Iterable
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
 import pandas as pd
@@ -207,23 +208,26 @@ def _get_engine(uri: str) -> Engine:
     if uri_parsed.scheme in _DATABASE_SCHEMAS:
         return create_engine(uri)
     elif uri_parsed.scheme in _HTTP_SCHEMAS:
-        with urllib.request.urlopen(uri) as f:
-            if f.getcode() == HTTPStatus.OK:
-                mime_type = f.info()['Content-Type'].split(';')[0]
-                if mime_type in MimeType.CSV.value:
+        try:
+            with urllib.request.urlopen(uri) as f:
+                if f.getcode() == HTTPStatus.OK:
+                    mime_type = f.info()['Content-Type'].split(';')[0]
+                    if mime_type in MimeType.CSV.value:
 
-                    df = pd.read_csv(f)
-                elif mime_type in MimeType.XLSX.value:
-                    try:
-                        df = pd.read_excel(f.read())
-                    except ValueError:
+                        df = pd.read_csv(f)
+                    elif mime_type in MimeType.XLSX.value:
+                        try:
+                            df = pd.read_excel(f.read())
+                        except ValueError:
+                            raise MimeTypeError()
+                    else:
                         raise MimeTypeError()
                 else:
-                    raise MimeTypeError()
-            else:
-                raise DriverConnectionError('The url could not be reached.')
+                    raise DriverConnectionError('The url could not be reached.')
+        except (HTTPError, URLError) as err:
+            raise DriverConnectionError('The url could not be reached.') from err
 
         engine = create_engine("sqlite:///:memory:", echo=True, future=True)
-        df.to_sql(_TEMPORAL_TABLE_NAME, engine)
+        df.to_sql(_TEMPORAL_TABLE_NAME, engine, index=False)
         return engine
     raise NotImplementedSchemaError(f'Schema: "{uri_parsed.scheme}" is not implemented.')

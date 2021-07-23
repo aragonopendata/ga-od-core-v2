@@ -14,5 +14,6 @@ pandas~=1.2.4
 psycopg2_binary~=2.8.6
 pydantic~=1.8.2
 SQLAlchemy~=1.4
+sqlathanor~=0.7
 requests~=2.25.1
 whitenoise~=5.2.0
