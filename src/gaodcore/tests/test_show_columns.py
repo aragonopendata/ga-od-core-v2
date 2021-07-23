@@ -1,13 +1,12 @@
 import pytest
 
-from conftest import auth_client, create_full_example
+from conftest import validate_error
+from django.test import Client
 
 
 @pytest.mark.django_db
-def test_show_columns(client, django_user_model, pg, request):
-    client = auth_client(client=client, django_user_model=django_user_model)
-    view_response = create_full_example(client, pg, request)
-    view_data = view_response.json()
+def test_show_columns(client, create_full_example_postgresql_fixture):
+    view_data = create_full_example_postgresql_fixture.json()
     download_response = client.get(f'/GA_OD_Core/show_columns.json', {'resource_id': view_data['id']})
     assert download_response.json() == [{
         'COLUMN_NAME': 'id',
@@ -37,3 +36,11 @@ def test_show_columns(client, django_user_model, pg, request):
         'COLUMN_NAME': 'destroyed',
         'DATA_TYPE': 'BOOLEAN'
     }]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("accept", ['text/html', 'application/json', 'text/csv', 'application/xml', ])
+def test_show_columns_resource_not_exists(accept: str, client: Client):
+    download_response = client.get(f'/GA_OD_Core/show_columns', {'resource_id': -1}, HTTP_ACCEPT=accept)
+    assert download_response.status_code == 400
+    validate_error(download_response.content, "Resource not exists or is not available", accept)

@@ -5,8 +5,10 @@ from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import JSONRenderer, BrowsableAPIRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_xml.renderers import XMLRenderer
 
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from gaodcore_manager.serializers import ConnectorConfigSerializer, ResourceConfigSerializer
@@ -39,6 +41,7 @@ class ResourceConfigView(XLSXFileMixin, viewsets.ModelViewSet):
 
 
 class ValidatorView(XLSXFileMixin, APIView):
+    renderer_classes = [JSONRenderer, XMLRenderer, BrowsableAPIRenderer]
     permission_classes = (IsAuthenticated,)
 
     @swagger_auto_schema(

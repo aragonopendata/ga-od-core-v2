@@ -34,6 +34,7 @@ from django.test import Client
     ["/GA_OD_Core/gaodcore-transports/zaragoza/arrival_ori_des", {'code': str, 'name': str, 'origen': str, 'destino': str, 'id': str, 'route': str, 'direction': str, 'url':str, 'departure_time': str, 'origin_id': str, 'destination_id': str }],
     ["/GA_OD_Core/gaodcore-transports/zaragoza/sae", {'bus':str, 'linea': str, 'nombre_linea':str, 'latitud': str, 'longitud': str, 'momento': str}],
 ])
+
 @pytest.mark.parametrize("accept,", ['text/html', 'application/yaml', 'application/json', 'text/csv', 'application/xlsx', 'application/xml'])
 @pytest.mark.django_db
 def test_transport_views_xlsx(client: Client, accept: str, url: str, fields: Dict[str, type]):
@@ -63,5 +64,4 @@ def test_transport_views_xlsx(client: Client, accept: str, url: str, fields: Dic
         assert response.content 
     else:
         raise NotImplementedError
-
 
