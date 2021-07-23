@@ -4,13 +4,12 @@ import pytest
 from _pytest.fixtures import FixtureRequest
 from django.contrib.auth.models import User
 from django.test.client import Client
-from rest_framework.response import Response
 
 
 @pytest.mark.django_db
-def test_connector_postgresql(auth_client_fixture: Client, create_full_example_fixture: Response):
+def test_connector_postgresql_json(auth_client_fixture: Client, create_full_example_postgresql_fixture):
     download_response = auth_client_fixture.get(f'/GA_OD_Core/download.json', {
-        'resource_id': create_full_example_fixture.json()['id'],
+        'resource_id': create_full_example_postgresql_fixture.json()['id'],
         "fields": ["id", "name"]
     })
 

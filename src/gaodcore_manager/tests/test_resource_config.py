@@ -28,16 +28,16 @@ def test_resource_config_error(client, django_user_model, pg, request):
 
 
 @pytest.mark.django_db
-def test_resource_too_many_rows(mock_resource_max_rows, create_full_example_fixture: Response):
+def test_resource_too_many_rows(mock_resource_max_rows, create_full_example_postgresql_fixture):
 
-    assert create_full_example_fixture.json() == {
+    assert create_full_example_postgresql_fixture.json() == {
         'non_field_errors': ['This resource have too many rows. For security reason this is not allowed.']
     }
 
 
 @pytest.mark.django_db
-def test_resource_postgresql_table(auth_client_fixture: Client, create_full_example_fixture: Response):
-    download_response = auth_client_fixture.get('/GA_OD_Core/download', {'resource_id': create_full_example_fixture.json()['id']})
+def test_resource_postgresql_table(auth_client_fixture: Client, create_full_example_postgresql_fixture):
+    download_response = auth_client_fixture.get('/GA_OD_Core/download', {'resource_id': create_full_example_postgresql_fixture.json()['id']})
     assert download_response.json() == [{
         "id": 1,
         "name": "RX-78-2 Gundam",
