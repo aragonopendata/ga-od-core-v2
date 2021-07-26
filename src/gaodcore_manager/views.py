@@ -1,17 +1,17 @@
 # Create your views here.
 from django.utils.decorators import method_decorator
 from drf_renderer_xlsx.mixins import XLSXFileMixin
-from drf_renderer_xlsx.renderers import XLSXRenderer
+# from drf_renderer_xlsx.renderers import XLSXRenderer
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.renderers import JSONRenderer
+# from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_csv.renderers import CSVRenderer
-from rest_framework_xml.renderers import XMLRenderer
-from rest_framework_yaml.renderers import YAMLRenderer
+# from rest_framework_csv.renderers import CSVRenderer
+# from rest_framework_xml.renderers import XMLRenderer
+# from rest_framework_yaml.renderers import YAMLRenderer
 
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from gaodcore_manager.serializers import ConnectorConfigSerializer, ResourceConfigSerializer
@@ -68,7 +68,9 @@ class ValidatorView(XLSXFileMixin, APIView):
                               description="Schema of object_location. Normally used in databases",
                               type=openapi.TYPE_STRING)
         ])
-    def get(self, request, **_kwargs) -> Response:
+
+    @staticmethod
+    def get(request, **_kwargs) -> Response:
         uri = request.query_params.get('uri')
         object_location = request.query_params.get('object_location')
         object_location_schema = request.query_params.get('object_location_schema')

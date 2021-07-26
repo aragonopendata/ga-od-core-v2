@@ -94,8 +94,8 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
             resource_config = ResourceConfig.objects.select_related().get(id=resource_id,
                                                                           enabled=True,
                                                                           connector_config__enabled=True)
-        except ResourceConfig.DoesNotExist:
-            raise ValidationError("Resource not exists or is not available", 400)
+        except ResourceConfig.DoesNotExist as err:
+            raise ValidationError("Resource not exists or is not available", 400) from err
 
         try:
             data = get_resource_data(uri=resource_config.connector_config.uri,
@@ -107,13 +107,13 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
                                      fields=fields,
                                      sort=sort)
         except (FieldNoExistsError, SortFieldNoExistsError) as err:
-            raise ValidationError(err, 400)
-        except NoObjectError:
-            raise ValidationError(f'Object "{resource_config.object_location}" is not available.', 500)
-        except DriverConnectionError:
-            raise ValidationError('Connection is not available.', 500)
+            raise ValidationError(err, 400) from err
+        except NoObjectError as err:
+            raise ValidationError(f'Object "{resource_config.object_location}" is not available.', 500) from err
+        except DriverConnectionError as err:
+            raise ValidationError('Connection is not available.', 500) from err
         except NotImplementedSchemaError as err:
-            raise ValidationError(str(err), 500)
+            raise ValidationError(str(err), 500) from err
 
         response = Response(get_return_list(data))
 
@@ -136,8 +136,8 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
         """
         try:
             resource_id = int(request.query_params.get('resource_id') or request.query_params.get('view_id'))
-        except ValueError:
-            raise ValidationError("Resource_id is not a number.")
+        except ValueError as err:
+            raise ValidationError("Resource_id is not a number.") from err
 
         if not resource_id:
             raise ValidationError("Is required specify resource_id in query string.")
@@ -154,8 +154,8 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
         if value:
             try:
                 value = int(request.query_params.get(field))
-            except ValueError:
-                raise ValidationError(f"Value of {field} is not a number.", 400)
+            except ValueError as err:
+                raise ValidationError(f"Value of {field} is not a number.", 400) from err
 
         return value
 
@@ -187,8 +187,8 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
         if limit:
             try:
                 limit = int(limit)
-            except ValueError:
-                raise ValidationError("Value of limit is not a number.", 400)
+            except ValueError as err:
+                raise ValidationError("Value of limit is not a number.", 400) from err
 
             if request.get_full_path().startswith('/preview'):
                 if limit > self._PREVIEW_LIMIT:
@@ -210,13 +210,13 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
         """
         try:
             filters = json.loads(request.query_params.get('filters', '{}'))
-        except JSONDecodeError:
-            raise ValidationError('Invalid JSON.', 400)
+        except JSONDecodeError as err:
+            raise ValidationError('Invalid JSON.', 400) from err
 
-        if type(filters) != dict:
-            raise ValidationError("Invalid format: eg. {“key1”: “a”, “key2”: “b”}.", 400)
+        if not isinstance(filters, dict):
+            raise ValidationError('Invalid format: eg. {“key1”: “a”, “key2”: “b”}', 400)
 
-        for key, value in filters.items():
+        for _, value in filters.items():
             if type(value) not in (str, int, float, bool, None) and value is not None:
                 raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Null or None', 400)
         return filters
@@ -263,7 +263,8 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
                                                description="Alias of resource_id. Backward compatibility.",
                                                type=openapi.TYPE_NUMBER),
                          ])
-    def get(self, request: Request, **_kwargs) -> Response:
+    @staticmethod
+    def get(request: Request, **_kwargs) -> Response:
         """This method allows to get datatype of each column from a resource."""
         resource_id = request.query_params.get('resource_id') or request.query_params.get('view_id')
         resource_config = ResourceConfig.objects.select_related().get(id=resource_id,
@@ -273,12 +274,12 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
             data = get_resource_columns(uri=resource_config.connector_config.uri,
                                         object_location=resource_config.object_location,
                                         object_location_schema=resource_config.object_location_schema)
-        except NoObjectError:
-            raise ValidationError(f'Object "{resource_config.object_location}" is not available.', 500)
-        except DriverConnectionError:
-            raise ValidationError('Connection is not available.', 500)
+        except NoObjectError as err:
+            raise ValidationError(f'Object "{resource_config.object_location}" is not available.', 500) from err
+        except DriverConnectionError as err:
+            raise ValidationError('Connection is not available.', 500) from err
         except NotImplementedSchemaError as err:
-            raise ValidationError(str(err), 500)
+            raise ValidationError(str(err), 500) from err
 
         return Response(get_return_list(data))
 
@@ -288,7 +289,8 @@ class ResourcesView(XLSXFileMixin, APIViewMixin):
 
     @swagger_auto_schema(
         tags=['default'], )
-    def get(self, _: Request, **_kwargs) -> Response:
+    @staticmethod
+    def get( _: Request, **_kwargs) -> Response:
         """This view allow to get a list of public resources."""
         resources = ({
             'resource_id': resource.id,

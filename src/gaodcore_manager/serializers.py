@@ -22,8 +22,8 @@ class ResourceConfigSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
 
-    def validate(self, data):
-        resource_validator(uri=data['connector_config'].uri,
-                           object_location=data.get('object_location'),
-                           object_location_schema=data.get('object_location_schema'))
-        return data
+    def validate(self, attrs):
+        resource_validator(uri=attrs['connector_config'].uri,
+                           object_location=attrs.get('object_location'),
+                           object_location_schema=attrs.get('object_location_schema'))
+        return attrs

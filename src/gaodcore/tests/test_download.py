@@ -167,7 +167,7 @@ def test_download_pagination_fail_page(client, django_user_model, pg, request):
         '_page_size': "1"
     })
 
-    assert 'Value of _page is not a number.' == json.loads(download_response.content)[0]
+    assert json.loads(download_response.content)[0] == 'Value of _page is not a number.'
 
 
 @pytest.mark.django_db
@@ -181,7 +181,7 @@ def test_download_pagination_fail_page_size(client, django_user_model, pg, reque
         '_page_size': "a"
     })
 
-    assert 'Value of _page_size is not a number.' == json.loads(download_response.content)[0]
+    assert json.loads(download_response.content)[0] == 'Value of _page_size is not a number.'
 
 
 @pytest.mark.django_db
@@ -389,4 +389,3 @@ def test_download_api(client, request, django_user_model):
 
     response = client.get(f'/GA_OD_Core/download.json', {'resource_id': resource_response.json()['id']})
     assert response.status_code == 200
-
