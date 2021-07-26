@@ -17,22 +17,18 @@ _TEMPORAL_TABLE_NAME = 'temporal_table'
 
 class NotImplementedSchemaError(Exception):
     """Schema of the URI is not implemented. Schema examples: http, https, postgresql, ftp, etc."""
-    pass
 
 
 class DriverConnectionError(Exception):
     """Connection cannot be established."""
-    pass
 
 
 class NoObjectError(Exception):
     """Object is not available. Connection was successfully done but object is not available."""
-    pass
 
 
 class TooManyRowsError(Exception):
     """Object have too many rows to process. There are a hard limit to limit memory usage."""
-    pass
 
 
 class FieldNoExistsError(Exception):
@@ -62,7 +58,7 @@ def _get_model(*, engine: Engine, object_location: str, object_location_schema: 
                      autoload_with=engine,
                      schema=object_location_schema)
     except sqlalchemy.exc.NoSuchTableError as err:
-        raise NoObjectError(str(err))
+        raise NoObjectError(str(err)) from err
 
 
 def get_resource_columns(uri: str,
@@ -74,9 +70,9 @@ def get_resource_columns(uri: str,
     @return: list of dictionaries with column name and data type
     """
     engine = _get_engine(uri)
-    Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
 
-    data = ({"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)} for column in Model.columns)
+    data = ({"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)} for column in model.columns)
     engine.dispose()
     return data
 
@@ -99,10 +95,10 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
-    Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
 
     session = session_maker()
-    if session.query(Model).count() > _RESOURCE_MAX_ROWS:
+    if session.query(model).count() > _RESOURCE_MAX_ROWS:
         raise TooManyRowsError()
     session.close()
     session_maker.close_all()
@@ -122,13 +118,13 @@ def get_resource_data(*,
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
-    Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
 
-    column_dict = {column.name: column for column in Model.columns}
+    column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
     sort_methods = _get_sort_methods(column_dict, sort)
     session = session_maker()
-    data = session.query(Model).filter_by(**filters).order_by(*sort_methods).with_entities(
+    data = session.query(model).filter_by(**filters).order_by(*sort_methods).with_entities(
         *columns).offset(offset).limit(limit).all()
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
@@ -149,7 +145,7 @@ def _get_columns(columns_dict: Dict[str, Column], column_names: List[str]) -> It
         try:
             return [columns_dict[column_name] for column_name in column_names]
         except KeyError as err:
-            raise FieldNoExistsError(f'Field: "{str(err)}" not exists.')
+            raise FieldNoExistsError(f'Field: "{str(err)}" not exists.') from err
     else:
         return columns_dict.values()
 
@@ -161,7 +157,7 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
         try:
             column = column_dict[item.field]
         except KeyError as err:
-            raise SortFieldNoExistsError(f'Sort field: "{str(err)} not exists.')
+            raise SortFieldNoExistsError(f'Sort field: "{str(err)} not exists.') from err
         if item.ascending:
             sort_methods.append(column)
         else:
@@ -176,7 +172,7 @@ def validate_uri(uri: str) -> None:
         with _get_engine(uri).connect() as _:
             pass
     except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError) as err:
-        raise DriverConnectionError(str(err))
+        raise DriverConnectionError(str(err)) from err
 
 
 def _get_engine(uri: str) -> Engine:
@@ -185,12 +181,12 @@ def _get_engine(uri: str) -> Engine:
         try:
             return create_engine(uri)
         except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError) as err:
-            raise DriverConnectionError(str(err))
+            raise DriverConnectionError(str(err)) from err
     elif uri_parsed.scheme in _HTTP_SCHEMAS:
-        with urllib.request.urlopen(uri) as f:
-            df = pd.read_csv(f)
+        with urllib.request.urlopen(uri) as file:
+            data_frame = pd.read_csv(file)
 
         engine = create_engine("sqlite:///:memory:", echo=True, future=True)
-        df.to_sql(_TEMPORAL_TABLE_NAME, engine)
+        data_frame.to_sql(_TEMPORAL_TABLE_NAME, engine)
         return engine
     raise NotImplementedSchemaError(f'Schema: "{uri_parsed.scheme}" is not implemented.')

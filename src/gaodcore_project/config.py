@@ -9,13 +9,13 @@ from pydantic import BaseModel
 
 try:
     _CONFIG_PATH = os.environ['CONFIG_PATH']
-except KeyError:
+except KeyError as err:
     if platform == "win32":
-        _CONFIG_PATH = 'C:\ga-od-core-v2\config-tst.yaml'
-    elif platform == "linux" or platform == "linux2":
+        _CONFIG_PATH = 'C:\\ga-od-core-v2\\config-tst.yaml'
+    elif platform in ("linux", "linux2"):
         _CONFIG_PATH = '/etc/gaodcore/config-tst.yaml'
     else:
-        raise NotImplementedError("System not supported")
+        raise NotImplementedError("System not supported") from err
 
 
 
@@ -102,6 +102,6 @@ class Config(BaseModel):
 
     @classmethod
     def get_config(cls) -> 'Config':
-        with open(_CONFIG_PATH, 'r') as f:
-            data = yaml.load(f, Loader=yaml.FullLoader)
+        with open(_CONFIG_PATH, 'r') as file:
+            data = yaml.load(file, Loader=yaml.FullLoader)
         return Config.parse_obj(data)

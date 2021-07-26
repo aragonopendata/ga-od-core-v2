@@ -53,8 +53,8 @@ async def download_async(session: aiohttp.ClientSession(), url: str,
                          auth: Optional[aiohttp.BasicAuth] = None) -> Dict[str, Any]:
     try:
         response = await session.get(url, auth=auth)
-    except aiohttp.client_exceptions.ServerDisconnectedError:
-        raise BadGateway()
+    except aiohttp.client_exceptions.ServerDisconnectedError as err:
+        raise BadGateway() from err
 
     download_check(response)
     try:
@@ -77,17 +77,17 @@ async def gather_limited(concurrency_limit: int, tasks: Iterable[Coroutine]):
 def flatten_object(data_dict: dict) -> dict:
     out = {}
 
-    def flatten(x, name=''):
-        if type(x) is dict:
-            for a in x:
-                flatten(x[a], name + a + '_')
-        elif type(x) is list:
+    def flatten(obj_to_flatten, name=''):
+        if isinstance(obj_to_flatten, dict):
+            for aux in obj_to_flatten:
+                flatten(obj_to_flatten[aux], name + aux + '_')
+        elif isinstance(obj_to_flatten, list):
             i = 0
-            for a in x:
-                flatten(a, name + str(i) + '_')
+            for aux in obj_to_flatten:
+                flatten(aux, name + str(i) + '_')
                 i += 1
         else:
-            out[name[:-1]] = x
+            out[name[:-1]] = obj_to_flatten
 
     flatten(data_dict)
     return out
