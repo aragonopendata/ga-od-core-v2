@@ -1,12 +1,13 @@
 -r requirements.txt
+lxml
 pytest-cov
-pytest-xdist
 pytest-django
 pytest-docker-fixtures
 pytest-docker-fixtures[mysql]
 pytest-docker-fixtures[pg]
-pytest-rerunfailures
+pytest-httpserver
 pytest-mock
+pytest-rerunfailures
+pytest-xdist
 tox
 yapf
-pytest-httpserver

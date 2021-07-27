@@ -5,15 +5,14 @@ from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.renderers import JSONRenderer, BrowsableAPIRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_xml.renderers import XMLRenderer
 
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from gaodcore_manager.serializers import ConnectorConfigSerializer, ResourceConfigSerializer
 from gaodcore_manager.validators import resource_validator
 from utils import get_return_list
+from views import APIViewMixin
 
 
 @method_decorator(name='create', decorator=swagger_auto_schema(tags=['manager']))
@@ -25,7 +24,7 @@ from utils import get_return_list
 class ConnectorConfigView(XLSXFileMixin, viewsets.ModelViewSet):
     serializer_class = ConnectorConfigSerializer
     queryset = ConnectorConfig.objects.all()
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, )
 
 
 @method_decorator(name='create', decorator=swagger_auto_schema(tags=['manager']))
@@ -37,12 +36,11 @@ class ConnectorConfigView(XLSXFileMixin, viewsets.ModelViewSet):
 class ResourceConfigView(XLSXFileMixin, viewsets.ModelViewSet):
     serializer_class = ResourceConfigSerializer
     queryset = ResourceConfig.objects.all()
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated, )
 
 
-class ValidatorView(XLSXFileMixin, APIView):
-    renderer_classes = [JSONRenderer, XMLRenderer, BrowsableAPIRenderer]
-    permission_classes = (IsAuthenticated,)
+class ValidatorView(APIViewMixin):
+    permission_classes = (IsAuthenticated, )
 
     @swagger_auto_schema(
         tags=['manager'],

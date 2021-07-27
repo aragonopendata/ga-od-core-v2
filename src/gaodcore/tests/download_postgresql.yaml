@@ -1,0 +1,21 @@
+- description: The RX-78-2 Gundam is the titular mobile suit of Mobile Suit Gundam
+    television series
+  destroyed: true
+  destroyed_date: '0079-12-31T12:01:01'
+  discover_date: '0079-09-18'
+  id: 1
+  max_acceleration: 0.93
+  name: RX-78-2 Gundam
+  size: 18
+  weight: 60.0
+  empty: null
+- description: null
+  destroyed: null
+  destroyed_date: null
+  discover_date: null
+  id: 2
+  max_acceleration: null
+  name: Half Gundam
+  size: null
+  weight: null
+  empty: null
