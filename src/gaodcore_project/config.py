@@ -2,14 +2,20 @@ import os
 from abc import ABCMeta
 from typing import Optional, Dict
 from urllib.parse import urljoin
-
+from sys import platform
 import yaml
 from pydantic import BaseModel
 
 try:
     _CONFIG_PATH = os.environ['CONFIG_PATH']
-except KeyError:
-    _CONFIG_PATH = '/etc/gaodcore/config-tst.yaml'
+except KeyError as err:
+    if platform == "win32":
+        _CONFIG_PATH = 'C:\\ga-od-core-v2\\config-tst.yaml'
+    elif platform in ("linux", "linux2"):
+        _CONFIG_PATH = '/etc/gaodcore/config-tst.yaml'
+    else:
+        raise NotImplementedError("System not supported") from err
+
 
 
 class GetURL(metaclass=ABCMeta):
@@ -95,6 +101,6 @@ class Config(BaseModel):
 
     @classmethod
     def get_config(cls) -> 'Config':
-        with open(_CONFIG_PATH, 'r') as f:
-            data = yaml.load(f, Loader=yaml.FullLoader)
+        with open(_CONFIG_PATH, 'r') as file:
+            data = yaml.load(file, Loader=yaml.FullLoader)
         return Config.parse_obj(data)

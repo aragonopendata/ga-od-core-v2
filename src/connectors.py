@@ -34,22 +34,18 @@ class MimeType(Enum):
 
 class NotImplementedSchemaError(Exception):
     """Schema of the URI is not implemented. Schema examples: http, https, postgresql, ftp, etc."""
-    pass
 
 
 class DriverConnectionError(Exception):
     """Connection cannot be established."""
-    pass
 
 
 class NoObjectError(Exception):
     """Object is not available. Connection was successfully done but object is not available."""
-    pass
 
 
 class TooManyRowsError(Exception):
     """Object have too many rows to process. There are a hard limit to limit memory usage."""
-    pass
 
 
 class FieldNoExistsError(Exception):
@@ -95,9 +91,9 @@ def get_resource_columns(uri: str, object_location: Optional[str],
     @return: list of dictionaries with column name and data type
     """
     engine = _get_engine(uri)
-    Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
 
-    data = ({"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)} for column in Model.columns)
+    data = ({"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)} for column in model.columns)
     engine.dispose()
     return data
 
@@ -120,7 +116,7 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
-    Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
 
     session = session_maker()
     try:
@@ -148,13 +144,13 @@ def get_resource_data(*,
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
-    Model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
 
-    column_dict = {column.name: column for column in Model.columns}
+    column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
     sort_methods = _get_sort_methods(column_dict, sort)
     session = session_maker()
-    data = session.query(Model).filter_by(**filters).order_by(*sort_methods).with_entities(
+    data = session.query(model).filter_by(**filters).order_by(*sort_methods).with_entities(
         *columns).offset(offset).limit(limit).all()
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
@@ -173,7 +169,7 @@ def _get_columns(columns_dict: Dict[str, Column], column_names: List[str]) -> It
         try:
             return [columns_dict[column_name] for column_name in column_names]
         except KeyError as err:
-            raise FieldNoExistsError(f'Field: {err.args[0]} not exists.')
+            raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
     else:
         return columns_dict.values()
 
@@ -185,7 +181,7 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
         try:
             column = column_dict[item.field]
         except KeyError as err:
-            raise SortFieldNoExistsError(f'Sort field: {err.args[0]} not exists.')
+            raise SortFieldNoExistsError(f'Sort field: {err.args[0]} not exists.') from err
         if item.ascending:
             sort_methods.append(column)
         else:

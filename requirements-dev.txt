@@ -1,5 +1,6 @@
 -r requirements.txt
 lxml
+pylint
 pytest-cov
 pytest-django
 pytest-docker-fixtures
