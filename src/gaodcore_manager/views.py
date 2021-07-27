@@ -64,7 +64,9 @@ class ValidatorView(APIViewMixin):
                               description="Schema of object_location. Normally used in databases",
                               type=openapi.TYPE_STRING)
         ])
-    def get(self, request, **_kwargs) -> Response:
+
+    @staticmethod
+    def get(request, **_kwargs) -> Response:
         uri = request.query_params.get('uri')
         object_location = request.query_params.get('object_location')
         object_location_schema = request.query_params.get('object_location_schema')
