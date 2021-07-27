@@ -119,8 +119,10 @@ class StopsRouteView(APIViewMixin):
     @staticmethod
     def get(_: Request, **_kwargs):
         configs = [
-            DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url(
-                'stops_route', line_id=route['line_id'], route_id=route['route'], isreturn=route['isreturn']),
+            DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url('stops_route',
+                                                                                   line_id=route['line_id'],
+                                                                                   route_id=route['route'],
+                                                                                   isreturn=route['isreturn']),
                                     root_name='stops_route',
                                     extra_data={
                                         'line_id': route['line_id'],
@@ -140,7 +142,7 @@ class ArrivalTimeView(APIViewMixin):
     def get(_: Request, **_kwargs):
         configs = [
             DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url('arrival_time',
-                                                                                              stop_id=stop['stop_id']),
+                                                                                   stop_id=stop['stop_id']),
                                     root_name='arrival_time',
                                     extra_data={'stop_id': stop['stop_id']}) for stop in _get_stops()
         ]
@@ -199,7 +201,14 @@ class LinesOriDesView(APIViewMixin):
         return Response(get_return_list(data))
 
 
-@method_decorator(name='get', decorator=swagger_auto_schema(manual_parameters=[openapi.Parameter('time_sec', openapi.IN_QUERY, description="Time in seconds", type=openapi.TYPE_NUMBER)], tags=['transports']))
+@method_decorator(name='get',
+                  decorator=swagger_auto_schema(manual_parameters=[
+                      openapi.Parameter('time_sec',
+                                        openapi.IN_QUERY,
+                                        description="Time in seconds",
+                                        type=openapi.TYPE_NUMBER)
+                  ],
+                                                tags=['transports']))
 class TimesRouteView(APIViewMixin):
     _DEFAULT_BUS = 0
     _DEFAULT_DEPARTURE_TIME = datetime.now().hour * 3600
@@ -212,12 +221,11 @@ class TimesRouteView(APIViewMixin):
     def get(self, _: Request, **_kwargs):
         time_sec = self.request.query_params.get('time_sec', self._DEFAULT_DEPARTURE_TIME)
         configs = [
-            DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url(
-                'times_route',
-                id_linea=line['id'],
-                bus=self._DEFAULT_BUS,
-                departure_time=time_sec,
-                direction=direction),
+            DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url('times_route',
+                                                                                   id_linea=line['id'],
+                                                                                   bus=self._DEFAULT_BUS,
+                                                                                   departure_time=time_sec,
+                                                                                   direction=direction),
                                     root_name=self._ROOT_NAME,
                                     extra_data={
                                         'line_id': line['id'],
