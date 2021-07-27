@@ -1,3 +1,5 @@
+"""Module that deal with external resources."""
+
 import csv
 import json
 import logging
@@ -15,7 +17,7 @@ from urllib.parse import urlparse
 
 import cchardet
 import sqlalchemy.exc
-from sqlalchemy import create_engine, Table, MetaData, Column, Boolean, Text, Integer, DateTime, Time, Numeric, REAL
+from sqlalchemy import create_engine, Table, MetaData, Column, Boolean, Text, Integer, DateTime, Time, REAL
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
@@ -27,9 +29,10 @@ _SQLALCHEMY_MAP_TYPE = {bool: Boolean, str: Text, int: Integer, float: REAL, dat
 
 
 class MimeType(Enum):
-    CSV = 'text/csv',
-    XLSX = 'application/xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    JSON = 'application/json'
+    """Enum with some mimetype and his different values."""
+    CSV = ('text/csv',)
+    XLSX = ('application/xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',)
+    JSON = ('application/json',)
 
 
 class NotImplementedSchemaError(Exception):
@@ -45,20 +48,19 @@ class NoObjectError(Exception):
 
 
 class TooManyRowsError(Exception):
-    """Object have too many rows to process. There are a hard limit to limit memory usage."""
+    """Object have too many rows to process. Excel not allow more rows."""
 
 
 class FieldNoExistsError(Exception):
-    pass
+    """Resource does not have a field."""
 
 
 class SortFieldNoExistsError(Exception):
-    pass
+    """Resource does not have a field."""
 
 
 class MimeTypeError(Exception):
     """Type of document is not csv or excel."""
-    pass
 
 
 @dataclass
@@ -120,7 +122,7 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
 
     session = session_maker()
     try:
-        num_rows = session.query(Model).count()
+        num_rows = session.query(model).count()
     except sqlalchemy.exc.ProgrammingError as err:
         logging.exception("Object not available.")
         raise NoObjectError("Object not available.") from err
@@ -148,19 +150,16 @@ def get_resource_data(*,
 
     column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
-    sort_methods = _get_sort_methods(column_dict, sort)
     session = session_maker()
-    data = session.query(model).filter_by(**filters).order_by(*sort_methods).with_entities(
+    data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
         *columns).offset(offset).limit(limit).all()
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
-    columns_names = [column.name for column in columns]
-    data = (dict(zip(columns_names, row)) for row in data)
 
     session.close()
     engine.dispose()
 
-    return data
+    return (dict(zip([column.name for column in columns], row)) for row in data)
 
 
 def _get_columns(columns_dict: Dict[str, Column], column_names: List[str]) -> Iterable[Column]:
@@ -207,7 +206,7 @@ def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
 
     data = data.decode(charset)
     dialect = csv.Sniffer().sniff(data)
-    return [element for element in csv.DictReader(StringIO(data), dialect=dialect)]
+    return list(csv.DictReader(StringIO(data), dialect=dialect))
 
 
 def _get_table_from_dict(data: List[Dict[str, Any]], engine: Engine, meta_data: MetaData) -> Table:
@@ -268,6 +267,6 @@ def _get_engine(uri: str) -> Engine:
     uri_parsed = urlparse(uri)
     if uri_parsed.scheme in _DATABASE_SCHEMAS:
         return create_engine(uri)
-    elif uri_parsed.scheme in _HTTP_SCHEMAS:
+    if uri_parsed.scheme in _HTTP_SCHEMAS:
         return _get_engine_from_api(uri)
     raise NotImplementedSchemaError(f'Schema: "{uri_parsed.scheme}" is not implemented.')

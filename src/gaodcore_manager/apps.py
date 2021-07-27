@@ -6,4 +6,3 @@ class GaodcoreManagerConfig(AppConfig):
 
     def ready(self):
         from gaodcore_project import signals  # noqa
-        
