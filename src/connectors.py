@@ -1,14 +1,21 @@
+import csv
+import json
 import logging
 import urllib.request
+from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import date, datetime, time
 from enum import Enum
 from http import HTTPStatus
+from io import StringIO
+from sqlite3 import Date
 from typing import Optional, Dict, List, Any, Iterable
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
-import pandas as pd
+import cchardet
 import sqlalchemy.exc
-from sqlalchemy import create_engine, Table, MetaData, Column
+from sqlalchemy import create_engine, Table, MetaData, Column, Boolean, Text, Integer, DateTime, Time, Numeric, REAL
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
@@ -16,11 +23,13 @@ _DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql', 'oracle', 'sqlite'}
 _HTTP_SCHEMAS = {'http', 'https'}
 _RESOURCE_MAX_ROWS = 1048576
 _TEMPORAL_TABLE_NAME = 'temporal_table'
+_SQLALCHEMY_MAP_TYPE = {bool: Boolean, str: Text, int: Integer, float: REAL, date: Date, datetime: DateTime, time: Time}
 
 
 class MimeType(Enum):
     CSV = 'text/csv',
     XLSX = 'application/xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    JSON = 'application/json'
 
 
 class NotImplementedSchemaError(Exception):
@@ -65,11 +74,7 @@ def _get_model(*, engine: Engine, object_location: str, object_location_schema: 
     object_location = object_location or _TEMPORAL_TABLE_NAME
     meta_data = MetaData(bind=engine)
     try:
-        return Table(object_location,
-                     meta_data,
-                     autoload=True,
-                     autoload_with=engine,
-                     schema=object_location_schema)
+        return Table(object_location, meta_data, autoload=True, autoload_with=engine, schema=object_location_schema)
     except sqlalchemy.exc.NoSuchTableError as err:
         logging.exception("Object not available.")
         raise NoObjectError("Object not available.") from err
@@ -78,8 +83,7 @@ def _get_model(*, engine: Engine, object_location: str, object_location_schema: 
         raise DriverConnectionError("Connection not available.") from err
 
 
-def get_resource_columns(uri: str,
-                         object_location: Optional[str],
+def get_resource_columns(uri: str, object_location: Optional[str],
                          object_location_schema: Optional[str]) -> Iterable[Dict[str, str]]:
     """From resource get a list of dictionaries with column name and data type.
 
@@ -150,7 +154,6 @@ def get_resource_data(*,
         *columns).offset(offset).limit(limit).all()
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
-    # FIXME: XML serializer fail if returns a generator :(
     columns_names = [column.name for column in columns]
     data = (dict(zip(columns_names, row)) for row in data)
 
@@ -198,28 +201,73 @@ def validate_uri(uri: str) -> None:
         raise DriverConnectionError("Connection not available.") from err
 
 
+def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
+    if not charset:
+        charset = cchardet.detect(data)['encoding']
+
+    data = data.decode(charset)
+    dialect = csv.Sniffer().sniff(data)
+    return [element for element in csv.DictReader(StringIO(data), dialect=dialect)]
+
+
+def _get_table_from_dict(data: List[Dict[str, Any]], engine: Engine, meta_data: MetaData) -> Table:
+    fields_to_check = list(data[0].keys())
+    fields_checked = []
+
+    field_types = OrderedDict([(field, Column(field, Text)) for field in fields_to_check])
+    for row in data:
+        for field_to_check in fields_to_check:
+            value = row.get(field_to_check)
+            if value and field_to_check not in fields_checked:
+                field_types[field_to_check] = Column(field_to_check, _SQLALCHEMY_MAP_TYPE[type(value)])
+                fields_checked.append(field_to_check)
+        for field_checked in fields_checked:
+            fields_to_check.remove(field_checked)
+        fields_checked = []
+        if not fields_to_check:
+            break
+
+    table = Table(_TEMPORAL_TABLE_NAME, meta_data, *field_types.values(), prefixes=['TEMPORARY'])
+    meta_data.create_all(engine)
+    return table
+
+
+def _get_engine_from_api(uri: str) -> Engine:
+    try:
+        with urllib.request.urlopen(uri) as response:
+            if response.getcode() == HTTPStatus.OK:
+                split_content_type = response.info()['Content-Type'].split(';')
+                mime_type = split_content_type[0]
+                if len(split_content_type) > 1:
+                    charset = split_content_type[1].split('=')[1]
+                else:
+                    charset = None
+
+                if mime_type in MimeType.CSV.value:
+                    data = _csv_to_dict(response.read(), charset)
+                elif mime_type in MimeType.JSON.value:
+                    data = json.loads(response.read())
+                else:
+                    raise MimeTypeError()
+            else:
+                raise DriverConnectionError('The url could not be reached.')
+    except (HTTPError, URLError) as err:
+        raise DriverConnectionError('The url could not be reached.') from err
+    engine = create_engine("sqlite:///:memory:", echo=True, future=True)
+    metadata = MetaData()
+    table = _get_table_from_dict(data, engine, metadata)
+    session_maker = sessionmaker(bind=engine)
+    session = session_maker()
+    session.execute(table.insert(), data)
+    session.commit()
+    session.close()
+    return engine
+
+
 def _get_engine(uri: str) -> Engine:
     uri_parsed = urlparse(uri)
     if uri_parsed.scheme in _DATABASE_SCHEMAS:
         return create_engine(uri)
     elif uri_parsed.scheme in _HTTP_SCHEMAS:
-        with urllib.request.urlopen(uri) as file:
-            if f.getcode() == HTTPStatus.OK:
-                mime_type = file.info()['Content-Type'].split(';')[0]
-                if mime_type in MimeType.CSV.value:
-
-                    df = pd.read_csv(f)
-                elif mime_type in MimeType.XLSX.value:
-                    try:
-                        df = pd.read_excel(f.read())
-                    except ValueError:
-                        raise MimeTypeError()
-                else:
-                    raise MimeTypeError()
-            else:
-                raise DriverConnectionError('The url could not be reached.')
-
-        engine = create_engine("sqlite:///:memory:", echo=True, future=True)
-        df.to_sql(_TEMPORAL_TABLE_NAME, engine)
-        return engine
+        return _get_engine_from_api(uri)
     raise NotImplementedSchemaError(f'Schema: "{uri_parsed.scheme}" is not implemented.')
