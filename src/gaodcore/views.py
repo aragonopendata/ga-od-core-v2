@@ -299,7 +299,7 @@ class ResourcesView(XLSXFileMixin, APIViewMixin):
     @swagger_auto_schema(
         tags=['default'], )
     @staticmethod
-    def get( _: Request, **_kwargs) -> Response:
+    def get(_: Request, **_kwargs) -> Response:
         """This view allow to get a list of public resources."""
         resources = ({
             'id': resource.id,

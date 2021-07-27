@@ -17,7 +17,6 @@ except KeyError as err:
         raise NotImplementedError("System not supported") from err
 
 
-
 class GetURL(metaclass=ABCMeta):
     # @property
     # def base_url(self) -> str:
