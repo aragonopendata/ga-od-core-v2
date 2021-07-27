@@ -35,11 +35,10 @@ def _get_data_public_error(func: Callable, *args, **kwargs) -> List[Dict[str, An
 
 def _get_resource(resource_id: int):
     try:
-        return ResourceConfig.objects.select_related().get(id=resource_id,
-                                                                      enabled=True,
-                                                                      connector_config__enabled=True)
+        return ResourceConfig.objects.select_related().get(id=resource_id, enabled=True, connector_config__enabled=True)
     except ResourceConfig.DoesNotExist:
         raise ValidationError("Resource not exists or is not available", 400)
+
 
 class DownloadView(APIViewMixin):
     """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón."""
@@ -61,7 +60,7 @@ class DownloadView(APIViewMixin):
                              openapi.Parameter('filters',
                                                openapi.IN_QUERY,
                                                description='Matching conditions to select, e.g '
-                                                           '{“key1”: “a”, “key2”: “b”}.',
+                                               '{“key1”: “a”, “key2”: “b”}.',
                                                type=openapi.TYPE_OBJECT),
                              openapi.Parameter('offset',
                                                openapi.IN_QUERY,
@@ -84,7 +83,7 @@ class DownloadView(APIViewMixin):
                              openapi.Parameter('sort',
                                                openapi.IN_QUERY,
                                                description="Comma separated field names with ordering e.g: "
-                                                           "“fieldname1, fieldname2 desc”.",
+                                               "“fieldname1, fieldname2 desc”.",
                                                type=openapi.TYPE_ARRAY,
                                                items=openapi.Items(type=openapi.TYPE_STRING)),
                              openapi.Parameter('formato',
@@ -99,10 +98,12 @@ class DownloadView(APIViewMixin):
                                                openapi.IN_QUERY,
                                                description='Force name of file to download.',
                                                type=openapi.TYPE_STRING),
-                             openapi.Parameter('_page',
-                                               openapi.IN_QUERY,
-                                               description='Deprecated. Number of the page.',
-                                               type=openapi.TYPE_INTEGER, ),
+                             openapi.Parameter(
+                                 '_page',
+                                 openapi.IN_QUERY,
+                                 description='Deprecated. Number of the page.',
+                                 type=openapi.TYPE_INTEGER,
+                             ),
                              openapi.Parameter('_pageSize',
                                                openapi.IN_QUERY,
                                                description='Deprecated. Number of results in each page.',
@@ -119,7 +120,8 @@ class DownloadView(APIViewMixin):
 
         resource_config = _get_resource(resource_id=resource_id)
 
-        data = _get_data_public_error(get_resource_data, uri=resource_config.connector_config.uri,
+        data = _get_data_public_error(get_resource_data,
+                                      uri=resource_config.connector_config.uri,
                                       object_location=resource_config.object_location,
                                       object_location_schema=resource_config.object_location_schema,
                                       filters=filters,
@@ -268,7 +270,6 @@ class DownloadView(APIViewMixin):
 
 class ShowColumnsView(XLSXFileMixin, APIViewMixin):
     """This view allows to get datatype of each column from a resource."""
-
     @swagger_auto_schema(tags=['default'],
                          manual_parameters=[
                              openapi.Parameter('resource_id',
@@ -284,7 +285,8 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
         """This method allows to get datatype of each column from a resource."""
         resource_id = request.query_params.get('resource_id') or request.query_params.get('view_id')
         resource_config = _get_resource(resource_id=resource_id)
-        data = _get_data_public_error(get_resource_columns, uri=resource_config.connector_config.uri,
+        data = _get_data_public_error(get_resource_columns,
+                                      uri=resource_config.connector_config.uri,
                                       object_location=resource_config.object_location,
                                       object_location_schema=resource_config.object_location_schema)
 
@@ -293,7 +295,6 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
 
 class ResourcesView(XLSXFileMixin, APIViewMixin):
     """This view allow to get a list of public resources."""
-
     @swagger_auto_schema(
         tags=['default'], )
     def get(self, _: Request, **_kwargs) -> Response:

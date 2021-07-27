@@ -34,8 +34,8 @@ class APIViewGetDataMixin(APIViewMixin, metaclass=ABCMeta):
         pass
 
     def _get_default_endpoint_data(self) -> List[Dict[str, Any]]:
-        url = CONFIG.projects.transport.aragon.get_url(
-            self._ENDPOINT, customer_id=CONFIG.projects.transport.aragon.customer_id)
+        url = CONFIG.projects.transport.aragon.get_url(self._ENDPOINT,
+                                                       customer_id=CONFIG.projects.transport.aragon.customer_id)
         return self._get_endpoint_data(url)
 
     def _get_endpoint_data(self, url: str) -> List[Dict[str, Any]]:
@@ -135,13 +135,13 @@ class DistanceTravelledView(APIViewGetDataMixin):
     _FLATTEN = False
 
     def _get_data(self):
-        url = CONFIG.projects.transport.aragon.get_url(
-            self._DISTANCE_TRAVELED,
-            customer_id=CONFIG.projects.transport.aragon.customer_id,
-            vehicle_ids=','.join({row['id']
-                                  for row in self._get_default_endpoint_data()}),
-            start_date=datetime.min.isoformat(),
-            end_date=datetime.now().isoformat())
+        url = CONFIG.projects.transport.aragon.get_url(self._DISTANCE_TRAVELED,
+                                                       customer_id=CONFIG.projects.transport.aragon.customer_id,
+                                                       vehicle_ids=','.join(
+                                                           {row['id']
+                                                            for row in self._get_default_endpoint_data()}),
+                                                       start_date=datetime.min.isoformat(),
+                                                       end_date=datetime.now().isoformat())
         data = download(url,
                         auth=requests.auth.HTTPBasicAuth(CONFIG.projects.transport.aragon.user,
                                                          CONFIG.projects.transport.aragon.password))

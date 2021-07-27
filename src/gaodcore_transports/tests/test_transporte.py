@@ -35,25 +35,20 @@ def test_transport_views_json(client: Client, url: str):
 
 
 @pytest.mark.parametrize("url,", [
-    "/GA_OD_Core/gaodcore-transports/aragon/vehicles.xlsx",
-    "/GA_OD_Core/gaodcore-transports/aragon/drivers.xlsx",
+    "/GA_OD_Core/gaodcore-transports/aragon/vehicles.xlsx", "/GA_OD_Core/gaodcore-transports/aragon/drivers.xlsx",
     "/GA_OD_Core/gaodcore-transports/aragon/live-position-latest.xlsx",
     "/GA_OD_Core/gaodcore-transports/aragon/vehicle-journey-history-latest.xlsx",
     "/GA_OD_Core/gaodcore-transports/aragon/distance-travelled.xlsx",
-    "/GA_OD_Core/gaodcore-transports/zaragoza/lines.xlsx",
-    "/GA_OD_Core/gaodcore-transports/zaragoza/stops.xlsx",
-    "/GA_OD_Core/gaodcore-transports/zaragoza/routes.xlsx",
-    "/GA_OD_Core/gaodcore-transports/zaragoza/stops_route.xlsx",
+    "/GA_OD_Core/gaodcore-transports/zaragoza/lines.xlsx", "/GA_OD_Core/gaodcore-transports/zaragoza/stops.xlsx",
+    "/GA_OD_Core/gaodcore-transports/zaragoza/routes.xlsx", "/GA_OD_Core/gaodcore-transports/zaragoza/stops_route.xlsx",
     "/GA_OD_Core/gaodcore-transports/zaragoza/arrival_time.xlsx",
-    "/GA_OD_Core/gaodcore-transports/zaragoza/notices.xlsx",
-    "/GA_OD_Core/gaodcore-transports/zaragoza/origins.xlsx",
+    "/GA_OD_Core/gaodcore-transports/zaragoza/notices.xlsx", "/GA_OD_Core/gaodcore-transports/zaragoza/origins.xlsx",
     "/GA_OD_Core/gaodcore-transports/zaragoza/destinations.xlsx",
     "/GA_OD_Core/gaodcore-transports/zaragoza/lines_ori_des.xlsx",
     "/GA_OD_Core/gaodcore-transports/zaragoza/times_route.xlsx",
     "/GA_OD_Core/gaodcore-transports/zaragoza/exp_ori_des.xlsx",
     "/GA_OD_Core/gaodcore-transports/zaragoza/stops_ori_des.xlsx",
-    "/GA_OD_Core/gaodcore-transports/zaragoza/arrival_ori_des.xlsx",
-    "/GA_OD_Core/gaodcore-transports/zaragoza/sae.xlsx"
+    "/GA_OD_Core/gaodcore-transports/zaragoza/arrival_ori_des.xlsx", "/GA_OD_Core/gaodcore-transports/zaragoza/sae.xlsx"
 ])
 @pytest.mark.django_db
 def test_transport_views_xlsx(client: Client, url: str):

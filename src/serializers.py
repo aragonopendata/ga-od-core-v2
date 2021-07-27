@@ -16,6 +16,5 @@ class DictSerializer(serializers.Serializer):
         super().__init__(*args, **kwargs)
 
     def get_fields(self):
-        print(self._data)
         fields = {field for row in self._data for field in row.keys()}
         return {field: Field(label=field) for field in fields}
