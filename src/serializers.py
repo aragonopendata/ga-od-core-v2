@@ -1,3 +1,5 @@
+"""Module that contains all custom serializers."""
+
 from typing import List, Dict, Any
 
 from rest_framework import serializers
@@ -5,6 +7,8 @@ from rest_framework.fields import Field
 
 
 class DictSerializer(serializers.Serializer):
+    """Generic serialize to serialize a list of dict. This is normally used when resources is provided by external
+    source."""
     def update(self, instance, validated_data):
         raise NotImplementedError
 

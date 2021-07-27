@@ -13,15 +13,13 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
-# from django.contrib import admin
 from django.urls import path, re_path, include
 from django.contrib import admin
 
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 
-schema_view = get_schema_view(
+SchemaView = get_schema_view(
     openapi.Info(
         title='GA OD Core API',
         default_version='v2',
