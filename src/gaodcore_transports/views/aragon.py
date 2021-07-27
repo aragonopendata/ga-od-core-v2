@@ -12,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from gaodcore_project.settings import CONFIG
-from utils import download, download_bulk, get_return_list, flatten_object
+from utils import download, download_bulk, get_return_list, flatten_dict
 from views import APIViewMixin
 
 
@@ -47,7 +47,7 @@ class APIViewGetDataMixin(APIViewMixin, metaclass=ABCMeta):
     def _get_data(self) -> Iterable[Dict[str, Any]]:
         data = self._get_default_endpoint_data()
         if self._FLATTEN:
-            data = (flatten_object(row) for row in data)
+            data = (flatten_dict(row) for row in data)
         return data
 
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
@@ -72,7 +72,7 @@ class ListVehicleView(APIViewGetDataMixin):
         for row in data:
             if self._FIELD_TAGS in row:
                 del row[self._FIELD_TAGS]
-            row = flatten_object(row)
+            row = flatten_dict(row)
             if row[self._FIELD_STATUS] != self._FIELD_STATUS_SOLD:
                 yield row
 
@@ -99,7 +99,7 @@ class LivePositionLatestView(APIViewGetDataMixin):
         for row in data:
             if self._FIELD_TAGS in row:
                 del row[self._FIELD_TAGS]
-            yield flatten_object(row)
+            yield flatten_dict(row)
 
 
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
