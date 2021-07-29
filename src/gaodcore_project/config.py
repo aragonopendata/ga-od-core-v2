@@ -1,3 +1,5 @@
+"""Configuration module."""
+
 import os
 from abc import ABCMeta
 from typing import Optional, Dict
