@@ -1,5 +1,4 @@
 import json
-from functools import partial
 from json.decoder import JSONDecodeError
 from typing import Optional, Dict, Any, List, Callable
 
@@ -270,6 +269,7 @@ class DownloadView(APIViewMixin):
 
 class ShowColumnsView(XLSXFileMixin, APIViewMixin):
     """This view allows to get datatype of each column from a resource."""
+    @staticmethod
     @swagger_auto_schema(tags=['default'],
                          manual_parameters=[
                              openapi.Parameter('resource_id',
@@ -281,7 +281,6 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
                                                description="Alias of resource_id. Backward compatibility.",
                                                type=openapi.TYPE_NUMBER),
                          ])
-    @staticmethod
     def get(request: Request, **_kwargs) -> Response:
         """This method allows to get datatype of each column from a resource."""
         resource_id = request.query_params.get('resource_id') or request.query_params.get('view_id')
@@ -294,11 +293,10 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
         return Response(get_return_list(data))
 
 
-class ResourcesView(XLSXFileMixin, APIViewMixin):
+class ResourcesView(XLSXFileMixin, APIViewMixin):  # pylint: disable=too-few-public-methods
     """This view allow to get a list of public resources."""
-    @swagger_auto_schema(
-        tags=['default'], )
     @staticmethod
+    @swagger_auto_schema(tags=['default'])
     def get(_: Request, **_kwargs) -> Response:
         """This view allow to get a list of public resources."""
         resources = ({

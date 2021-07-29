@@ -1,3 +1,4 @@
+"""GAODCore Aragon transports views."""
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List
@@ -16,7 +17,8 @@ from utils import download, download_bulk, get_return_list, flatten_dict
 from views import APIViewMixin
 
 
-class APIViewGetDataMixin(APIViewMixin, metaclass=ABCMeta):
+class APIViewGetDataMixin(APIViewMixin, metaclass=ABCMeta):  # pylint: disable=too-few-public-methods
+    """Mixin of helpers that helps the generations Aragon transports views."""
     _DATA_FIELD = 'items'
     _OPTIONS = {}
 
@@ -52,12 +54,14 @@ class APIViewGetDataMixin(APIViewMixin, metaclass=ABCMeta):
 
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(self, _request: Request, **_kwargs):
+        """Implements HTTP method."""
         return Response(get_return_list(self._get_data()))
 
 
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
-class ListVehicleView(APIViewGetDataMixin):
-    """Returns the registration, group and current odometer reading for a vehicle. The odometer reading is in kilometres."""
+class ListVehicleView(APIViewGetDataMixin):  # pylint: disable=too-few-public-methods
+    """Returns the registration, group and current odometer reading for a vehicle. The odometer reading is in
+    kilometres."""
     _ENDPOINT = 'vehicles'
     _FIELD_TAGS = 'tags'
     _FIELD_STATUS = 'status'
@@ -78,15 +82,16 @@ class ListVehicleView(APIViewGetDataMixin):
 
 
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
-class ListDriverView(APIViewGetDataMixin):
+class ListDriverView(APIViewGetDataMixin):  # pylint: disable=too-few-public-methods
     """Returns details for all drivers and the group they have been assigned to."""
     _ENDPOINT = 'drivers'
     _FLATTEN = True
 
 
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
-class LivePositionLatestView(APIViewGetDataMixin):
-    """Returns the live position and status for a resource (driver or vehicle). The live position for a vehicle on a private journey is not returned."""
+class LivePositionLatestView(APIViewGetDataMixin):  # pylint: disable=too-few-public-methods
+    """Returns the live position and status for a resource (driver or vehicle). The live position for a vehicle on a
+    private journey is not returned."""
     _ENDPOINT = 'live_position_latest'
     _FLATTEN = False
     _FIELD_TAGS = 'tags'
@@ -103,8 +108,9 @@ class LivePositionLatestView(APIViewGetDataMixin):
 
 
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
-class VehicleJourneyHistoryLatestView(APIViewGetDataMixin):
-    """Returns the latest tracking events that have been processed by Connect for a vehicle since the specified date. No details are returned for a private journey."""
+class VehicleJourneyHistoryLatestView(APIViewGetDataMixin):  # pylint: disable=too-few-public-methods
+    """Returns the latest tracking events that have been processed by Connect for a vehicle since the specified date.
+    No details are returned for a private journey."""
     _ENDPOINT = 'vehicles'
     _TIMEDELTA = {"weeks": 2}
     _VEHICLE_JOURNEY_HISTORY_LATEST = 'vehicle_journey_history_latest'
@@ -128,7 +134,7 @@ class VehicleJourneyHistoryLatestView(APIViewGetDataMixin):
 
 
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
-class DistanceTravelledView(APIViewGetDataMixin):
+class DistanceTravelledView(APIViewGetDataMixin):  # pylint: disable=too-few-public-methods
     """Returns the distance traveled (in kilometers) by a vehicle for the last day made."""
     _ENDPOINT = 'vehicles'
     _DISTANCE_TRAVELED = 'distance_travelled'

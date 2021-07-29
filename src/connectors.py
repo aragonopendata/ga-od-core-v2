@@ -30,9 +30,12 @@ _SQLALCHEMY_MAP_TYPE = {bool: Boolean, str: Text, int: Integer, float: REAL, dat
 
 class MimeType(Enum):
     """Enum with some mimetype and his different values."""
-    CSV = ('text/csv',)
-    XLSX = ('application/xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',)
-    JSON = ('application/json',)
+    CSV = ('text/csv', )
+    XLSX = (
+        'application/xlsx',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    JSON = ('application/json', )
 
 
 class NotImplementedSchemaError(Exception):
