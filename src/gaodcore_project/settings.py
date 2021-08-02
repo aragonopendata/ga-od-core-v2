@@ -34,6 +34,8 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     'gaodcore',  # For testing
     'miv-aodfront-01.aragon.local',
+    'mev-aodfront-01.aragon.local',
+    'mov-aodfront-01.aragon.local',
     'preopendata.aragon.es',
     'opendata.aragon.es',
 ]
