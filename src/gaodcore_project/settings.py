@@ -30,15 +30,7 @@ SECRET_KEY = CONFIG.common_config.secret_key
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = CONFIG.common_config.debug
 
-ALLOWED_HOSTS = [
-    '127.0.0.1',
-    'gaodcore',  # For testing
-    'miv-aodfront-01.aragon.local',
-    'mev-aodfront-01.aragon.local',
-    'mov-aodfront-01.aragon.local',
-    'preopendata.aragon.es',
-    'opendata.aragon.es',
-]
+ALLOWED_HOSTS = CONFIG.common_config.allowed_hosts
 
 # Application definition
 
