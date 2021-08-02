@@ -89,7 +89,7 @@ from django.test import Client
             'cumulativeIdleTime': int,
             'cumulativePtoTime': int,
             'cumulativeDistance': float,
-            'cumulativeFuelUsage': float
+            'cumulativeFuelUsage': float,
         }
     ],
     [
@@ -152,7 +152,7 @@ from django.test import Client
             'direction': str,
             'bus': str,
             'departure_time': str,
-            'reamining_time': str,
+            'remaining_time': str,
             'TR': str,
             'inc': str,
             'url': str,
@@ -259,7 +259,7 @@ def test_transport_views(client: Client, accept: str, url: str, fields: Dict[str
             data = response.json()[0]
         else:
             data = yaml.load(response.content)[0]
-        assert fields.keys() == data.keys()
+        assert set(fields.keys()) == set(data.keys())
 
         for field, field_type in fields.items():
             assert type(data[field]) == field_type
