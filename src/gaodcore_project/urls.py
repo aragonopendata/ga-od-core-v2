@@ -18,7 +18,7 @@ from django.contrib import admin
 
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
-from .configswagger import BothHttpAndHttpsSchemaGenerator
+from .configswagger import HttpsSchemaGenerator
 
 SchemaView = get_schema_view(
     openapi.Info(
@@ -30,7 +30,7 @@ SchemaView = get_schema_view(
         license=openapi.License(name='EUPL License'),
     ),
     public=False,
-    generator_class=BothHttpAndHttpsSchemaGenerator,
+    generator_class=HttpsSchemaGenerator,
 )
 
 urlpatterns = [
