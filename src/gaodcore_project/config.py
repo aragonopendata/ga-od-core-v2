@@ -2,7 +2,7 @@
 
 import os
 from abc import ABCMeta
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from urllib.parse import urljoin
 from sys import platform
 import yaml
@@ -90,6 +90,7 @@ class Database(BaseModel):
 
 
 class CommonConfig(BaseModel):
+    allowed_hosts: List[str]
     secret_key: str
     debug: bool
     databases: Dict[str, Database]
