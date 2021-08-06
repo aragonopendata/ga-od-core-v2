@@ -9,7 +9,7 @@ from gaodcore_transports.views.zaragoza import LineView, LineStopsView, RoutesVi
     ArrivalTimeView, NoticesView, OriginsView, DestinationsView, LinesOriDesView, TimesRouteView, ExpOriDesView, \
     StopsOriDesView, ArrivalOriDesView, SAEView
 
-urlpatterns = format_suffix_patterns([
+urlpatterns = [
     path('aragon/vehicles', ListVehicleView.as_view()),
     path('aragon/drivers', ListDriverView.as_view()),
     path('aragon/live-position-latest', LivePositionLatestView.as_view()),
@@ -29,5 +29,4 @@ urlpatterns = format_suffix_patterns([
     path('zaragoza/stops_ori_des', StopsOriDesView.as_view()),
     path('zaragoza/arrival_ori_des', ArrivalOriDesView.as_view()),
     path('zaragoza/sae', SAEView.as_view())
-],
-                                     allowed=['json', 'xml', 'csv', 'yaml', 'xlsx'])
+]
