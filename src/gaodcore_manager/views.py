@@ -54,7 +54,8 @@ class ValidatorView(APIViewMixin):
                 'object_location',
                 openapi.IN_QUERY,
                 required=False,
-                description="This field in databases origins can be a table, view or function. This field in APIs origins is not required.",
+                description="This field in databases origins can be a table, view or function. "
+                            "This field in APIs origins is not required.",
                 type=openapi.TYPE_STRING),
             openapi.Parameter('object_location_schema',
                               openapi.IN_QUERY,
