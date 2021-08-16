@@ -6,7 +6,7 @@ from conftest import validate_error
 
 @pytest.mark.django_db
 def test_show_columns(client: Client, full_example):
-    download_response = client.get(f'/GA_OD_Core/show_columns.json', {'resource_id': full_example.resources.table.id})
+    download_response = client.get('/GA_OD_Core/show_columns.json', {'resource_id': full_example.resources.table.id})
     data = download_response.json()
     if full_example.scheme == 'postgresql':
         assert data == [{
@@ -110,6 +110,6 @@ def test_show_columns(client: Client, full_example):
 
 @pytest.mark.django_db
 def test_show_columns_resource_not_exists(accept_error, client: Client):
-    download_response = client.get(f'/GA_OD_Core/show_columns', {'resource_id': -1}, HTTP_ACCEPT=accept_error)
+    download_response = client.get('/GA_OD_Core/show_columns', {'resource_id': -1}, HTTP_ACCEPT=accept_error)
     assert download_response.status_code == 400
     validate_error(download_response.content, "Resource not exists or is not available", accept_error)

@@ -50,11 +50,13 @@ def test_download_fields(endpoint: str, client: Client, full_example):
 @pytest.mark.django_db
 @pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download", "/GA_OD_Core/preview"])
 def test_download_non_existent_field_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(endpoint, {
-        'resource_id': full_example.resources.table.id,
-        "fields": ["non_existent_field"]
-    },
-                                   HTTP_ACCEPT=accept_error)
+    download_response = client.get(
+        endpoint,
+        {
+            'resource_id': full_example.resources.table.id,
+            "fields": ["non_existent_field"]
+        },
+        HTTP_ACCEPT=accept_error)
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Field: non_existent_field not exists.', accept_error)
 
@@ -103,17 +105,19 @@ def test_download_format_error(endpoint: str, client: Client, full_example):
 def test_download_offset(endpoint: str, client: Client, full_example):
     download_response = client.get(endpoint, {'resource_id': full_example.resources.table.id, 'offset': "1"})
 
-    with open(os.path.join(os.path.dirname(__file__), f"download_postgresql.json"), r'rb') as f:
-        assert json.loads(f.read())[1:] == json.loads(download_response.content)
+    with open(os.path.join(os.path.dirname(__file__), "download_postgresql.json"), r'rb') as file:
+        assert json.loads(file.read())[1:] == json.loads(download_response.content)
 
 
 @pytest.mark.django_db
 def test_download_offset_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(endpoint, {
-        'resource_id': full_example.resources.table.id,
-        'offset': "a"
-    },
-                                   HTTP_ACCEPT=accept_error)
+    download_response = client.get(
+        endpoint,
+        {
+            'resource_id': full_example.resources.table.id,
+            'offset': "a"
+        },
+        HTTP_ACCEPT=accept_error)
 
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Value of offset is not a number.', accept_error)
@@ -123,18 +127,20 @@ def test_download_offset_error(endpoint: str, accept_error, client: Client, full
 def test_download_limit(endpoint: str, client: Client, full_example):
     download_response = client.get(endpoint, {'resource_id': full_example.resources.table.id, 'limit': "1"})
 
-    with open(os.path.join(os.path.dirname(__file__), f"download_postgresql.json"), 'rb') as f:
-        data = f.read()
+    with open(os.path.join(os.path.dirname(__file__), "download_postgresql.json"), 'rb') as file:
+        data = file.read()
         assert json.loads(data)[:1] == json.loads(download_response.content)
 
 
 @pytest.mark.django_db
 def test_download_limit_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(endpoint, {
-        'resource_id': full_example.resources.table.id,
-        'limit': "a"
-    },
-                                   HTTP_ACCEPT=accept_error)
+    download_response = client.get(
+        endpoint,
+        {
+            'resource_id': full_example.resources.table.id,
+            'limit': "a"
+        },
+        HTTP_ACCEPT=accept_error)
 
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Value of limit is not a number.', accept_error)
@@ -148,8 +154,8 @@ def test_download_pagination(endpoint: str, client: Client, full_example):
         '_page_size': "1"
     })
 
-    with open(os.path.join(os.path.dirname(__file__), f"download_postgresql.json"), r'rb') as f:
-        data = json.loads(f.read())
+    with open(os.path.join(os.path.dirname(__file__), "download_postgresql.json"), r'rb') as file:
+        data = json.loads(file.read())
         response_data = json.loads(download_response.content)
         assert data[1:2] == response_data
 
@@ -167,12 +173,14 @@ def test_download_pagination_overflow(endpoint: str, client: Client, full_exampl
 
 @pytest.mark.django_db
 def test_download_pagination_page_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(endpoint, {
-        'resource_id': full_example.resources.table.id,
-        '_page': "a",
-        '_page_size': "1"
-    },
-                                   HTTP_ACCEPT=accept_error)
+    download_response = client.get(
+        endpoint,
+        {
+            'resource_id': full_example.resources.table.id,
+            '_page': "a",
+            '_page_size': "1"
+        },
+        HTTP_ACCEPT=accept_error)
 
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Value of _page is not a number.', accept_error)
@@ -180,12 +188,14 @@ def test_download_pagination_page_error(endpoint: str, accept_error, client: Cli
 
 @pytest.mark.django_db
 def test_download_pagination_page_size_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(endpoint, {
-        'resource_id': full_example.resources.table.id,
-        '_page': "1",
-        '_page_size': "a"
-    },
-                                   HTTP_ACCEPT=accept_error)
+    download_response = client.get(
+        endpoint,
+        {
+            'resource_id': full_example.resources.table.id,
+            '_page': "1",
+            '_page_size': "a"
+        },
+        HTTP_ACCEPT=accept_error)
 
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Value of _page_size is not a number.', accept_error)
@@ -198,8 +208,8 @@ def test_download_filters(endpoint: str, client: Client, full_example):
         'filters': '{"description": null}'
     })
 
-    with open(os.path.join(os.path.dirname(__file__), f"download_postgresql.json"), r'rb') as f:
-        assert json.loads(f.read())[1:2] == json.loads(download_response.content)
+    with open(os.path.join(os.path.dirname(__file__), "download_postgresql.json"), r'rb') as file:
+        assert json.loads(file.read())[1:2] == json.loads(download_response.content)
 
 
 @pytest.mark.django_db
@@ -222,8 +232,8 @@ def test_download_filters_value_error(endpoint: str, accept_error, client: Clien
 def test_download_sort_asc(endpoint: str, client: Client, full_example):
     download_response = client.get(endpoint, {'resource_id': full_example.resources.table.id, 'sort': 'name asc'})
 
-    with open(os.path.join(os.path.dirname(__file__), f"download_postgresql.json"), r'rb') as f:
-        data = json.loads(f.read())
+    with open(os.path.join(os.path.dirname(__file__), "download_postgresql.json"), r'rb') as file:
+        data = json.loads(file.read())
         data.sort(key=lambda x: x['name'])
         assert data == json.loads(download_response.content)
 
@@ -232,8 +242,8 @@ def test_download_sort_asc(endpoint: str, client: Client, full_example):
 def test_download_sort_desc(endpoint: str, client: Client, full_example):
     download_response = client.get(endpoint, {'resource_id': full_example.resources.table.id, 'sort': 'name desc'})
 
-    with open(os.path.join(os.path.dirname(__file__), f"download_postgresql.json"), r'rb') as f:
-        data = json.loads(f.read())
+    with open(os.path.join(os.path.dirname(__file__), "download_postgresql.json"), r'rb') as file:
+        data = json.loads(file.read())
         data.sort(key=lambda x: x['name'], reverse=True)
         assert data == json.loads(download_response.content)
 
@@ -245,19 +255,21 @@ def test_download_sort_n(endpoint: str, client: Client, full_example):
         'sort': 'name asc, description'
     })
 
-    with open(os.path.join(os.path.dirname(__file__), f"download_postgresql.json"), r'rb') as f:
-        data = json.loads(f.read())
+    with open(os.path.join(os.path.dirname(__file__), "download_postgresql.json"), r'rb') as file:
+        data = json.loads(file.read())
         data.sort(key=lambda x: [x['name'], x['description']])
         assert data == json.loads(download_response.content)
 
 
 @pytest.mark.django_db
 def test_download_sort_non_existent_field_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(endpoint, {
-        'resource_id': full_example.resources.table.id,
-        'sort': 'name desc, description, acceleration asc'
-    },
-                                   HTTP_ACCEPT=accept_error)
+    download_response = client.get(
+        endpoint,
+        {
+            'resource_id': full_example.resources.table.id,
+            'sort': 'name desc, description, acceleration asc'
+        },
+        HTTP_ACCEPT=accept_error)
 
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Sort field: acceleration not exists.', accept_error)
@@ -265,11 +277,13 @@ def test_download_sort_non_existent_field_error(endpoint: str, accept_error, cli
 
 @pytest.mark.django_db
 def test_download_sort_mode_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(endpoint, {
-        'resource_id': full_example.resources.table.id,
-        'sort': 'name none'
-    },
-                                   HTTP_ACCEPT=accept_error)
+    download_response = client.get(
+        endpoint,
+        {
+            'resource_id': full_example.resources.table.id,
+            'sort': 'name none'
+        },
+        HTTP_ACCEPT=accept_error)
     assert download_response.status_code == 400
     validate_error(download_response.content,
                    'Sort value name none is not allowed. Ej: fieldname1 asc, fieldname2 desc.', accept_error)
@@ -277,11 +291,12 @@ def test_download_sort_mode_error(endpoint: str, accept_error, client: Client, f
 
 @pytest.mark.django_db
 def test_download_sort_too_many_arguments_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(endpoint, {
-        'resource_id': full_example.resources.table.id,
-        'sort': 'name none asd'
-    },
-                                   HTTP_ACCEPT=accept_error)
+    download_response = client.get(
+        endpoint, {
+            'resource_id': full_example.resources.table.id,
+            'sort': 'name none asd'
+        },
+        HTTP_ACCEPT=accept_error)
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Sort value name none asd is not allowed. Too many arguments.',
                    accept_error)
@@ -296,7 +311,7 @@ def test_download_resource_not_exists(endpoint: str, accept_error, client: Clien
 
 @pytest.mark.django_db
 def test_download_extension(endpoint: str, accept_download: str, client: Client, full_example):
-    download_response = client.get(f'/GA_OD_Core/download', {'resource_id': full_example.resources.table.id},
+    download_response = client.get('/GA_OD_Core/download', {'resource_id': full_example.resources.table.id},
                                    HTTP_ACCEPT=accept_download)
     compare_files(os.path.dirname(__file__), f'download_{full_example.scheme}', accept_download,
                   download_response.content)

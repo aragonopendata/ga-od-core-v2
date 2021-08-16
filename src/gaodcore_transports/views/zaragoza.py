@@ -106,7 +106,8 @@ class ZaragozaTransportMixin(APIViewMixin):
 class LineView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of available bus lines, for the current date."""
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
-    def get(self, _: Request, **_kwargs):
+    @staticmethod
+    def get(_: Request, **_kwargs):
         """Returns the list of available bus lines, for the current date."""
         return Response(get_lines())
 
@@ -115,7 +116,8 @@ class LineView(APIViewMixin):  # pylint: disable=too-few-public-methods
 class LineStopsView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of available stop lines, for the current date."""
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
-    def get(self, _: Request, **_kwargs):
+    @staticmethod
+    def get(_: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(_get_stops())
 
@@ -124,7 +126,8 @@ class LineStopsView(APIViewMixin):  # pylint: disable=too-few-public-methods
 class RoutesView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the routes that a line performs, for the current date."""
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
-    def get(self, _: Request, **_kwargs):
+    @staticmethod
+    def get(_: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(get_return_list(_get_routes()))
 
@@ -139,17 +142,20 @@ class StopsRouteView(ZaragozaTransportMixin):  # pylint: disable=too-few-public-
     def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         configs = [
-            DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url(
-                'stops_route',
-                line_id=route[self._LINE_ID_FIELD],
-                route_id=route[self._ROUTE_FIELD],
-                isreturn=route[self._IS_RETURN_FIELD]),
-                                    root_name=self._ENDPOINT,
-                                    extra_data={
-                                        self._LINE_ID_FIELD: route[self._LINE_ID_FIELD],
-                                        self._ROUTE_FIELD: route[self._ROUTE_FIELD],
-                                        self._IS_RETURN_FIELD: route[self._IS_RETURN_FIELD]
-                                    }) for route in _get_routes()
+            DownloadProcessorConfig(
+                url=CONFIG.projects.transport.zaragoza.get_url(
+                    'stops_route',
+                    line_id=route[self._LINE_ID_FIELD],
+                    route_id=route[self._ROUTE_FIELD],
+                    isreturn=route[self._IS_RETURN_FIELD]
+                ),
+                root_name=self._ENDPOINT,
+                extra_data={
+                    self._LINE_ID_FIELD: route[self._LINE_ID_FIELD],
+                    self._ROUTE_FIELD: route[self._ROUTE_FIELD],
+                    self._IS_RETURN_FIELD: route[self._IS_RETURN_FIELD]
+                }
+            ) for route in _get_routes()
         ]
         data = asyncio.run(_download_processor(configs=configs))
         return Response(get_return_list(data))
@@ -192,7 +198,8 @@ class NoticesView(APIViewMixin):  # pylint: disable=too-few-public-methods
 class OriginsView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of municipalities of origin for the current date."""
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
-    def get(self, _: Request, **_kwargs):
+    @staticmethod
+    def get(_: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(get_return_list(_get_origins()))
 
@@ -201,7 +208,8 @@ class OriginsView(APIViewMixin):  # pylint: disable=too-few-public-methods
 class DestinationsView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of destination municipalities, depending on the origin, for the current date."""
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
-    def get(self, _: Request, **_kwargs):
+    @staticmethod
+    def get(_: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(_get_origins_destinations())
 
@@ -213,16 +221,18 @@ class LinesOriDesView(ZaragozaTransportMixin):  # pylint: disable=too-few-public
     def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         configs = [
-            DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url(
-                'lines_ori_des',
-                origin=origin_destination[self._ORIGIN_ID_FIELD],
-                destination=origin_destination[self._ID_FIELD],
-            ),
-                                    root_name='lines_ori_des',
-                                    extra_data={
-                                        self._ORIGIN_ID_FIELD: origin_destination[self._ORIGIN_ID_FIELD],
-                                        self._DESTINATION_ID_FIELD: origin_destination[self._ID_FIELD]
-                                    }) for origin_destination in _get_origins_destinations()
+            DownloadProcessorConfig(
+                url=CONFIG.projects.transport.zaragoza.get_url(
+                    'lines_ori_des',
+                    origin=origin_destination[self._ORIGIN_ID_FIELD],
+                    destination=origin_destination[self._ID_FIELD],
+                ),
+                root_name='lines_ori_des',
+                extra_data={
+                    self._ORIGIN_ID_FIELD: origin_destination[self._ORIGIN_ID_FIELD],
+                    self._DESTINATION_ID_FIELD: origin_destination[self._ID_FIELD]
+                }
+            ) for origin_destination in _get_origins_destinations()
         ]
 
         data = asyncio.run(_download_processor(configs))
@@ -241,24 +251,28 @@ class TimesRouteView(ZaragozaTransportMixin):  # pylint: disable=too-few-public-
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     @swagger_auto_schema(manual_parameters=[
         openapi.Parameter('time_sec', openapi.IN_QUERY, description="Time in seconds", type=openapi.TYPE_NUMBER)
-    ],
-                         tags=['transports'])
+    ], tags=['transports'])
     def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         time_sec = self.request.query_params.get(self._TIME_SEC_PARAM, self._DEFAULT_DEPARTURE_TIME)
         configs = [
-            DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url(self._ENDPOINT,
-                                                                                   id_linea=line[self._ID_FIELD],
-                                                                                   bus=self._DEFAULT_BUS,
-                                                                                   departure_time=time_sec,
-                                                                                   direction=direction),
-                                    root_name=self._ENDPOINT,
-                                    extra_data={
-                                        self._LINE_ID_FIELD: line[self._ID_FIELD],
-                                        'direction': direction,
-                                        'bus': self._DEFAULT_BUS,
-                                        'departure_time': time_sec
-                                    }) for line in get_lines() for direction in self._DIRECTIONS
+            DownloadProcessorConfig(
+                url=CONFIG.projects.transport.zaragoza.get_url(
+                    self._ENDPOINT,
+                    id_linea=line[self._ID_FIELD],
+                    bus=self._DEFAULT_BUS,
+                    departure_time=time_sec,
+                    direction=direction
+                ),
+                root_name=self._ENDPOINT,
+                extra_data={
+                    self._LINE_ID_FIELD: line[self._ID_FIELD],
+                    'direction': direction,
+                    'bus': self._DEFAULT_BUS,
+                    'departure_time': time_sec
+                }
+            )
+            for line in get_lines() for direction in self._DIRECTIONS
         ]
 
         return Response(get_return_list(asyncio.run(_download_processor(configs))))
@@ -276,15 +290,18 @@ class ExpOriDesView(ZaragozaTransportMixin):  # pylint: disable=too-few-public-m
         """It shows all the shipments that go between an origin and a destination, the order of introduction of the origin
     and the destination determines the direction, for the current date."""
         configs = [
-            DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url(
-                self._ENDPOINT,
-                origin=origins_destination[self._ORIGIN_ID_FIELD],
-                destination=origins_destination[self._ID_FIELD]),
-                                    root_name=self._ENDPOINT,
-                                    extra_data={
-                                        self._ORIGIN_ID_FIELD: origins_destination[self._ORIGIN_ID_FIELD],
-                                        self._DESTINATION_ID_FIELD: origins_destination[self._ID_FIELD]
-                                    }) for origins_destination in _get_origins_destinations()
+            DownloadProcessorConfig(
+                url=CONFIG.projects.transport.zaragoza.get_url(
+                    self._ENDPOINT,
+                    origin=origins_destination[self._ORIGIN_ID_FIELD],
+                    destination=origins_destination[self._ID_FIELD]
+                ),
+                root_name=self._ENDPOINT,
+                extra_data={
+                    self._ORIGIN_ID_FIELD: origins_destination[self._ORIGIN_ID_FIELD],
+                    self._DESTINATION_ID_FIELD: origins_destination[self._ID_FIELD]
+                }
+            ) for origins_destination in _get_origins_destinations()
         ]
         data = asyncio.run(_download_processor(configs))
         return Response(get_return_list(data))
@@ -301,15 +318,18 @@ class StopsOriDesView(ZaragozaTransportMixin):  # pylint: disable=too-few-public
     def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         configs = [
-            DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url(
-                self._ENDPOINT,
-                origin=origin_destination[self._ORIGIN_ID_FIELD],
-                destination=origin_destination[self._ID_FIELD]),
-                                    root_name=self._ENDPOINT,
-                                    extra_data={
-                                        self._ORIGIN_ID_FIELD: origin_destination[self._ORIGIN_ID_FIELD],
-                                        self._DESTINATION_ID_FIELD: origin_destination[self._ID_FIELD]
-                                    }) for origin_destination in _get_origins_destinations()
+            DownloadProcessorConfig(
+                url=CONFIG.projects.transport.zaragoza.get_url(
+                    self._ENDPOINT,
+                    origin=origin_destination[self._ORIGIN_ID_FIELD],
+                    destination=origin_destination[self._ID_FIELD]
+                ),
+                root_name=self._ENDPOINT,
+                extra_data={
+                    self._ORIGIN_ID_FIELD: origin_destination[self._ORIGIN_ID_FIELD],
+                    self._DESTINATION_ID_FIELD: origin_destination[self._ID_FIELD]
+                }
+            ) for origin_destination in _get_origins_destinations()
         ]
 
         data = asyncio.run(_download_processor(configs))
@@ -330,15 +350,18 @@ class ArrivalOriDesView(APIViewMixin):  # pylint: disable=too-few-public-methods
         """Implementation of get of APIViewMixin."""
         origins_destinations = _get_origins_destinations()
         configs = [
-            DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url(
-                self._ENDPOINT,
-                origin=origin_destination[self._ORIGIN_ID_FIELD],
-                destination=origin_destination[self._ID_FIELD]),
-                                    root_name=self._ENDPOINT,
-                                    extra_data={
-                                        self._ORIGIN_ID_FIELD: origin_destination[self._ORIGIN_ID_FIELD],
-                                        self._DESTINATION_ID_FIELD: origin_destination[self._ID_FIELD]
-                                    }) for origin_destination in origins_destinations
+            DownloadProcessorConfig(
+                url=CONFIG.projects.transport.zaragoza.get_url(
+                    self._ENDPOINT,
+                    origin=origin_destination[self._ORIGIN_ID_FIELD],
+                    destination=origin_destination[self._ID_FIELD]
+                ),
+                root_name=self._ENDPOINT,
+                extra_data={
+                    self._ORIGIN_ID_FIELD: origin_destination[self._ORIGIN_ID_FIELD],
+                    self._DESTINATION_ID_FIELD: origin_destination[self._ID_FIELD]
+                }
+            ) for origin_destination in origins_destinations
         ]
         data = asyncio.run(_download_processor(configs))
         return Response(get_return_list(data))
