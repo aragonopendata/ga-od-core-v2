@@ -106,7 +106,8 @@ class DownloadView(APIViewMixin):
                              openapi.Parameter('_pageSize',
                                                openapi.IN_QUERY,
                                                description='Deprecated. Number of results in each page.',
-                                               type=openapi.TYPE_INTEGER), ])
+                                               type=openapi.TYPE_INTEGER),
+                         ])
     def get(self, request: Request, **_kwargs) -> Response:
         """This method allows get serialized public data from databases or APIs of Gobierno de Aragón."""
         resource_id = self._get_resource_id(request)
@@ -269,21 +270,17 @@ class DownloadView(APIViewMixin):
 class ShowColumnsView(XLSXFileMixin, APIViewMixin):
     """This view allows to get datatype of each column from a resource."""
     @staticmethod
-    @swagger_auto_schema(
-        tags=['default'],
-        manual_parameters=[
-            openapi.Parameter(
-                'resource_id',
-                openapi.IN_QUERY,
-                description="",
-                type=openapi.TYPE_NUMBER),
-            openapi.Parameter(
-                'view_id',
-                openapi.IN_QUERY,
-                description="Alias of resource_id. Backward compatibility.",
-                type=openapi.TYPE_NUMBER),
-        ]
-    )
+    @swagger_auto_schema(tags=['default'],
+                         manual_parameters=[
+                             openapi.Parameter('resource_id',
+                                               openapi.IN_QUERY,
+                                               description="",
+                                               type=openapi.TYPE_NUMBER),
+                             openapi.Parameter('view_id',
+                                               openapi.IN_QUERY,
+                                               description="Alias of resource_id. Backward compatibility.",
+                                               type=openapi.TYPE_NUMBER),
+                         ])
     def get(request: Request, **_kwargs) -> Response:
         """This method allows to get datatype of each column from a resource."""
         resource_id = request.query_params.get('resource_id') or request.query_params.get('view_id')
