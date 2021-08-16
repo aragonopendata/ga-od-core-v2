@@ -24,40 +24,33 @@ def test_validator(auth_client: Client, full_example: ConnectorData, accept_down
 
 @pytest.mark.django_db
 def test_validator_invalid_uri_error(auth_client, accept_error):
-    response = auth_client.get(
-        '/GA_OD_Core_admin/manager/validator',
-        {
-            'object_location': 'fail',
-            'uri': 'postgresql://test/adsf'
-        },
-        HTTP_ACCEPT=accept_error)
+    response = auth_client.get('/GA_OD_Core_admin/manager/validator', {
+        'object_location': 'fail',
+        'uri': 'postgresql://test/adsf'
+    },
+                               HTTP_ACCEPT=accept_error)
     assert response.status_code == 400
     validate_error(response.content, 'Connection is not available.', accept_error)
 
 
 @pytest.mark.django_db
 def test_validator_invalid_schema_error(auth_client, accept_error):
-    response = auth_client.get(
-        '/GA_OD_Core_admin/manager/validator',
-        {
-            'object_location': 'fail',
-            'uri': 'test://test/adsf'
-        },
-        HTTP_ACCEPT=accept_error)
+    response = auth_client.get('/GA_OD_Core_admin/manager/validator', {
+        'object_location': 'fail',
+        'uri': 'test://test/adsf'
+    },
+                               HTTP_ACCEPT=accept_error)
     assert response.status_code == 400
     validate_error(response.content, 'Schema of the URI is not available.', accept_error)
 
 
 @pytest.mark.django_db
 def test_validator_invalid_location_error(auth_client, connector_uri, accept_error):
-    response = auth_client.get(
-        '/GA_OD_Core_admin/manager/validator',
-        {
-            'object_location': 'fail',
-            'uri': connector_uri
-        },
-        HTTP_ACCEPT=accept_error
-    )
+    response = auth_client.get('/GA_OD_Core_admin/manager/validator', {
+        'object_location': 'fail',
+        'uri': connector_uri
+    },
+                               HTTP_ACCEPT=accept_error)
     assert response.status_code == 400
     scheme = urlparse(connector_uri).scheme
     if scheme in ['postgresql', 'mysql']:
@@ -73,14 +66,12 @@ def test_validator_invalid_location_error(auth_client, connector_uri, accept_err
 
 @pytest.mark.django_db
 def test_validator_invalid_location_schema_error(auth_client, connector_uri, accept_error):
-    response = auth_client.get(
-        '/GA_OD_Core_admin/manager/validator',
-        {
-            'object_location_schema': 'test',
-            'object_location': 'fail',
-            'uri': connector_uri
-        },
-        HTTP_ACCEPT=accept_error)
+    response = auth_client.get('/GA_OD_Core_admin/manager/validator', {
+        'object_location_schema': 'test',
+        'object_location': 'fail',
+        'uri': connector_uri
+    },
+                               HTTP_ACCEPT=accept_error)
     assert response.status_code == 400
     scheme = urlparse(connector_uri).scheme
     if scheme in ['postgresql']:
@@ -98,14 +89,11 @@ def test_validator_invalid_location_schema_error(auth_client, connector_uri, acc
 
 @pytest.mark.django_db
 def test_validator_malformed_uri_error(auth_client, accept_error):
-    response = auth_client.get(
-        '/GA_OD_Core_admin/manager/validator',
-        {
-            'object_location': 'fail',
-            'uri': 'uri'
-        },
-        HTTP_ACCEPT=accept_error
-    )
+    response = auth_client.get('/GA_OD_Core_admin/manager/validator', {
+        'object_location': 'fail',
+        'uri': 'uri'
+    },
+                               HTTP_ACCEPT=accept_error)
     assert response.status_code == 400
     validate_error(response.content, 'Schema of the URI is not available.', accept_error)
 
@@ -146,14 +134,11 @@ def test_validator_credentials_error(auth_client: Client, connector_uri: str, ca
         return
     parsed = parsed._replace(netloc="{}:{}@{}:{}".format('invalid_username', 'invalid_password', parsed.hostname,
                                                          parsed.netloc.split(':')[-1]))
-    response = auth_client.get(
-        '/GA_OD_Core_admin/manager/validator',
-        {
-            "object_location": 'fail',
-            "uri": parsed.geturl()
-        },
-        HTTP_ACCEPT=accept_error
-    )
+    response = auth_client.get('/GA_OD_Core_admin/manager/validator', {
+        "object_location": 'fail',
+        "uri": parsed.geturl()
+    },
+                               HTTP_ACCEPT=accept_error)
     assert response.status_code == 400
     if parsed.scheme == 'postgresql':
         assert 'FATAL:  password authentication failed for user "invalid_username"' in caplog.text

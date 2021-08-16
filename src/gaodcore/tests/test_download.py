@@ -50,13 +50,11 @@ def test_download_fields(endpoint: str, client: Client, full_example):
 @pytest.mark.django_db
 @pytest.mark.parametrize("endpoint,", ["/GA_OD_Core/download", "/GA_OD_Core/preview"])
 def test_download_non_existent_field_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(
-        endpoint,
-        {
-            'resource_id': full_example.resources.table.id,
-            "fields": ["non_existent_field"]
-        },
-        HTTP_ACCEPT=accept_error)
+    download_response = client.get(endpoint, {
+        'resource_id': full_example.resources.table.id,
+        "fields": ["non_existent_field"]
+    },
+                                   HTTP_ACCEPT=accept_error)
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Field: non_existent_field not exists.', accept_error)
 
@@ -111,13 +109,11 @@ def test_download_offset(endpoint: str, client: Client, full_example):
 
 @pytest.mark.django_db
 def test_download_offset_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(
-        endpoint,
-        {
-            'resource_id': full_example.resources.table.id,
-            'offset': "a"
-        },
-        HTTP_ACCEPT=accept_error)
+    download_response = client.get(endpoint, {
+        'resource_id': full_example.resources.table.id,
+        'offset': "a"
+    },
+                                   HTTP_ACCEPT=accept_error)
 
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Value of offset is not a number.', accept_error)
@@ -134,13 +130,11 @@ def test_download_limit(endpoint: str, client: Client, full_example):
 
 @pytest.mark.django_db
 def test_download_limit_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(
-        endpoint,
-        {
-            'resource_id': full_example.resources.table.id,
-            'limit': "a"
-        },
-        HTTP_ACCEPT=accept_error)
+    download_response = client.get(endpoint, {
+        'resource_id': full_example.resources.table.id,
+        'limit': "a"
+    },
+                                   HTTP_ACCEPT=accept_error)
 
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Value of limit is not a number.', accept_error)
@@ -173,14 +167,12 @@ def test_download_pagination_overflow(endpoint: str, client: Client, full_exampl
 
 @pytest.mark.django_db
 def test_download_pagination_page_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(
-        endpoint,
-        {
-            'resource_id': full_example.resources.table.id,
-            '_page': "a",
-            '_page_size': "1"
-        },
-        HTTP_ACCEPT=accept_error)
+    download_response = client.get(endpoint, {
+        'resource_id': full_example.resources.table.id,
+        '_page': "a",
+        '_page_size': "1"
+    },
+                                   HTTP_ACCEPT=accept_error)
 
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Value of _page is not a number.', accept_error)
@@ -188,14 +180,12 @@ def test_download_pagination_page_error(endpoint: str, accept_error, client: Cli
 
 @pytest.mark.django_db
 def test_download_pagination_page_size_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(
-        endpoint,
-        {
-            'resource_id': full_example.resources.table.id,
-            '_page': "1",
-            '_page_size': "a"
-        },
-        HTTP_ACCEPT=accept_error)
+    download_response = client.get(endpoint, {
+        'resource_id': full_example.resources.table.id,
+        '_page': "1",
+        '_page_size': "a"
+    },
+                                   HTTP_ACCEPT=accept_error)
 
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Value of _page_size is not a number.', accept_error)
@@ -263,13 +253,11 @@ def test_download_sort_n(endpoint: str, client: Client, full_example):
 
 @pytest.mark.django_db
 def test_download_sort_non_existent_field_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(
-        endpoint,
-        {
-            'resource_id': full_example.resources.table.id,
-            'sort': 'name desc, description, acceleration asc'
-        },
-        HTTP_ACCEPT=accept_error)
+    download_response = client.get(endpoint, {
+        'resource_id': full_example.resources.table.id,
+        'sort': 'name desc, description, acceleration asc'
+    },
+                                   HTTP_ACCEPT=accept_error)
 
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Sort field: acceleration not exists.', accept_error)
@@ -277,13 +265,11 @@ def test_download_sort_non_existent_field_error(endpoint: str, accept_error, cli
 
 @pytest.mark.django_db
 def test_download_sort_mode_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(
-        endpoint,
-        {
-            'resource_id': full_example.resources.table.id,
-            'sort': 'name none'
-        },
-        HTTP_ACCEPT=accept_error)
+    download_response = client.get(endpoint, {
+        'resource_id': full_example.resources.table.id,
+        'sort': 'name none'
+    },
+                                   HTTP_ACCEPT=accept_error)
     assert download_response.status_code == 400
     validate_error(download_response.content,
                    'Sort value name none is not allowed. Ej: fieldname1 asc, fieldname2 desc.', accept_error)
@@ -291,12 +277,11 @@ def test_download_sort_mode_error(endpoint: str, accept_error, client: Client, f
 
 @pytest.mark.django_db
 def test_download_sort_too_many_arguments_error(endpoint: str, accept_error, client: Client, full_example):
-    download_response = client.get(
-        endpoint, {
-            'resource_id': full_example.resources.table.id,
-            'sort': 'name none asd'
-        },
-        HTTP_ACCEPT=accept_error)
+    download_response = client.get(endpoint, {
+        'resource_id': full_example.resources.table.id,
+        'sort': 'name none asd'
+    },
+                                   HTTP_ACCEPT=accept_error)
     assert download_response.status_code == 400
     validate_error(download_response.content, 'Sort value name none asd is not allowed. Too many arguments.',
                    accept_error)
