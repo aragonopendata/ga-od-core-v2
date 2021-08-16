@@ -6,7 +6,7 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.views import APIView
+# from rest_framework.views import APIView
 
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from gaodcore_manager.serializers import ConnectorConfigSerializer, ResourceConfigSerializer
@@ -54,9 +54,7 @@ class ValidatorView(APIViewMixin):
                 'object_location',
                 openapi.IN_QUERY,
                 required=False,
-                description=
-                "This field in databases origins can be a table, view or function. This field in APIs origins "
-                "is not required.",
+                description="This field in databases origins can be a table, view or function. This field in APIs origins is not required.",
                 type=openapi.TYPE_STRING),
             openapi.Parameter('object_location_schema',
                               openapi.IN_QUERY,

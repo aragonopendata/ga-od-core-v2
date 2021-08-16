@@ -36,5 +36,5 @@ class Migration(migrations.Migration):
                  models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='gaodcore_manager.connectorconfig')),
             ],
         ),
-        #migrations.RunSQL('ALTER SEQUENCE resource_id_seq RESTART WITH 1000')
+        # migrations.RunSQL('ALTER SEQUENCE resource_id_seq RESTART WITH 1000')
     ]

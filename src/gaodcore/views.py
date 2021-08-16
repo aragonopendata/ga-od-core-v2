@@ -21,22 +21,22 @@ def _get_data_public_error(func: Callable, *args, **kwargs) -> List[Dict[str, An
     try:
         return func(*args, **kwargs)
     except (FieldNoExistsError, SortFieldNoExistsError) as err:
-        raise ValidationError(err, 400)
-    except NoObjectError:
-        raise ValidationError(f'Object is not available.', 500)
-    except DriverConnectionError:
-        raise ValidationError('Connection is not available.', 500)
-    except NotImplementedSchemaError:
-        raise ValidationError("Unexpected error: schema is not implemented.", 500)
-    except MimeTypeError:
-        raise ValidationError("Unexpected error: mimetype of input file is not implemented.", 500)
+        raise ValidationError(err, 400) from err
+    except NoObjectError as err:
+        raise ValidationError('Object is not available.', 500) from err
+    except DriverConnectionError as err:
+        raise ValidationError('Connection is not available.', 500) from err
+    except NotImplementedSchemaError as err:
+        raise ValidationError("Unexpected error: schema is not implemented.", 500) from err
+    except MimeTypeError as err:
+        raise ValidationError("Unexpected error: mimetype of input file is not implemented.", 500) from err
 
 
 def _get_resource(resource_id: int):
     try:
         return ResourceConfig.objects.select_related().get(id=resource_id, enabled=True, connector_config__enabled=True)
-    except ResourceConfig.DoesNotExist:
-        raise ValidationError("Resource not exists or is not available", 400)
+    except ResourceConfig.DoesNotExist as err:
+        raise ValidationError("Resource not exists or is not available", 400) from err
 
 
 class DownloadView(APIViewMixin):
@@ -106,8 +106,7 @@ class DownloadView(APIViewMixin):
                              openapi.Parameter('_pageSize',
                                                openapi.IN_QUERY,
                                                description='Deprecated. Number of results in each page.',
-                                               type=openapi.TYPE_INTEGER),
-                         ])
+                                               type=openapi.TYPE_INTEGER), ])
     def get(self, request: Request, **_kwargs) -> Response:
         """This method allows get serialized public data from databases or APIs of Gobierno de Aragón."""
         resource_id = self._get_resource_id(request)
@@ -270,17 +269,21 @@ class DownloadView(APIViewMixin):
 class ShowColumnsView(XLSXFileMixin, APIViewMixin):
     """This view allows to get datatype of each column from a resource."""
     @staticmethod
-    @swagger_auto_schema(tags=['default'],
-                         manual_parameters=[
-                             openapi.Parameter('resource_id',
-                                               openapi.IN_QUERY,
-                                               description="",
-                                               type=openapi.TYPE_NUMBER),
-                             openapi.Parameter('view_id',
-                                               openapi.IN_QUERY,
-                                               description="Alias of resource_id. Backward compatibility.",
-                                               type=openapi.TYPE_NUMBER),
-                         ])
+    @swagger_auto_schema(
+        tags=['default'],
+        manual_parameters=[
+            openapi.Parameter(
+                'resource_id',
+                openapi.IN_QUERY,
+                description="",
+                type=openapi.TYPE_NUMBER),
+            openapi.Parameter(
+                'view_id',
+                openapi.IN_QUERY,
+                description="Alias of resource_id. Backward compatibility.",
+                type=openapi.TYPE_NUMBER),
+        ]
+    )
     def get(request: Request, **_kwargs) -> Response:
         """This method allows to get datatype of each column from a resource."""
         resource_id = request.query_params.get('resource_id') or request.query_params.get('view_id')

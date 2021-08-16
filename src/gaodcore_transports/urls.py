@@ -1,7 +1,7 @@
 """GAODCore transports urlpatterns."""
 
 from django.urls import path
-from rest_framework.urlpatterns import format_suffix_patterns
+# from rest_framework.urlpatterns import format_suffix_patterns
 
 from gaodcore_transports.views.aragon import ListVehicleView, ListDriverView, LivePositionLatestView, \
     VehicleJourneyHistoryLatestView, DistanceTravelledView
