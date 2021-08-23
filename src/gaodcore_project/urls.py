@@ -39,6 +39,7 @@ urlpatterns = [
         include([
             path('', include('gaodcore.urls')),
             path('gaodcore-transports/', include('gaodcore_transports.urls')),
+            path('google-analytics/', include('google_analytics.urls')),
             re_path(r'^ui(?P<format>\.json|\.yaml)$', SchemaView.without_ui(cache_timeout=0), name='schema-json'),
             re_path(r'^ui/$', SchemaView.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
         ])),
