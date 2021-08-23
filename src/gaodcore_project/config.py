@@ -12,7 +12,7 @@ try:
     _CONFIG_PATH = os.environ['CONFIG_PATH']
 except KeyError as err:
     if platform == "win32":
-        _CONFIG_PATH = 'C:\\ga-od-core-v2\\config-tst.yaml'
+        _CONFIG_PATH = 'C:\\utils\\config-tst.yaml'
     elif platform in ("linux", "linux2"):
         _CONFIG_PATH = '/etc/gaodcore/config-tst.yaml'
     else:
@@ -76,8 +76,15 @@ class Transport(BaseModel):
     zaragoza: ZaragozaTransport
 
 
+class GoogleAnalytics(BaseModel, GetURL):
+    base_url: str
+    service_account: str
+    key_file_location: str
+
+
 class Projects(BaseModel):
     transport: Transport
+    google_analytics: GoogleAnalytics
 
 
 class Database(BaseModel):
@@ -104,5 +111,6 @@ class Config(BaseModel):
     @classmethod
     def get_config(cls) -> 'Config':
         with open(_CONFIG_PATH, 'r') as file:
+            print(file)
             data = yaml.load(file, Loader=yaml.FullLoader)
         return Config.parse_obj(data)
