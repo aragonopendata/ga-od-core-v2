@@ -1,38 +1,48 @@
 common_config:
+  allowed_hosts:
+    - foo
   secret_key: foo
-  debug: true
+  debug: foo
   databases:
     default:
       ENGINE: foo
       NAME: foo
+      USER: foo
+      PASSWORD: foo
+      HOST: foo
+      PORT: foo
+  cache_ttl: foo
+  networks_allowed_auth:
+    - foo
+
 projects:
-  api_reader:
-    transport:
-      aragon:
-        user: foo
-        password: foo
-        customer_id: foo
-        base_url: foo
-        endpoints:
-          vehicles: foo
-          drivers: foo
-          live_position_latest: foo
-          vehicle_journey_history_latest: foo
-          distance_travelled : foo
-      zaragoza:
-        base_url: foo
-        endpoints:
-          lines: foo
-          stops: foo
-          routes: foo
-          stops_route: foo
-          arrival_time: foo
-          notices: foo
-          origins: foo
-          destinations: foo
-          lines_ori_des: foo
-          times_route: foo
-          exp_ori_des: foo
-          stops_ori_des: foo
-          arrival_ori_des: foo
-          sae: foo
+  transport:
+    aragon:
+      user: foo
+      password: foo
+      customer_id: foo
+      base_url: foo
+      endpoints:
+        vehicles: foo
+        drivers: foo
+        live_position_latest: foo
+        vehicle_journey_history_latest: foo
+        distance_travelled: foo
+    zaragoza:
+      base_url: foo
+      max_concurrency: foo
+      endpoints:
+        lines: foo
+        stops: foo
+        routes: foo
+        stops_route: foo
+        arrival_time: foo
+        notices: foo
+        origins: foo
+        destinations: foo
+        lines_ori_des: foo
+        times_route: foo
+        exp_ori_des: foo
+        stops_ori_des: foo
+        arrival_ori_des: foo
+        sae: foo
