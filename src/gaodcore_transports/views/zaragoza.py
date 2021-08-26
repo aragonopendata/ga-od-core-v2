@@ -105,8 +105,8 @@ class ZaragozaTransportMixin(APIViewMixin):
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
 class LineView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of available bus lines, for the current date."""
-    @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     @staticmethod
+    @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(_: Request, **_kwargs):
         """Returns the list of available bus lines, for the current date."""
         return Response(get_lines())
@@ -115,8 +115,8 @@ class LineView(APIViewMixin):  # pylint: disable=too-few-public-methods
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
 class LineStopsView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of available stop lines, for the current date."""
-    @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     @staticmethod
+    @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(_: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(_get_stops())
@@ -125,8 +125,8 @@ class LineStopsView(APIViewMixin):  # pylint: disable=too-few-public-methods
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
 class RoutesView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the routes that a line performs, for the current date."""
-    @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     @staticmethod
+    @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(_: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(get_return_list(_get_routes()))
@@ -194,8 +194,8 @@ class NoticesView(APIViewMixin):  # pylint: disable=too-few-public-methods
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
 class OriginsView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of municipalities of origin for the current date."""
-    @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     @staticmethod
+    @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(_: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(get_return_list(_get_origins()))
@@ -204,8 +204,8 @@ class OriginsView(APIViewMixin):  # pylint: disable=too-few-public-methods
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
 class DestinationsView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of destination municipalities, depending on the origin, for the current date."""
-    @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     @staticmethod
+    @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(_: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(_get_origins_destinations())
