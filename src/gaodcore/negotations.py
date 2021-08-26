@@ -1,3 +1,5 @@
+"""Custom Content Negotiation. This is used to know what response-type is required by a user."""
+
 from typing import List
 
 from rest_framework.exceptions import ValidationError
@@ -6,7 +8,13 @@ from rest_framework.renderers import BaseRenderer
 from rest_framework.request import Request
 
 
-def get_allowed_formats(renderers: List[BaseRenderer]):
+def get_allowed_formats(renderers: List[BaseRenderer]) -> List[str]:
+    """From a list of instances of BaseRender this return content-types or formats that can be rendered.
+
+    :param renderers: List of instances of BaseRender.
+
+    :return: Content-types or formats that can be rendered.
+    """
     return [renderer.format for renderer in renderers]
 
 

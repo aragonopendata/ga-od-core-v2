@@ -9,7 +9,7 @@ class ConnectorConfig(models.Model):
     uri = models.TextField(
         unique=True,
         help_text='This can have and http/s API or database URI. Ex. "https://domain.es/file.ext" or '
-        '"oracle://username:password@host".')
+        '"oracle://username:password@host".', )
     enabled = models.BooleanField(help_text="Resource will be offered if conector and resource are enabled.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

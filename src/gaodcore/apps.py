@@ -1,8 +1,10 @@
+"""GAODCore django application."""
 from django.apps import AppConfig
 
 
-class GAODCORE(AppConfig):
-    name = 'GA_OD_CORE'
+class GAODCore(AppConfig):
+    """GAODCore django application."""
+    name = 'GA_OD_Core'
 
     def ready(self):
         from gaodcore_project import signals  # noqa
