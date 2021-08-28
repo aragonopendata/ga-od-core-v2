@@ -12,8 +12,7 @@ common_config:
       HOST: foo
       PORT: foo
   cache_ttl: foo
-  networks_allowed_auth:
-    - foo
+
 
 projects:
   transport:

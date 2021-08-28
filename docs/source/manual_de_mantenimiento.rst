@@ -1,17 +1,18 @@
-#######################
+=======================
 Manual de Mantenimiento
-#######################
+=======================
 
 Este manual es un manual pensado para administradores de sistema (Sysadmin) o microinformáticos en caso para que tengan
 una FAQ en caso de problemas.
 
 
-******
+######
 Acceso
-******
+######
 
+***********************************************************
 Restablecimiento de intentos de autenticación desde consola
-===========================================================
+***********************************************************
 
 Se deberá acceder a la maquina vía ssh y entrar en el container vía:
 
@@ -26,8 +27,3 @@ en la documentación de infraestructura.
 
 Una vez hayas accedido al container revisa la documentación oficial:
 https://django-axes.readthedocs.io/en/latest/3_usage.html#resetting-attempts-from-command-line
-
-*************
-Configuración
-*************
-Si se requiere modificar algún parámetro de la configuración del GAODCore consulte el documento de despliegue
