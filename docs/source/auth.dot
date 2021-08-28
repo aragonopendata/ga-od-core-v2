@@ -1,0 +1,15 @@
+graph "Authentication"
+{
+    label="\G"
+    subgraph "Djangoasd"
+    {
+
+        subgraph "Django"
+        {
+            AxesBackend [shape=box, label="axes.backends.AxesBackend"];
+            djangoauth [shape=box];
+
+
+        }
+    }
+}
