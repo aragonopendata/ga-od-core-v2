@@ -9,6 +9,7 @@ class ConnectorConfigSerializer(serializers.ModelSerializer):
         model = ConnectorConfig
         fields = '__all__'
         read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {'uri': {'write_only': True}}
 
     @staticmethod
     def validate_uri(uri: str):
@@ -19,9 +20,9 @@ class ConnectorConfigSerializer(serializers.ModelSerializer):
 class ResourceConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = ResourceConfig
-        fields = '__all__'
+        fields = "__all__"
         read_only_fields = ['created_at', 'updated_at']
-
+        write_only = ['uri']
     def validate(self, attrs):
         resource_validator(uri=attrs['connector_config'].uri,
                            object_location=attrs.get('object_location'),
