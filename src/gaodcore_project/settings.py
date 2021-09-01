@@ -160,3 +160,5 @@ CACHES = {
         'LOCATION': 'django_cache',
     }
 }
+
+STATIC_ROOT = BASE_DIR / 'staticfiles'

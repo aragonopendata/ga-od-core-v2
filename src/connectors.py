@@ -269,7 +269,7 @@ def _get_engine_from_api(uri: str) -> Engine:
 def _get_engine(uri: str) -> Engine:
     uri_parsed = urlparse(uri)
     if uri_parsed.scheme in _DATABASE_SCHEMAS:
-        return create_engine(uri)
+        return create_engine(uri, max_identifier_length=128)
     if uri_parsed.scheme in _HTTP_SCHEMAS:
         return _get_engine_from_api(uri)
     raise NotImplementedSchemaError(f'Schema: "{uri_parsed.scheme}" is not implemented.')
