@@ -125,7 +125,7 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
 
     session = session_maker()
     try:
-        num_rows = session.query(model).count()
+        num_rows = session.query(*[model.c[col.name].label(col.name) for col in model.columns]).count()
     except sqlalchemy.exc.ProgrammingError as err:
         logging.exception("Object not available.")
         raise NoObjectError("Object not available.") from err
@@ -155,7 +155,7 @@ def get_resource_data(*,
     columns = _get_columns(column_dict, fields)
     session = session_maker()
     data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
-        *columns).offset(offset).limit(limit).all()
+        *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
 
