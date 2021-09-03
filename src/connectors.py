@@ -255,6 +255,11 @@ def _get_engine_from_api(uri: str) -> Engine:
                 raise DriverConnectionError('The url could not be reached.')
     except (HTTPError, URLError) as err:
         raise DriverConnectionError('The url could not be reached.') from err
+    max_key = max(data, key=len).keys()
+    for item in data:
+        if len(max_key) > len(item.keys()):
+            for k in max_key:
+                item.setdefault(k, None)
     engine = create_engine("sqlite:///:memory:", echo=True, future=True)
     metadata = MetaData()
     table = _get_table_from_dict(data, engine, metadata)
