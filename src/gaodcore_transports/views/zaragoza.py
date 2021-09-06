@@ -107,7 +107,7 @@ class LineView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of available bus lines, for the current date."""
     @staticmethod
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
-    def get(_: Request, **_kwargs):
+    def get(self, _: Request, **_kwargs):
         """Returns the list of available bus lines, for the current date."""
         return Response(get_lines())
 
@@ -117,7 +117,7 @@ class LineStopsView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of available stop lines, for the current date."""
     @staticmethod
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
-    def get(_: Request, **_kwargs):
+    def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(_get_stops())
 
@@ -127,7 +127,7 @@ class RoutesView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the routes that a line performs, for the current date."""
     @staticmethod
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
-    def get(_: Request, **_kwargs):
+    def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(get_return_list(_get_routes()))
 
@@ -196,7 +196,7 @@ class OriginsView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of municipalities of origin for the current date."""
     @staticmethod
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
-    def get(_: Request, **_kwargs):
+    def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(get_return_list(_get_origins()))
 
@@ -206,7 +206,7 @@ class DestinationsView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of destination municipalities, depending on the origin, for the current date."""
     @staticmethod
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
-    def get(_: Request, **_kwargs):
+    def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         return Response(_get_origins_destinations())
 
