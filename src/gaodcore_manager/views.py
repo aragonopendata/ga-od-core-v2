@@ -40,6 +40,7 @@ class ResourceConfigView(XLSXFileMixin, viewsets.ModelViewSet):
 class ValidatorView(APIViewMixin):
     permission_classes = (IsAuthenticated, )
 
+    @staticmethod
     @swagger_auto_schema(tags=['manager'],
                          manual_parameters=[
                              openapi.Parameter('uri',
@@ -60,7 +61,6 @@ class ValidatorView(APIViewMixin):
                                                description="Schema of object_location. Normally used in databases",
                                                type=openapi.TYPE_STRING)
                          ])
-    @staticmethod
     def get(request, **_kwargs) -> Response:
         uri = request.query_params.get('uri')
         object_location = request.query_params.get('object_location')
