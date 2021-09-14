@@ -188,6 +188,8 @@ class NoticesView(APIViewMixin):  # pylint: disable=too-few-public-methods
     def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         data = download(CONFIG.projects.transport.zaragoza.get_url(self._ENDPOINT))[self._ENDPOINT]
+        if not data:
+            data = []
         return Response(get_return_list(data))
 
 

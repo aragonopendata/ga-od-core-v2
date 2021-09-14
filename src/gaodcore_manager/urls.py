@@ -8,4 +8,8 @@ router = routers.SimpleRouter()
 router.register(r'connector-config', ConnectorConfigView)
 router.register(r'resource-config', ResourceConfigView)
 
-urlpatterns = [*router.urls, path('validator', ValidatorView.as_view()),]
+urlpatterns = format_suffix_patterns([
+    *router.urls,
+    path('validator', ValidatorView.as_view()),
+],
+                                     allowed=['json', 'xml', 'csv', 'yaml', 'xlsx'])
