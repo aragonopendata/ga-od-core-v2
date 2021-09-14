@@ -1,0 +1,4 @@
+graph "Aragon Open Data"
+{
+    aragonopendata [shape=note, label="Aragon Open Data"];
+}

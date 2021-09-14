@@ -20,3 +20,8 @@ Documentación de GAODCore
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+
+* :ref:`modindex`
+
+.. automodule:: src.views
+    :members:

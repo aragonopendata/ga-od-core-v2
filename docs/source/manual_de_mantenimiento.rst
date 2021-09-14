@@ -16,11 +16,15 @@ Restablecimiento de intentos de autenticación desde consola
 
 Se deberá acceder a la maquina vía ssh y entrar en el container vía:
 
-``docker exec -it <nombre de container> /bin/bash``
+.. code-block:: shell
+
+   docker exec -it <nombre de container> /bin/bash
 
 Puedes encontrar el nombre de container mediante:
 
-``docker ps``
+.. code-block:: shell
+
+   docker ps
 
 Donde aparecerá el nombre del container buscado muy posiblemente ``gaodcore``. También puedes revisar como se ha desplegado
 en la documentación de infraestructura.

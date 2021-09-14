@@ -92,7 +92,7 @@ El fichero de configuración tienen el siguiente formato:
 .. literalinclude :: ../../config.template.yaml
    :language: yaml
 
-Nota: si se ha modificado el ``config.yaml`` respecto a la versió ya instalada se puede optar por modificar el yaml
+Nota: si se ha modificado el ``config.yaml`` respecto a la versión ya instalada se puede optar por modificar el yaml
 ya copiado.
 
 ***********************************
