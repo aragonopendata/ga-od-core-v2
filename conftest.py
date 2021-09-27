@@ -26,17 +26,23 @@ DB_USERNAME = 'username'
 DB_PASSWORD = 'password'
 DB_NAME = 'gaodcore'
 
-images.configure(
-    'mysql',
-    'mysql', '8',
-    env={'MYSQL_USER': DB_USERNAME, 'MYSQL_PASSWORD': DB_PASSWORD, 'MYSQL_DATABASE': DB_NAME}
-)
+images.configure('mysql',
+                 'mysql',
+                 '8',
+                 env={
+                     'MYSQL_USER': DB_USERNAME,
+                     'MYSQL_PASSWORD': DB_PASSWORD,
+                     'MYSQL_DATABASE': DB_NAME
+                 })
 
-images.configure(
-    'postgresql',
-    'postgres', '13',
-    env={'POSTGRES_USER': DB_USERNAME, 'POSTGRES_PASSWORD': DB_PASSWORD, 'POSTGRES_DB': DB_NAME}
-)
+images.configure('postgresql',
+                 'postgres',
+                 '13',
+                 env={
+                     'POSTGRES_USER': DB_USERNAME,
+                     'POSTGRES_PASSWORD': DB_PASSWORD,
+                     'POSTGRES_DB': DB_NAME
+                 })
 
 pytest_plugins = ['pytest_docker_fixtures']
 
@@ -131,15 +137,17 @@ def create_table_view(uri: str, test_name: str):
 
     try:
         session.bulk_save_objects([
-            TestData(name='RX-78-2 Gundam',
-                     size=18,
-                     max_acceleration=0.93,
-                     weight=60.0,
-                     description='The RX-78-2 Gundam is the titular mobile suit of Mobile Suit Gundam television series',
-                     discover_date=datetime.date(79, 9, 18),
-                     destroyed_date=datetime.datetime(79, 12, 31, 12, 1, 1),
-                     destroyed=True),
-            TestData(name='Half Gundam', )])
+            TestData(
+                name='RX-78-2 Gundam',
+                size=18,
+                max_acceleration=0.93,
+                weight=60.0,
+                description='The RX-78-2 Gundam is the titular mobile suit of Mobile Suit Gundam television series',
+                discover_date=datetime.date(79, 9, 18),
+                destroyed_date=datetime.datetime(79, 12, 31, 12, 1, 1),
+                destroyed=True),
+            TestData(name='Half Gundam', )
+        ])
         session.commit()
 
     except IntegrityError:
@@ -149,7 +157,8 @@ def create_table_view(uri: str, test_name: str):
     session.close()
 
 
-def create_resource_table_view(client, test_name: str, table_name: Optional[str], connector_data: ConnectorData) -> ResourceData:
+def create_resource_table_view(client, test_name: str, table_name: Optional[str],
+                               connector_data: ConnectorData) -> ResourceData:
     data = {
         "name": test_name,
         "enabled": True,
@@ -171,13 +180,13 @@ def full_example(auth_client: Client, connector_uri: str, request) -> ConnectorD
         table_name = request.node.originalname
         create_table_view(connector_uri, request.node.originalname)
         connector_data.resources.view = create_resource_table_view(auth_client, f"{request.node.originalname}_view",
-                                                                   f"{request.node.originalname}_view",
-                                                                   connector_data)
+                                                                   f"{request.node.originalname}_view", connector_data)
     elif parsed_url.scheme in ['http', 'https']:
         table_name = None
     else:
         raise NotImplementedError
-    connector_data.resources.table = create_resource_table_view(auth_client, request.node.originalname, table_name, connector_data)
+    connector_data.resources.table = create_resource_table_view(auth_client, request.node.originalname, table_name,
+                                                                connector_data)
 
     return connector_data
 
@@ -225,8 +234,8 @@ def compare_files(directory: str, file_without_extension, mimetype: str, content
                     assert test_data == response_data
                 elif mimetype == 'application/xml':
                     parser = etree.XMLParser(remove_blank_text=True)
-                    assert etree.tostring(etree.XML(f.read(), parser=parser)) == etree.tostring(
-                        etree.XML(content, parser=parser))
+                    assert etree.tostring(etree.XML(f.read(),
+                                                    parser=parser)) == etree.tostring(etree.XML(content, parser=parser))
                 else:
                     raise NotImplementedError
         else:
@@ -268,12 +277,17 @@ def connector_uri(request, pg, mysql, httpserver: HTTPServer):
         raise NotImplementedError
 
 
-@pytest.fixture(params=['text/html', 'application/json', 'text/csv', 'application/xml', ])
+@pytest.fixture(params=[
+    'text/html',
+    'application/json',
+    'text/csv',
+    'application/xml',
+])
 def accept_error(request):
     return request.param
 
 
-@pytest.fixture(params=['text/html', 'application/json', 'text/csv', 'application/xml', 'application/yaml',
-                        'application/xlsx'])
+@pytest.fixture(
+    params=['text/html', 'application/json', 'text/csv', 'application/xml', 'application/yaml', 'application/xlsx'])
 def accept_download(request):
     return request.param

@@ -1,4 +1,3 @@
-# Create your views here.
 from django.utils.decorators import method_decorator
 from drf_renderer_xlsx.mixins import XLSXFileMixin
 from drf_yasg import openapi
@@ -6,7 +5,6 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-# from rest_framework.views import APIView
 
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from gaodcore_manager.serializers import ConnectorConfigSerializer, ResourceConfigSerializer
@@ -42,28 +40,27 @@ class ResourceConfigView(XLSXFileMixin, viewsets.ModelViewSet):
 class ValidatorView(APIViewMixin):
     permission_classes = (IsAuthenticated, )
 
-    @swagger_auto_schema(
-        tags=['manager'],
-        manual_parameters=[
-            openapi.Parameter('uri',
-                              openapi.IN_QUERY,
-                              required=True,
-                              description="URI of resource. Not allowed driver in schema.",
-                              type=openapi.TYPE_STRING),
-            openapi.Parameter(
-                'object_location',
-                openapi.IN_QUERY,
-                required=False,
-                description="This field in databases origins can be a table, view or function. "
-                            "This field in APIs origins is not required.",
-                type=openapi.TYPE_STRING),
-            openapi.Parameter('object_location_schema',
-                              openapi.IN_QUERY,
-                              required=False,
-                              description="Schema of object_location. Normally used in databases",
-                              type=openapi.TYPE_STRING)
-        ])
     @staticmethod
+    @swagger_auto_schema(tags=['manager'],
+                         manual_parameters=[
+                             openapi.Parameter('uri',
+                                               openapi.IN_QUERY,
+                                               required=True,
+                                               description="URI of resource. Not allowed driver in schema.",
+                                               type=openapi.TYPE_STRING),
+                             openapi.Parameter(
+                                 'object_location',
+                                 openapi.IN_QUERY,
+                                 required=False,
+                                 description="This field in databases origins can be a table, view or function. "
+                                 "This field in APIs origins is not required.",
+                                 type=openapi.TYPE_STRING),
+                             openapi.Parameter('object_location_schema',
+                                               openapi.IN_QUERY,
+                                               required=False,
+                                               description="Schema of object_location. Normally used in databases",
+                                               type=openapi.TYPE_STRING)
+                         ])
     def get(request, **_kwargs) -> Response:
         uri = request.query_params.get('uri')
         object_location = request.query_params.get('object_location')

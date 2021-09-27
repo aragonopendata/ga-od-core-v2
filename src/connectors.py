@@ -125,7 +125,7 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
 
     session = session_maker()
     try:
-        num_rows = session.query(model).count()
+        num_rows = session.query(*[model.c[col.name].label(col.name) for col in model.columns]).count()
     except sqlalchemy.exc.ProgrammingError as err:
         logging.exception("Object not available.")
         raise NoObjectError("Object not available.") from err
@@ -155,7 +155,7 @@ def get_resource_data(*,
     columns = _get_columns(column_dict, fields)
     session = session_maker()
     data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
-        *columns).offset(offset).limit(limit).all()
+        *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
 
@@ -255,6 +255,11 @@ def _get_engine_from_api(uri: str) -> Engine:
                 raise DriverConnectionError('The url could not be reached.')
     except (HTTPError, URLError) as err:
         raise DriverConnectionError('The url could not be reached.') from err
+    max_key = max(data, key=len).keys()
+    for item in data:
+        if len(max_key) > len(item.keys()):
+            for k in max_key:
+                item.setdefault(k, None)
     engine = create_engine("sqlite:///:memory:", echo=True, future=True)
     metadata = MetaData()
     table = _get_table_from_dict(data, engine, metadata)
@@ -269,7 +274,7 @@ def _get_engine_from_api(uri: str) -> Engine:
 def _get_engine(uri: str) -> Engine:
     uri_parsed = urlparse(uri)
     if uri_parsed.scheme in _DATABASE_SCHEMAS:
-        return create_engine(uri)
+        return create_engine(uri, max_identifier_length=128)
     if uri_parsed.scheme in _HTTP_SCHEMAS:
         return _get_engine_from_api(uri)
     raise NotImplementedSchemaError(f'Schema: "{uri_parsed.scheme}" is not implemented.')
