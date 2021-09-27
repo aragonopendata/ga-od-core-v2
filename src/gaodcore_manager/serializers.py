@@ -19,7 +19,7 @@ class ConnectorConfigSerializer(serializers.ModelSerializer):
 class ResourceConfigSerializer(serializers.ModelSerializer):
     class Meta:
         model = ResourceConfig
-        fields = '__all__'
+        fields = "__all__"
         read_only_fields = ['created_at', 'updated_at']
 
     def validate(self, attrs):

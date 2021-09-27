@@ -1,7 +1,7 @@
 """GAODCore transports urlpatterns."""
 
 from django.urls import path
-# from rest_framework.urlpatterns import format_suffix_patterns
+from rest_framework.urlpatterns import format_suffix_patterns
 
 from gaodcore_transports.views.aragon import ListVehicleView, ListDriverView, LivePositionLatestView, \
     VehicleJourneyHistoryLatestView, DistanceTravelledView
@@ -9,7 +9,7 @@ from gaodcore_transports.views.zaragoza import LineView, LineStopsView, RoutesVi
     ArrivalTimeView, NoticesView, OriginsView, DestinationsView, LinesOriDesView, TimesRouteView, ExpOriDesView, \
     StopsOriDesView, ArrivalOriDesView, SAEView
 
-urlpatterns = [
+urlpatterns = format_suffix_patterns([
     path('aragon/vehicles', ListVehicleView.as_view()),
     path('aragon/drivers', ListDriverView.as_view()),
     path('aragon/live-position-latest', LivePositionLatestView.as_view()),
@@ -29,4 +29,5 @@ urlpatterns = [
     path('zaragoza/stops_ori_des', StopsOriDesView.as_view()),
     path('zaragoza/arrival_ori_des', ArrivalOriDesView.as_view()),
     path('zaragoza/sae', SAEView.as_view())
-]
+],
+                                     allowed=['json', 'xml', 'csv', 'yaml', 'xlsx'])
