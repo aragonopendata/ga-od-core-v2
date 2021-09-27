@@ -22,6 +22,3 @@ Documentación de GAODCore
    :caption: Contents:
 
 * :ref:`modindex`
-
-.. automodule:: src.views
-    :members:
