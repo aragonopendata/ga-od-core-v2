@@ -1,14 +1,56 @@
-graph "Infrastructura"
-{
-    subgraph "Djangoasd"
-    {
 
-        subgraph "Django"
-        {
-            AxesBackend [shape=box, label="axes.backends.AxesBackend"];
-            djangoauth [shape=box];
+digraph G {
+    subgraph "cluster Aragonesa de servicios telemáticos" {
+        label = "Aragonesa de servicios telemáticos";
 
+        astapache -> aodapache [label=7030]
+        gaodcore -> internaldataproviderdb;
+        gaodcore -> internaldataproviderapi;
+
+        admin -> gaodcore [label=6001];
+
+        astapache [shape=rect, label=Apache]
+        admin [label=Admin]
+
+        subgraph cluster_aodfront {
+            label = "Aragon Open Data Front";
+            style=filled;
+            color=lightgrey;
+
+            aodapache -> gaodcore [label=6001];
+
+
+            aodapache [shape=rect, label="Apache"];
+
+            gaodcore [shape=rect, label="GAODCore"];
+        }
+
+        subgraph cluster_aodback {
+            label = "Aragon Open Data Back";
+            gaodcoredb [shape=cylinder, label="GAODCore\nDatabase"];
+            aoddb [shape=cylinder, label="Other\ndatabases"];
+            aodapi [shape=rect, label="API"]
 
         }
-    }
+
+        subgraph cluster_internaldataprovider {
+            label = "Proveedores de datos internos";
+            internaldataproviderdb [shape=cylinder, label="BD"]
+            internaldataproviderapi [shape=rect, label="API"]
+        }
+	}
+
+	subgraph cluster_externaldataprovider {
+	    label = "Proveedores de datos externos";
+		externaldataproviderdb [shape=cylinder, label="BD"]
+		externaldataproviderapi [shape=rect, label="API"]
+	}
+    gaodcore -> externaldataproviderdb;
+	gaodcore -> externaldataproviderapi;
+	user -> astapache [label=443];
+	gaodcore -> aoddb;
+	gaodcore -> aodapi;
+    gaodcore -> gaodcoredb;
+
+	user [label=User];
 }

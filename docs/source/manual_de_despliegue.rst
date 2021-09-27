@@ -1,5 +1,5 @@
 ====================
-Manual de Despliegue
+Man de Despliegue
 ====================
 
 En este manual se explicara como desplegar y actualizar GAODCore.
@@ -189,3 +189,14 @@ TODO: revisar si al final se va hacer uso de dockerhub por ejemplo.
 
    cd /opt/infraestructura/
    docker-compose up -d --build
+
+###############################
+Crear super usuario de GAODCore
+###############################
+
+.. code-block:: bash
+
+   cd /opt/infraestructura/
+   docker exec -it <nombre de container> /bin/bash
+
+Seguir el siguiente punto: https://docs.djangoproject.com/en/3.2/intro/tutorial02/#creating-an-admin-user

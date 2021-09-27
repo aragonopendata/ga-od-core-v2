@@ -22,4 +22,4 @@ Recurso
 Un recursos son datos que tienen relación y que provienen de una única fuente de datos. Una fuente de datos puede tener
 varios recursos.
 
-Los datos se pueden descargar en diferentes formatos desde GAODCore: CSV, XLSX, CSV, JSON y YAML.
+Los datos se pueden descargar en diferentes formatos desde GAODCore: CSV, XLSX, XML, JSON y YAML.

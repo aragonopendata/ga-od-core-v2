@@ -1,5 +1,5 @@
 ========================
-Manual de Administración
+Man de Administración
 ========================
 
 En este manual es para usuarios internos no técnicos de la organización con derechos de administración en GAODCore.
@@ -287,9 +287,3 @@ la configuración de la conexión y será capaz de obtener los datos con la conf
 
 .. image:: _static/api_manager/create_resource.png
    :alt: Create connector
-
-
-
-
-
-

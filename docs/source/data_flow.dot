@@ -1,0 +1,19 @@
+digraph "dataflow"
+{
+    request -> gaodcore [label="1 - Se realiza la petición"];
+    gaodcore -> djangoorm [label="2 - Se pide la información\nde la configuración sobre\nel recurso pedido en la petición"];
+    djangoorm -> gaodcoredb [label="3 - Se devuelve la información"];
+    gaodcore -> sqlite [label="4a.1 - En caso de que el origen \nde los datos sea una API se descargan\n los datos y se vuelcan en una BD\n sqlite en memoria"]
+    sqlite -> sqlalchemy [label="4a.2 - Se proporciona la información \nde conexión"];
+    gaodcore -> sqlalchemy [label="4b - Se proporciona la información \nde conexión"];
+    sqlalchemy -> object [label="5 - Se obtiene el modelo a \npartir de la información del nombre \ndel objeto de la BD"];
+    sqlalchemy -> object [label="6 - Se realiza la petición \ncon los parametros de la petición"];
+
+    request [label="Petición"];
+    gaodcore [label="GAODCore"];
+    djangoorm [label="Django ORM"];
+    gaodcoredb [label="GAODCore Database"];
+    sqlite [label="SQLite"];
+    sqlalchemy [label="SQLAlchemy"];
+    object [label="Objeto de la BD"];
+}

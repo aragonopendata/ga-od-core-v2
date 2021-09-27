@@ -1,15 +1,10 @@
-graph "Authentication"
+digraph "Authentication"
 {
-    label="\G"
-    subgraph "Djangoasd"
-    {
+    axesbackend -> djangoauth;
+    axesbackend -> gaodcoredb;
+    djangoauth -> gaodcoredb;
 
-        subgraph "Django"
-        {
-            AxesBackend [shape=box, label="axes.backends.AxesBackend"];
-            djangoauth [shape=box];
-
-
-        }
-    }
+    axesbackend [shape=box, label="axes.backends.AxesBackend"];
+    djangoauth [shape=box, label="django.contrib.auth"];
+    gaodcoredb [shape=box, label="GAODCoreDB"];
 }

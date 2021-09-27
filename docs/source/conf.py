@@ -13,11 +13,12 @@
 
 import os
 import sys
-print(sys.path)
-print('caca')
-sys.path.insert(0, sys.path.insert(0, os.path.abspath('../../')))
-os.environ['DJANGO_SETTINGS_MODULE'] = 'Your_project_name.settings'
-print(sys.path)
+
+import django
+
+sys.path.insert(0, os.path.abspath('../../src'))
+os.environ['DJANGO_SETTINGS_MODULE'] = 'gaodcore_project.settings'
+django.setup()
 sys.setrecursionlimit(1500)
 
 

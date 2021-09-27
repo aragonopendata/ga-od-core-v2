@@ -1,5 +1,5 @@
 =================
-Manual de Usuario
+Man de Usuario
 =================
 
 En este apartado se explicará como utilizar la herramienta para un usuario externo a la organización.
