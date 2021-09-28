@@ -105,7 +105,7 @@ class ZaragozaTransportMixin(APIViewMixin):
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
 class LineView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of available bus lines, for the current date."""
-    @staticmethod
+
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(self, _: Request, **_kwargs):
         """Returns the list of available bus lines, for the current date."""
@@ -115,7 +115,6 @@ class LineView(APIViewMixin):  # pylint: disable=too-few-public-methods
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
 class LineStopsView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the list of available stop lines, for the current date."""
-    @staticmethod
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
@@ -125,7 +124,6 @@ class LineStopsView(APIViewMixin):  # pylint: disable=too-few-public-methods
 @method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
 class RoutesView(APIViewMixin):  # pylint: disable=too-few-public-methods
     """Returns the routes that a line performs, for the current date."""
-    @staticmethod
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
@@ -280,8 +278,8 @@ class ExpOriDesView(ZaragozaTransportMixin):  # pylint: disable=too-few-public-m
 
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(self, _: Request, **_kwargs):
-        """It shows all the shipments that go between an origin and a destination, the order of introduction of the origin
-    and the destination determines the direction, for the current date."""
+        """It shows all the shipments that go between an origin and a destination, the order of introduction of the
+        origin and the destination determines the direction, for the current date."""
         configs = [
             DownloadProcessorConfig(url=CONFIG.projects.transport.zaragoza.get_url(
                 self._ENDPOINT,

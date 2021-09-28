@@ -291,3 +291,8 @@ def accept_error(request):
     params=['text/html', 'application/json', 'text/csv', 'application/xml', 'application/yaml', 'application/xlsx'])
 def accept_download(request):
     return request.param
+
+
+@pytest.fixture(params=["/GA_OD_Core/download", "/GA_OD_Core/preview"])
+def download_endpoint(request):
+    return request.param
