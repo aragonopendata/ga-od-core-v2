@@ -8,14 +8,15 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
-
 from connectors import get_resource_data, get_resource_columns, NoObjectError, DriverConnectionError, \
-    NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError, MimeTypeError
+    NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError, MimeTypeError, \
+    validator_max_excel_allowed, TooManyRowsErrorExcel    
 from gaodcore.negotations import LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list
 from views import APIViewMixin
 
+_RESOURCE_MAX_ROWS_EXCEL = 1048576
 
 def _get_data_public_error(func: Callable, *args, **kwargs) -> List[Dict[str, Any]]:
     try:
@@ -119,6 +120,19 @@ class DownloadView(APIViewMixin):
 
         resource_config = _get_resource(resource_id=resource_id)
 
+        if request.accepted_renderer.format == "xlsx":
+            if not validator_max_excel_allowed(uri=resource_config.connector_config.uri,
+                                       object_location=resource_config.object_location,
+                                       object_location_schema=resource_config.object_location_schema,
+                                       filters=filters,
+                                       limit=limit,
+                                       offset=offset,
+                                       fields=fields,
+                                       sort=sort) :
+                raise ValidationError("An xlsx cannot be generated with so many lines, please request it in another format", 407) from TooManyRowsErrorExcel
+           #    raise ValidationError({'error' : 'An xlsx cannot be generated with so many lines, please request it in another format'})    
+           
+        
         data = _get_data_public_error(get_resource_data,
                                       uri=resource_config.connector_config.uri,
                                       object_location=resource_config.object_location,
@@ -135,6 +149,7 @@ class DownloadView(APIViewMixin):
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
             disposition = f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
             response["content-disposition"] = disposition
+            
 
         return response
 
