@@ -156,10 +156,6 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
         logging.exception("Object not available.")
         raise NoObjectError("Object not available.") from err
 
-    #No se valida el número máximo de filas de entrada. 
-    # Se valida en la sálida del excel
-    #if num_rows > _RESOURCE_MAX_ROWS:
-    #    raise TooManyRowsError()
     session.close()
     engine.dispose()
 
