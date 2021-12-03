@@ -23,7 +23,7 @@ from sqlalchemy.orm import sessionmaker
 
 _DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql', 'oracle', 'sqlite'}
 _HTTP_SCHEMAS = {'http', 'https'}
-_RESOURCE_MAX_ROWS = 1048576
+_RESOURCE_MAX_ROWS = 999999
 _TEMPORAL_TABLE_NAME = 'temporal_table'
 _SQLALCHEMY_MAP_TYPE = {bool: Boolean, str: Text, int: Integer, float: REAL, date: Date, datetime: DateTime, time: Time}
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
@@ -178,8 +178,14 @@ def get_resource_data(*,
     column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
     session = session_maker()
+    print (limit)
+    
+    """Limit rows.""" 
+    if limit == None: limit = _RESOURCE_MAX_ROWS
+    
     data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
         *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+    
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
     
