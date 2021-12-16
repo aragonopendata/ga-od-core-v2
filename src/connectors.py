@@ -26,7 +26,7 @@ _HTTP_SCHEMAS = {'http', 'https'}
 _RESOURCE_MAX_ROWS = 1048576
 _TEMPORAL_TABLE_NAME = 'temporal_table'
 _SQLALCHEMY_MAP_TYPE = {bool: Boolean, str: Text, int: Integer, float: REAL, date: Date, datetime: DateTime, time: Time}
-
+_RESOURCE_MAX_ROWS_EXCEL = 1048576
 
 class MimeType(Enum):
     """Enum with some mimetype and his different values."""
@@ -49,6 +49,8 @@ class DriverConnectionError(Exception):
 class NoObjectError(Exception):
     """Object is not available. Connection was successfully done but object is not available."""
 
+class TooManyRowsErrorExcel(Exception):
+    """Object Excel have too many rows to process. Excel not allow more rows."""
 
 class TooManyRowsError(Exception):
     """Object have too many rows to process. Excel not allow more rows."""
@@ -105,7 +107,7 @@ def get_resource_columns(uri: str, object_location: Optional[str],
 
 def validate_resource(*, uri: str, object_location: Optional[str],
                       object_location_schema: Optional[str]) -> Iterable[Dict[str, Any]]:
-    """Validate if resource is available and have less rows than allowed. Return data of resource, a iterable of
+    """Validate if resource is available . Return data of resource, a iterable of
     dictionaries."""
     _validate_max_rows_allowed(uri, object_location, object_location_schema=object_location_schema)
     return get_resource_data(uri=uri,
@@ -115,9 +117,33 @@ def validate_resource(*, uri: str, object_location: Optional[str],
                              fields=[],
                              sort=[])
 
+def validator_max_excel_allowed(uri: str,
+                      object_location: Optional[str],
+                      object_location_schema: Optional[str],
+                      filters: Dict[str, str],
+                      fields: List[str],
+                      sort: List[OrderBy],
+                      limit: Optional[int] = None,
+                      offset: int = 0):
+    """Validate if resource  have less rows than allowed."""
+    engine = _get_engine(uri)
+    session_maker = sessionmaker(bind=engine)
+
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+
+    column_dict = {column.name: column for column in model.columns}
+    columns = _get_columns(column_dict, fields)
+    session = session_maker()
+    data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
+        *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+    session.close()
+    engine.dispose()
+    
+    return len(data) <= _RESOURCE_MAX_ROWS_EXCEL
+
 
 def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_location_schema: Optional[str]):
-    """Validate if resource have less rows than allowed."""
+    """Validate if resource is aviable."""
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
@@ -130,8 +156,6 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
         logging.exception("Object not available.")
         raise NoObjectError("Object not available.") from err
 
-    if num_rows > _RESOURCE_MAX_ROWS:
-        raise TooManyRowsError()
     session.close()
     engine.dispose()
 
@@ -154,11 +178,13 @@ def get_resource_data(*,
     column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
     session = session_maker()
+    
     data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
         *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+    
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
-
+    
     session.close()
     engine.dispose()
 
