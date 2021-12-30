@@ -203,9 +203,11 @@ class DownloadView(APIViewMixin):
         page = self._get_int_field(request, '_page')
         page_size = self._get_int_field(request, '_pageSize')
         
-        
-        if page > 0 and page_size:
-            offset = (page -1) * page_size
+        try:
+            if page > 0 and page_size:
+                offset = (page -1) * page_size
+        except TypeError:
+            offset = 0
         
         return offset
 
