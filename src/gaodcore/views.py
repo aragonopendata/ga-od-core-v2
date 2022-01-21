@@ -201,11 +201,14 @@ class DownloadView(APIViewMixin):
 
         offset = self._get_int_field(request, 'offset')
         page = self._get_int_field(request, '_page')
-        page_size = self._get_int_field(request, '_page_size')
-
-        if page and page_size:
-            offset = page * page_size
-
+        page_size = self._get_int_field(request, '_pageSize')
+        
+        try:
+            if page > 0 and page_size:
+                offset = (page -1) * page_size
+        except TypeError:
+            offset = 0
+        
         return offset
 
     def _get_limit(self, request: Request) -> Optional[int]:
@@ -215,8 +218,8 @@ class DownloadView(APIViewMixin):
         @return: SQL limit value.
         """
         limit = request.query_params.get('limit') or None
-        page_size = self._get_int_field(request, '_page_size')
-
+        page_size = self._get_int_field(request, '_pageSize')
+      
         if limit:
             try:
                 limit = int(limit)
@@ -226,12 +229,17 @@ class DownloadView(APIViewMixin):
             if request.get_full_path().startswith('/preview'):
                 if limit > self._PREVIEW_LIMIT:
                     limit = self._PREVIEW_LIMIT
-
-        elif request.get_full_path().startswith('/preview'):
-            limit = self._PREVIEW_LIMIT
         elif page_size:
-            limit = page_size
-
+            try:
+                limit = int(page_size) 
+            except ValueError as err:
+                raise ValidationError("Value of _pageSize is not a number.", 400) from err
+            
+            if request.get_full_path().startswith('/preview'):
+                 if page_size > self._PREVIEW_LIMIT:
+                    limit = self._PREVIEW_LIMIT
+        
+           
         return limit
 
     @staticmethod
