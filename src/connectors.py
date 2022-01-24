@@ -20,6 +20,17 @@ import sqlalchemy.exc
 from sqlalchemy import create_engine, Table, MetaData, Column, Boolean, Text, Integer, DateTime, Time, REAL
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.types import TypeDecorator, Numeric, Float
+from sqlalchemy.dialects import postgresql
+
+import datetime
+import decimal
+import json
+import uuid
+import re
+
+
+from django.utils.functional import Promise
 
 _DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql', 'oracle', 'sqlite'}
 _HTTP_SCHEMAS = {'http', 'https'}
