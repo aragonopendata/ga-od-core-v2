@@ -126,6 +126,8 @@ def validator_max_excel_allowed(uri: str,
                       limit: Optional[int] = None,
                       offset: int = 0):
     """Validate if resource  have less rows than allowed."""
+   
+
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
@@ -170,6 +172,9 @@ def get_resource_data(*,
                       limit: Optional[int] = None,
                       offset: int = 0) -> Iterable[Dict[str, Any]]:
     """Return a iterable of dictionaries with data of resource."""
+    
+    re_decimal = "\.0\s*$"  # allow e.g. '1.0' as an int, but not '1.2
+    
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
@@ -182,6 +187,31 @@ def get_resource_data(*,
     data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
         *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
     
+    """" When no typing objects are present, as when executing plain SQL strings, adefault "outputtypehandler" is present which will generally return numeric
+    values which specify precision and scale as Python ``Decimal`` objects default "outputtypehandler" is present which will generally return numeric
+    values which specify precision and scale as Python ``Decimal`` objects.  To disable this coercion to decimal for performance reasons, pass the flag
+    ``coerce_to_decimal=False`` to :func:`_sa.create_engine`:: engine = create_engine("oracle+cx_oracle://dsn", coerce_to_decimal=False)
+    The ``coerce_to_decimal`` flag only impacts the results of plain string SQL statements that are not otherwise associated with a :class:`.Numeric`
+    SQLAlchemy type (or a subclass of such).
+    .. versionchanged:: 1.2  The numeric handling system for cx_Oracle has been reworked to take advantage of newer cx_Oracle features as well 
+    as better integration of outputtypehandlers. """
+    
+    dataTemp = []
+    dataTempTuplas= []
+  
+    for item in data:
+        for column in item:
+            if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)) and  re.search(re_decimal, str(column)) != None:
+                    dataTempTuplas.append(int(column))
+            elif isinstance(column, float) and re.search(re_decimal, str(column)) != None:
+                    dataTempTuplas.append(int(column))
+            else: 
+                    dataTempTuplas.append(column)
+                    
+        dataTemp.append(tuple(dataTempTuplas))
+        dataTempTuplas.clear()
+    data =dataTemp
+
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
     
