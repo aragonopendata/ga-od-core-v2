@@ -31,4 +31,4 @@ RUN pip install -r requirements.txt
 
 COPY ./src .
 
-CMD bash -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && python manage.py createcachetable && gunicorn gaodcore_project.wsgi --bind :8000 --workers 9 --timeout 1800"
+CMD bash -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && python manage.py createcachetable && gunicorn gaodcore_project.wsgi --bind :8000 --workers 9 --timeout 3000"
