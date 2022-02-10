@@ -1,4 +1,4 @@
-FROM python:3.9
+FROM python:3.9-buster
 
 ARG GAODCORE_DIR="/opt/gaodcore"
 ARG ORACLE_DIR="/opt/oracle"
@@ -27,11 +27,12 @@ RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
 RUN curl https://packages.microsoft.com/config/debian/10/prod.list > /etc/apt/sources.list.d/mssql-release.list
 
 # install FreeTDS and dependencies
-RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
-RUN apt-get update
-RUN apt-get install -y unixodbc unixodbc-dev freetds-dev freetds-bin  freetds-dev tdsodbc
-RUN ACCEPT_EULA=Y apt-get -y install msodbcsql17
+RUN apt-get update -y
 RUN ACCEPT_EULA=Y apt-get install -y mssql-tools
+RUN ACCEPT_EULA=Y apt-get -y install msodbcsql17
+RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
+RUN ACCEPT_EULA=Y apt-get install -y unixodbc-dev
+RUN apt-get install -y unixodbc unixodbc-dev freetds-dev freetds-bin  freetds-dev tdsodbc
 RUN apt-get install -y libgssapi-krb5-2
 RUN apt install -y wget
 
