@@ -18,3 +18,5 @@ SQLAlchemy~=1.4
 sqlathanor~=0.7
 requests~=2.25.1
 whitenoise~=5.2.0
+pymssql~=2.2.4
+pyodbc~=4.0.32
