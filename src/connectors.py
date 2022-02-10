@@ -32,7 +32,7 @@ import re
 
 from django.utils.functional import Promise
 
-_DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql', 'oracle', 'sqlite'}
+_DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql+pyodbc', 'oracle', 'sqlite'}
 _HTTP_SCHEMAS = {'http', 'https'}
 _RESOURCE_MAX_ROWS = 1048576
 _TEMPORAL_TABLE_NAME = 'temporal_table'
