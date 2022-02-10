@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 from rest_framework.exceptions import ValidationError
 
 from connectors import validate_resource, NoObjectError, DriverConnectionError, TooManyRowsError, validate_uri, \
-    NotImplementedSchemaError, MimeTypeError
+    NotImplementedSchemaError, MimeTypeError, validate_resource_mssql
 
 
 def uri_validator(uri):
@@ -40,7 +40,14 @@ def resource_validator(uri: str, object_location: str,
         ValidationError('Schema of the URI is not available.', 400)
 
     try:
-        return validate_resource(uri=uri,
+         if parsed.scheme in ['mssql+pyodbc']:
+                return validate_resource_mssql(uri=uri,
+                                 object_location=object_location,
+                                 object_location_schema=object_location_schema)
+            
+         else:
+            
+            return validate_resource(uri=uri,
                                  object_location=object_location,
                                  object_location_schema=object_location_schema)
     except NotImplementedSchemaError as err:

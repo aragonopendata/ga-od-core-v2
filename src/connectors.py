@@ -128,6 +128,35 @@ def validate_resource(*, uri: str, object_location: Optional[str],
                              fields=[],
                              sort=[])
 
+def validate_resource_mssql(*, uri: str, object_location: Optional[str],
+                      object_location_schema: Optional[str]) -> Iterable[Dict[str, Any]]:
+
+     """Validate if resource is available . Return data of resource, a iterable of
+    dictionaries."""
+     """sqlalchemy.exc.CompileError: MSSQL requires an order_by when using an OFFSET or a non-simple LIMIT clause """
+     
+     
+     fields=[]
+     sort=[]
+     
+     engine = _get_engine(uri)
+     session_maker = sessionmaker(bind=engine)
+
+     model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+
+     column_dict = {column.name: column for column in model.columns}
+     columns = _get_columns(column_dict, fields)
+     session = session_maker()
+    
+     data = session.query(model).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
+        *[model.c[col.name].label(col.name) for col in model.columns]).all()
+    
+     session.close()
+     engine.dispose()
+
+     return (dict(zip([column.name for column in columns], row)) for row in data)
+
+
 def validator_max_excel_allowed(uri: str,
                       object_location: Optional[str],
                       object_location_schema: Optional[str],
