@@ -22,6 +22,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.types import TypeDecorator, Numeric, Float
 from sqlalchemy.dialects import postgresql
+from urllib.parse import urlparse
 
 import datetime
 import decimal
@@ -133,7 +134,7 @@ def validate_resource_mssql(*, uri: str, object_location: Optional[str],
 
      """Validate if resource is available . Return data of resource, a iterable of
     dictionaries."""
-     """sqlalchemy.exc.CompileError: MSSQL requires an order_by when using an OFFSET or a non-simple LIMIT clause """
+    
      
      
      fields=[]
@@ -176,6 +177,8 @@ def validator_max_excel_allowed(uri: str,
     column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
     session = session_maker()
+
+   
     data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
         *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
     session.close()
@@ -224,9 +227,19 @@ def get_resource_data(*,
     columns = _get_columns(column_dict, fields)
     session = session_maker()
     
-    data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
-        *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+    """sqlalchemy.exc.CompileError: MSSQL requires an order_by when using an OFFSET or a non-simple LIMIT clause """
+    """(pyodbc.ProgrammingError) ('42000', '[42000] [FreeTDS][SQL Server]The text, ntext, and image data types cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')""""
+    """ mssql no order no limit no offset"""
     
+    parsed = urlparse(uri)
+
+    if parsed.scheme in ['mssql+pyodbc']:  
+        data = session.query(model).filter_by(**filters).with_entities(
+              *[model.c[col.name].label(col.name) for col in model.columns]).all()
+    else:
+         data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
+              *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+
     """" When no typing objects are present, as when executing plain SQL strings, adefault "outputtypehandler" is present which will generally return numeric
     values which specify precision and scale as Python ``Decimal`` objects default "outputtypehandler" is present which will generally return numeric
     values which specify precision and scale as Python ``Decimal`` objects.  To disable this coercion to decimal for performance reasons, pass the flag

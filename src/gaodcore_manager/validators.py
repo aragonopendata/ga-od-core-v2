@@ -40,14 +40,7 @@ def resource_validator(uri: str, object_location: str,
         ValidationError('Schema of the URI is not available.', 400)
 
     try:
-         if parsed.scheme in ['mssql+pyodbc']:
-                return validate_resource_mssql(uri=uri,
-                                 object_location=object_location,
-                                 object_location_schema=object_location_schema)
-            
-         else:
-            
-            return validate_resource(uri=uri,
+         return validate_resource(uri=uri,
                                  object_location=object_location,
                                  object_location_schema=object_location_schema)
     except NotImplementedSchemaError as err:
