@@ -37,7 +37,9 @@ RUN apt-get install -y libgssapi-krb5-2
 RUN apt install -y wget
 
 
-RUN echo "[FreeTDS]\n\ Description = FreeTDS unixODBC Driver\n\ Driver = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so" >> /etc/odbcinst.ini
+RUN echo "[FreeTDS]\n\ 
+Description = FreeTDS unixODBC Driver\n\
+Driver = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so" >> /etc/odbcinst.ini
 RUN apt clean -y
 RUN cp /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so /usr/local/lib/
 
