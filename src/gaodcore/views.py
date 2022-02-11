@@ -133,7 +133,7 @@ class DownloadView(APIViewMixin):
                 raise ValidationError("An xlsx cannot be generated with so many lines, please request it in another format", 407) from TooManyRowsErrorExcel
            #    raise ValidationError({'error' : 'An xlsx cannot be generated with so many lines, please request it in another format'})    
            
-        raise ValidationError("antes del data", 407) from TooManyRowsErrorExcel
+        
         data = _get_data_public_error(get_resource_data,
                                       uri=resource_config.connector_config.uri,
                                       object_location=resource_config.object_location,
@@ -144,15 +144,15 @@ class DownloadView(APIViewMixin):
                                       fields=fields,
                                       sort=sort)
 
-        raise ValidationError("desoues del data", 407) from TooManyRowsErrorExcel
+        
         response = Response(get_return_list(data))
-        raise ValidationError("desoues del response", 407) from TooManyRowsErrorExcel
+        
         if self.is_download_endpoint(request) or request.accepted_renderer.format == "xlsx":
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
             disposition = f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
             response["content-disposition"] = disposition
             
-
+        raise ValidationError("An xlsx cannot be generated with so many lines, please request it in another format11", 407) from TooManyRowsErrorExcel
         return response
 
     def get_filename(self, request: Request, resource_config: ResourceConfig):
