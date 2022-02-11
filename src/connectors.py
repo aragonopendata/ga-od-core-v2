@@ -232,7 +232,8 @@ def get_resource_data(*,
     """ mssql no order no limit no offset"""
     
     parsed = urlparse(uri)
-
+    
+    print("antes del data")
     if parsed.scheme in ['mssql+pyodbc']:  
         data = session.query(model).filter_by(**filters).with_entities(
               *[model.c[col.name].label(col.name) for col in model.columns]).all()
@@ -248,7 +249,7 @@ def get_resource_data(*,
     SQLAlchemy type (or a subclass of such).
     .. versionchanged:: 1.2  The numeric handling system for cx_Oracle has been reworked to take advantage of newer cx_Oracle features as well 
     as better integration of outputtypehandlers. """
-    
+    print("despues del data")
     dataTemp = []
     dataTempTuplas= []
   
