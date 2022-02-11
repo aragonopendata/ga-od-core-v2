@@ -20,6 +20,7 @@ _RESOURCE_MAX_ROWS_EXCEL = 1048576
 
 def _get_data_public_error(func: Callable, *args, **kwargs) -> List[Dict[str, Any]]:
     try:
+        print("antes del public error")
         return func(*args, **kwargs)
     except (FieldNoExistsError, SortFieldNoExistsError) as err:
         raise ValidationError(err, 400) from err
@@ -117,7 +118,7 @@ class DownloadView(APIViewMixin):
         fields = request.query_params.getlist('fields') or request.query_params.getlist('columns', [])
         filters = self._get_filters(request)
         sort = self._get_sort(request)
-
+        print("antes de obtener recurso")
         resource_config = _get_resource(resource_id=resource_id)
 
         if request.accepted_renderer.format == "xlsx":
@@ -142,9 +143,9 @@ class DownloadView(APIViewMixin):
                                       offset=offset,
                                       fields=fields,
                                       sort=sort)
-
+        print("antes del response")
         response = Response(get_return_list(data))
-
+        print("despues del response")
         if self.is_download_endpoint(request) or request.accepted_renderer.format == "xlsx":
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
             disposition = f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
