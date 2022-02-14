@@ -169,22 +169,7 @@ def validator_max_excel_allowed(uri: str,
                       offset: int = 0):
     """Validate if resource  have less rows than allowed."""
    
-
-    engine = _get_engine(uri)
-    session_maker = sessionmaker(bind=engine)
-
-    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
-
-    column_dict = {column.name: column for column in model.columns}
-    columns = _get_columns(column_dict, fields)
-    session = session_maker()
-
-   
-    data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
-        *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
-    session.close()
-    engine.dispose()
-    
+    data = get_session_data(uri, object_location, object_location_schema, filters, fields, sort, limit, offset)
     return len(data) <= _RESOURCE_MAX_ROWS_EXCEL
 
 
@@ -205,8 +190,47 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
     session.close()
     engine.dispose()
 
+#Add feature to sanitize text include control characters
 def sanitize_control_charcters(text):
-    return re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F]', " ", text)
+    
+    if re.search(r'[\x00-\x08\x0B-\x0C\x0E-\x1F]', str(text)):
+        return re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F]', " ", text)
+
+def get_session_data( uri: str,
+                      object_location: Optional[str],
+                      object_location_schema: Optional[str],
+                      filters: Dict[str, str],
+                      fields: List[str],
+                      sort: List[OrderBy],
+                      limit: Optional[int] = None,
+                      offset: int = 0):
+   
+    """sqlalchemy.exc.CompileError: MSSQL requires an order_by when using an OFFSET or a non-simple LIMIT clause """
+    """(pyodbc.ProgrammingError) ('42000', '[42000] [FreeTDS][SQL Server]The text, ntext, and image data types cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')"""
+    """ mssql no order no limit no offset"""
+   
+    engine = _get_engine(uri)
+    session_maker = sessionmaker(bind=engine)
+
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+
+    column_dict = {column.name: column for column in model.columns}
+    columns = _get_columns(column_dict, fields)
+    session = session_maker()
+    
+    parsed = urlparse(uri)
+    
+    if parsed.scheme in ['mssql+pyodbc']:  
+        data = session.query(model).filter_by(**filters).with_entities(
+              *[model.c[col.name].label(col.name) for col in model.columns]).all()
+    else:
+         data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
+              *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+    
+    session.close()
+    engine.dispose()
+    
+    return(data)
 
 
 def get_resource_data(*,
@@ -221,32 +245,8 @@ def get_resource_data(*,
     """Return a iterable of dictionaries with data of resource."""
     
     re_decimal = "\.0\s*$"  # allow e.g. '1.0' as an int, but not '1.2
+    data = get_session_data(uri, object_location, object_location_schema, filters, fields, sort, limit, offset)
     
-    engine = _get_engine(uri)
-    session_maker = sessionmaker(bind=engine)
-
-    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
-
-    column_dict = {column.name: column for column in model.columns}
-    columns = _get_columns(column_dict, fields)
-    session = session_maker()
-    
-    """sqlalchemy.exc.CompileError: MSSQL requires an order_by when using an OFFSET or a non-simple LIMIT clause """
-    """(pyodbc.ProgrammingError) ('42000', '[42000] [FreeTDS][SQL Server]The text, ntext, and image data types cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')"""
-    """ mssql no order no limit no offset"""
-    
-    parsed = urlparse(uri)
-    
-    
-    
-
-    if parsed.scheme in ['mssql+pyodbc']:  
-        data = session.query(model).filter_by(**filters).with_entities(
-              *[model.c[col.name].label(col.name) for col in model.columns]).all()
-    else:
-         data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
-              *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
-
     """" When no typing objects are present, as when executing plain SQL strings, adefault "outputtypehandler" is present which will generally return numeric
     values which specify precision and scale as Python ``Decimal`` objects default "outputtypehandler" is present which will generally return numeric
     values which specify precision and scale as Python ``Decimal`` objects.  To disable this coercion to decimal for performance reasons, pass the flag
@@ -256,7 +256,6 @@ def get_resource_data(*,
     .. versionchanged:: 1.2  The numeric handling system for cx_Oracle has been reworked to take advantage of newer cx_Oracle features as well 
     as better integration of outputtypehandlers. """
 
- 
 
     dataTemp = []
     dataTempTuplas= []
@@ -277,6 +276,13 @@ def get_resource_data(*,
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
     
+    engine = _get_engine(uri)
+    session_maker = sessionmaker(bind=engine)
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+
+    column_dict = {column.name: column for column in model.columns}
+    columns = _get_columns(column_dict, fields)
+    session = session_maker()
     session.close()
     engine.dispose()
 
