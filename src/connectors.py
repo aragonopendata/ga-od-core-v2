@@ -14,6 +14,7 @@ from sqlite3 import Date
 from typing import Optional, Dict, List, Any, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
+from rest_framework.exceptions import ValidationError
 
 import cchardet
 import sqlalchemy.exc
@@ -204,6 +205,9 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
     session.close()
     engine.dispose()
 
+def sanitize_control_charcters(text):
+    return re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F]', " ", text)
+
 
 def get_resource_data(*,
                       uri: str,
@@ -233,7 +237,9 @@ def get_resource_data(*,
     
     parsed = urlparse(uri)
     
-    print("antes del data")
+    
+    
+
     if parsed.scheme in ['mssql+pyodbc']:  
         data = session.query(model).filter_by(**filters).with_entities(
               *[model.c[col.name].label(col.name) for col in model.columns]).all()
@@ -249,7 +255,9 @@ def get_resource_data(*,
     SQLAlchemy type (or a subclass of such).
     .. versionchanged:: 1.2  The numeric handling system for cx_Oracle has been reworked to take advantage of newer cx_Oracle features as well 
     as better integration of outputtypehandlers. """
-    print("despues del data")
+
+ 
+
     dataTemp = []
     dataTempTuplas= []
   
@@ -260,7 +268,7 @@ def get_resource_data(*,
             elif isinstance(column, float) and re.search(re_decimal, str(column)) != None:
                     dataTempTuplas.append(int(column))
             else: 
-                    dataTempTuplas.append(column)
+                    dataTempTuplas.append(sanitize_control_charcters(column))
                     
         dataTemp.append(tuple(dataTempTuplas))
         dataTempTuplas.clear()
