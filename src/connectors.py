@@ -195,6 +195,9 @@ def sanitize_control_charcters(text):
     
     if re.search(r'[\x00-\x08\x0B-\x0C\x0E-\x1F]', str(text)):
         return re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F]', " ", text)
+    else:
+        return(text)
+
 
 def get_session_data( uri: str,
                       object_location: Optional[str],
