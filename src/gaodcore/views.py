@@ -152,7 +152,7 @@ class DownloadView(APIViewMixin):
             disposition = f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
             response["content-disposition"] = disposition
             
-        raise ValidationError("An xlsx cannot be generated with so many lines, please request it in another format11", 407) from TooManyRowsErrorExcel
+        
         return response
 
     def get_filename(self, request: Request, resource_config: ResourceConfig):
