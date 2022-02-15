@@ -62,7 +62,7 @@ class DownloadView(APIViewMixin):
                                                description='Matching conditions to select, e.g '
                                                '{“key1”: “a”, “key2”: “b”}.',
                                                type=openapi.TYPE_OBJECT),
-                             openapi.Parameter('offset',
+                            openapi.Parameter('offset',
                                                openapi.IN_QUERY,
                                                description="Offset this number of rows.",
                                                type=openapi.TYPE_INTEGER),
@@ -251,15 +251,15 @@ class DownloadView(APIViewMixin):
         """
         try:
             filters = json.loads(request.query_params.get('filters', '{}'))
+            print(filters)
         except JSONDecodeError as err:
             raise ValidationError('Invalid JSON.', 400) from err
 
         if not isinstance(filters, dict):
             raise ValidationError('Invalid format: eg. {“key1”: “a”, “key2”: “b”}', 400)
 
-        for _, value in filters.items():
-            if type(value) not in (str, int, float, bool, None) and value is not None:
-                raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Null or None', 400)
+        
+   
         return filters
 
     @staticmethod
