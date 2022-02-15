@@ -3,6 +3,7 @@
 import csv
 import json
 import logging
+from operator import contains
 import urllib.request
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -165,6 +166,7 @@ def get_resource_data(*,
                       object_location: Optional[str],
                       object_location_schema: Optional[str],
                       filters: Dict[str, str],
+                      
                       fields: List[str],
                       sort: List[OrderBy],
                       limit: Optional[int] = None,
@@ -177,10 +179,20 @@ def get_resource_data(*,
 
     column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
+    
     session = session_maker()
     
-    data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
-        *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+    filters_args= _get_filter_by_args(filters, model)
+   
+    data = session.query(model).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
+    *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+
+
+        # data = session.query(model).filter_by(**filters).filter(model.columns.nombre.like("%2%")).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
+    #  *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+
+
+
     
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
@@ -202,6 +214,29 @@ def _get_columns(columns_dict: Dict[str, Column], column_names: List[str]) -> It
         return columns_dict.values()
 
 
+def _get_filter_by_args(dict_args: dict, model_class: Table):
+      
+    filters = []
+    for key, value in dict_args.items():  # type: str, any
+        if key.endswith('_like'):
+            key = key[:-5]
+            filters.append(getattr(model_class, key) > value)
+        elif key.endswith('___max'):
+            key = key[:-6]
+            filters.append(getattr(model_class, key) < value)
+        elif key.endswith('__min'):
+            key = key[:-5]
+            filters.append(getattr(model_class, key) >= value)
+        elif key.endswith('__max'):
+            key = key[:-5]
+            filters.append(getattr(model_class, key) <= value)
+        else:
+            filters.append(getattr(model_class, key) == value)
+        print (filters)
+    return filters
+
+
+
 def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
     """Create a list of SQLAlchemy column instances that represent query sorting."""
     sort_methods = []
@@ -214,7 +249,7 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
             sort_methods.append(column)
         else:
             sort_methods.append(column.desc())
-
+    print (sort_methods)
     return sort_methods
 
 
