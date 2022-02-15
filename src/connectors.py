@@ -189,7 +189,7 @@ def get_resource_data(*,
     *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
 
 
-        # data = session.query(model).filter_by(**filters).filter(model.columns.nombre.like("%2%")).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
+    # data = session.query(model).filter_by(**filters).filter(model.columns.nombre.like("%2%")).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
     #  *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
 
 
@@ -221,21 +221,21 @@ def _get_filter_by_args(dict_args: dict, model_class: Table):
     for key, value in dict_args.items():  # type: str, any
         if key.endswith(' like'):
             key = key[:-5]
-            filters.append(str(model_class) +"." + str(key) +" Like '*" + str(value) +"*'" )
+            filters.append(str(model_class) +"." + str(key) +"like '*" + str(value) +"*'" )
         elif key.endswith('___max'):
             key = key[:-6]
-            item = str(model_class) +"."+ str(key) +" >> " + str(value)
+            item = str(model_class) +"."+ str(key) +">" + str(value)
             filters.append(item)
             
         elif key.endswith('__min'):
             key = key[:-5]
-            filters.append(str(model_class) +"." + str(key) +" << " + str(value)  )
+            filters.append(str(model_class) +"." + str(key) +"<" + str(value)  )
         elif key.endswith('__max'):
             key = key[:-5]
             filters.append(getattr(model_class, key) <= value)
         else:
-            filters.append(str(model_class) +"." + str(key) +" == " + str(value)  )
-        
+            filters.append(str(model_class) +"." + str(key) +"==" + str(value)  )
+    raise(filters, 400)    
     return filters
 
 
