@@ -184,7 +184,7 @@ def get_resource_data(*,
     
     session = session_maker()
     
-    filters_args= _get_filter_by_args(filters, model)
+    filters_args= _get_filter_by_args(filters, object_location)
 
 
     data = session.query(model).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
