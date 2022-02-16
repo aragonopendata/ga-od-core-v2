@@ -2,6 +2,8 @@
 
 import csv
 import json
+
+from rest_framework.exceptions import ValidationError
 import logging
 from operator import contains
 import urllib.request
@@ -183,8 +185,8 @@ def get_resource_data(*,
     session = session_maker()
     
     filters_args= _get_filter_by_args(filters, model)
-    print(*filters_args)
-   
+
+
     data = session.query(model).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
     *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
 
@@ -219,9 +221,11 @@ def _get_filter_by_args(dict_args: dict, model_class: Table):
       
     filters = []
     for key, value in dict_args.items():  # type: str, any
-        if key.endswith(' like'):
+      
+        if key.endswith('_like'):
+            
             key = key[:-5]
-            filters.append(str(model_class) +"." + str(key) +"like '*" + str(value) +"*'" )
+            filters.append(str(model_class) +"." + str(key) +".like '%" + str(value) +"%'" )
         elif key.endswith('___max'):
             key = key[:-6]
             item = str(model_class) +"."+ str(key) +">" + str(value)
@@ -230,12 +234,10 @@ def _get_filter_by_args(dict_args: dict, model_class: Table):
         elif key.endswith('__min'):
             key = key[:-5]
             filters.append(str(model_class) +"." + str(key) +"<" + str(value)  )
-        elif key.endswith('__max'):
-            key = key[:-5]
-            filters.append(getattr(model_class, key) <= value)
+       
         else:
             filters.append(str(model_class) +"." + str(key) +"==" + str(value)  )
-    raise(filters, 400)    
+           
     return filters
 
 
