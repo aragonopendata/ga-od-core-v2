@@ -43,15 +43,7 @@ def _get_resource(resource_id: int):
         raise ValidationError("Resource not exists or is not available", 400) from err
 
 
-
-
-class DownloadConfigView(XLSXFileMixin, viewsets.ModelViewSet):
-    serializer_class = DictSerializer
-    queryset =  DictSerializer.objects.all()
-    permission_classes = (IsAuthenticated, )
-
-
-class DownloadView(APIViewMixin):
+class DownloadView(XLSXFileMixin, APIViewMixin):
     """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón."""
     _PREVIEW_LIMIT = 1000
     _DOWNLOAD_ENDPOINT = ('/GA_OD_Core/download', '/GA_OD_Core/download')
