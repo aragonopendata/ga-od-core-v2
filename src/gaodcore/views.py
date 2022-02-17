@@ -1,4 +1,5 @@
 import json
+import io
 from json.decoder import JSONDecodeError
 from typing import Optional, Dict, Any, List, Callable
 
@@ -15,7 +16,6 @@ from gaodcore.negotations import LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list
 from views import APIViewMixin
-import xlsxwriter
 
 from serializers import  DictSerializer
 
@@ -154,10 +154,8 @@ class DownloadView(APIViewMixin):
                                       fields=fields,
                                       sort=sort)
 
-        if request.accepted_renderer.format == "xlsx":
-            response = Response(get_return_list(data), content_type ='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        else:
-            response = Response(get_return_list(data))
+     
+        response = Response(get_return_list(data))
 
         if self.is_download_endpoint(request) or request.accepted_renderer.format == "xlsx":
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
