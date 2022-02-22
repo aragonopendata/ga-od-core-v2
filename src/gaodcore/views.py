@@ -153,7 +153,7 @@ class DownloadView(APIViewMixin):
                
                 output = io.BytesIO()
                 workbook = xlsxwriter.Workbook(output)
-                worksheet = workbook.add_worksheet()
+                worksheet = workbook.add_worksheet('Report')
                 file_excel = get_return_list(data)
                 for row, item in enumerate(file_excel):
                     for col, (key, value) in enumerate(item.items()):
