@@ -1,4 +1,5 @@
 import json
+import io
 from json.decoder import JSONDecodeError
 from typing import Optional, Dict, Any, List, Callable
 
@@ -15,6 +16,11 @@ from gaodcore.negotations import LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list
 from views import APIViewMixin
+import xlsxwriter
+import io
+from django.http import HttpResponse 
+
+
 
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
 
@@ -143,17 +149,35 @@ class DownloadView(APIViewMixin):
                                       offset=offset,
                                       fields=fields,
                                       sort=sort)
+        #Get resource xlsx with order column names."""
+        #columns_order XlsxWriter can be used to write text, numbers, formulas and hyperlinks to multiple worksheets and it supports features such as formatting and many more, includin
+        if request.accepted_renderer.format == "xlsx":
+                output = io.BytesIO()
+                workbook = xlsxwriter.Workbook(output)
+                worksheet = workbook.add_worksheet('Report')
+                file_excel = get_return_list(data)
+                for row, item in enumerate(file_excel):
+                    for col, (key, value) in enumerate(item.items()):
+                         worksheet.write(row+1,col,value)
+                         if row==0:
+                              worksheet.write(row,col,key)
+                     
+                # Close the workbook before sending the data.
+                workbook.close()    
+                output.seek(0)
+                response = HttpResponse(output, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        else:
+                response = Response(get_return_list(data))
 
-        
-        response = Response(get_return_list(data))
-        
         if self.is_download_endpoint(request) or request.accepted_renderer.format == "xlsx":
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
             disposition = f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
             response["content-disposition"] = disposition
             
-        
+                
+
         return response
+    
 
     def get_filename(self, request: Request, resource_config: ResourceConfig):
         """Note: this is import due that replace XLSX Render method that forcer his own filename"""
