@@ -148,9 +148,9 @@ class DownloadView(APIViewMixin):
                                       offset=offset,
                                       fields=fields,
                                       sort=sort)
+        #Get resource xlsx with order column names."""
         #columns_order XlsxWriter can be used to write text, numbers, formulas and hyperlinks to multiple worksheets and it supports features such as formatting and many more, includin
         if request.accepted_renderer.format == "xlsx":
-               
                 output = io.BytesIO()
                 workbook = xlsxwriter.Workbook(output)
                 worksheet = workbook.add_worksheet('Report')
@@ -176,6 +176,7 @@ class DownloadView(APIViewMixin):
                 
 
         return response
+    
 
     def get_filename(self, request: Request, resource_config: ResourceConfig):
         """Note: this is import due that replace XLSX Render method that forcer his own filename"""
