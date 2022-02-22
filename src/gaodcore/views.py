@@ -16,8 +16,11 @@ from gaodcore.negotations import LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list
 from views import APIViewMixin
+import xlsxwriter
+import io
+from django.http import HttpResponse 
 
-from serializers import  DictSerializer
+
 
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
 
@@ -43,7 +46,7 @@ def _get_resource(resource_id: int):
         raise ValidationError("Resource not exists or is not available", 400) from err
 
 
-class DownloadView(XLSXFileMixin, APIViewMixin):
+class DownloadView(APIViewMixin):
     """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón."""
     _PREVIEW_LIMIT = 1000
     _DOWNLOAD_ENDPOINT = ('/GA_OD_Core/download', '/GA_OD_Core/download')
@@ -145,9 +148,25 @@ class DownloadView(XLSXFileMixin, APIViewMixin):
                                       offset=offset,
                                       fields=fields,
                                       sort=sort)
-
-     
-        response = Response(get_return_list(data))
+        #columns_order XlsxWriter can be used to write text, numbers, formulas and hyperlinks to multiple worksheets and it supports features such as formatting and many more, includin
+        if request.accepted_renderer.format == "xlsx":
+               
+                output = io.BytesIO()
+                workbook = xlsxwriter.Workbook(output)
+                worksheet = workbook.add_worksheet()
+                file_excel = get_return_list(data)
+                for row, item in enumerate(file_excel):
+                    for col, (key, value) in enumerate(item.items()):
+                         worksheet.write(row+1,col,value)
+                         if row==0:
+                              worksheet.write(row,col,key)
+                     
+                # Close the workbook before sending the data.
+                workbook.close()    
+                output.seek(0)
+                response = HttpResponse(output, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        else:
+                response = Response(get_return_list(data))
 
         if self.is_download_endpoint(request) or request.accepted_renderer.format == "xlsx":
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
