@@ -1,5 +1,6 @@
 import json
 import io
+import csv
 from json.decoder import JSONDecodeError
 from typing import Optional, Dict, Any, List, Callable
 
@@ -19,7 +20,7 @@ from views import APIViewMixin
 import xlsxwriter
 import io
 from django.http import HttpResponse 
-
+from rest_framework.utils.serializer_helpers import ReturnList
 
 
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
@@ -46,6 +47,51 @@ def _get_resource(resource_id: int):
     except ResourceConfig.DoesNotExist as err:
         raise ValidationError("Resource not exists or is not available", 400) from err
 
+def get_response_xlsx(data: ReturnList)-> HttpResponse:
+    """Get resource XLSX with order column names."""
+    """output XLSX (Comma Separated Values) dynamically using Django views"""
+    """columns_order XlsxWriter can be used to write text, numbers, formulas and hyperlinks to multiple"""
+    """worksheets and it supports features such as formatting and many more, includin """
+      
+        
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output)
+    worksheet = workbook.add_worksheet()
+        
+    #column header names, you can use your own headers here
+        
+    for row, item in enumerate(data):
+        for col, (key, value) in enumerate(item.items()):
+            worksheet.write(row+1,col,value)
+            if row==0:
+                worksheet.write(row,col,key)
+                     
+    # Close the workbook before sending the data.
+    workbook.close()    
+    output.seek(0)
+           
+    return(HttpResponse(output, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))
+    
+
+def get_response_csv(data:ReturnList)-> HttpResponse:
+        
+    """Get resource csv with order column names."""
+    """output CSV (Comma Separated Values) dynamically using Django views"""
+       
+    response = HttpResponse(content_type='text/csv')
+    writer = csv.writer(response)
+         
+    for row, item in enumerate(data):
+        csv_header = []
+        csv_data = []
+        for col, (key, value) in enumerate(item.items()):
+            if row==0:
+                csv_header.append(key)
+            csv_data.append(value)
+        if row==0:
+            writer.writerow(csv_header)  
+        writer.writerow(csv_data)  
+    return response
 
 class DownloadView(APIViewMixin):
     """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón."""
@@ -149,26 +195,14 @@ class DownloadView(APIViewMixin):
                                       offset=offset,
                                       fields=fields,
                                       sort=sort)
-        #Get resource xlsx with order column names."""
-        #columns_order XlsxWriter can be used to write text, numbers, formulas and hyperlinks to multiple worksheets and it supports features such as formatting and many more, includin
+        
         if request.accepted_renderer.format == "xlsx":
-                output = io.BytesIO()
-                workbook = xlsxwriter.Workbook(output)
-                worksheet = workbook.add_worksheet('Report')
-                file_excel = get_return_list(data)
-                for row, item in enumerate(file_excel):
-                    for col, (key, value) in enumerate(item.items()):
-                         worksheet.write(row+1,col,value)
-                         if row==0:
-                              worksheet.write(row,col,key)
-                     
-                # Close the workbook before sending the data.
-                workbook.close()    
-                output.seek(0)
-                response = HttpResponse(output, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        else:
-                response = Response(get_return_list(data))
-
+            response = get_response_xlsx(get_return_list(data))
+        elif  request.accepted_renderer.format == "csv":  
+            response = get_response_csv(get_return_list(data))
+        else: 
+            response = Response(get_return_list(data))
+        
         if self.is_download_endpoint(request) or request.accepted_renderer.format == "xlsx":
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
             disposition = f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
