@@ -339,7 +339,7 @@ class DownloadView(APIViewMixin):
         """
         try:
             like = json.loads(request.query_params.get('like', '{}'))
-      
+            print(like)
         except JSONDecodeError as err:
             raise ValidationError('Invalid JSON.', 400) from err
 
