@@ -339,13 +339,16 @@ class DownloadView(APIViewMixin):
         """
         try:
             like = json.loads(request.query_params.get('like', '{}'))
-            print(like)
+           
         except JSONDecodeError as err:
             raise ValidationError('Invalid JSON.', 400) from err
 
         if not isinstance(like, dict):
             raise ValidationError('Invalid format: eg. {“key1”: “a”, “key2”: “b”}', 400)
-    
+        for _, value in like.items():
+            if type(value) not in (str, int, float, bool, None) and value is not None:
+                raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Null or None', 400)
+        return like
     @staticmethod
     def _get_sort(request: Request) -> List[OrderBy]:
         """Get sort options from query string.
