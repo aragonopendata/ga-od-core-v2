@@ -15,12 +15,13 @@ from typing import Optional, Dict, List, Any, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from rest_framework.exceptions import ValidationError
-
+from pydoc import text
 import cchardet
 import sqlalchemy.exc
 from sqlalchemy import create_engine, Table, MetaData, Column, Boolean, Text, Integer, DateTime, Time, REAL
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import class_mapper
 from sqlalchemy.types import TypeDecorator, Numeric, Float
 from sqlalchemy.dialects import postgresql
 from urllib.parse import urlparse
@@ -30,6 +31,7 @@ import decimal
 import json
 import uuid
 import re
+from pydoc import text
 
 
 from django.utils.functional import Promise
