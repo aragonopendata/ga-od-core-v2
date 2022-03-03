@@ -128,6 +128,11 @@ class DownloadView(APIViewMixin):
                                                description="Fields to return. Default: all fields in original order.",
                                                type=openapi.TYPE_ARRAY,
                                                items=openapi.Items(type=openapi.TYPE_STRING)),
+                             openapi.Parameter('like',
+                                               openapi.IN_QUERY,
+                                               description='Matching conditions to select, e.g '
+                                               '{“key1”: “a”, “key2”: “b”}.',
+                                               type=openapi.TYPE_OBJECT),
                              openapi.Parameter('columns',
                                                openapi.IN_QUERY,
                                                description="Alias of fields.",
@@ -169,6 +174,7 @@ class DownloadView(APIViewMixin):
         limit = self._get_limit(request)
         fields = request.query_params.getlist('fields') or request.query_params.getlist('columns', [])
         filters = self._get_filters(request)
+        like = self._get_like(request)
         sort = self._get_sort(request)
         
         resource_config = _get_resource(resource_id=resource_id)
@@ -178,6 +184,7 @@ class DownloadView(APIViewMixin):
                                        object_location=resource_config.object_location,
                                        object_location_schema=resource_config.object_location_schema,
                                        filters=filters,
+                                       like=like,
                                        limit=limit,
                                        offset=offset,
                                        fields=fields,
@@ -191,6 +198,7 @@ class DownloadView(APIViewMixin):
                                       object_location=resource_config.object_location,
                                       object_location_schema=resource_config.object_location_schema,
                                       filters=filters,
+                                      like=like,
                                       limit=limit,
                                       offset=offset,
                                       fields=fields,
@@ -321,7 +329,23 @@ class DownloadView(APIViewMixin):
             if type(value) not in (str, int, float, bool, None) and value is not None:
                 raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Null or None', 400)
         return filters
+    
+    @staticmethod
+    def _get_like(request: Request) -> Dict[str, Any]:
+        """Get filters_like from query string.
 
+        @param request: Django response instance.
+        @return: filters_like. SQL where parameters. Format {"column": value, ...}.
+        """
+        try:
+            like = json.loads(request.query_params.get('like', '{}'))
+      
+        except JSONDecodeError as err:
+            raise ValidationError('Invalid JSON.', 400) from err
+
+        if not isinstance(like, dict):
+            raise ValidationError('Invalid format: eg. {“key1”: “a”, “key2”: “b”}', 400)
+    
     @staticmethod
     def _get_sort(request: Request) -> List[OrderBy]:
         """Get sort options from query string.
