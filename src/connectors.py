@@ -127,6 +127,7 @@ def validate_resource(*, uri: str, object_location: Optional[str],
                              object_location=object_location,
                              object_location_schema=object_location_schema,
                              filters={},
+                             like={},
                              fields=[],
                              sort=[])
 
@@ -163,13 +164,14 @@ def validator_max_excel_allowed(uri: str,
                       object_location: Optional[str],
                       object_location_schema: Optional[str],
                       filters: Dict[str, str],
+                      like: Dict[str,str],
                       fields: List[str],
                       sort: List[OrderBy],
                       limit: Optional[int] = None,
                       offset: int = 0):
     """Validate if resource  have less rows than allowed."""
    
-    data = get_session_data(uri, object_location, object_location_schema, filters, fields, sort, limit, offset)
+    data = get_session_data(uri, object_location, object_location_schema, filters, like, fields, sort, limit, offset)
     return len(data) <= _RESOURCE_MAX_ROWS_EXCEL
 
 
@@ -203,6 +205,7 @@ def get_session_data( uri: str,
                       object_location: Optional[str],
                       object_location_schema: Optional[str],
                       filters: Dict[str, str],
+                      like: Dict[str, str],
                       fields: List[str],
                       sort: List[OrderBy],
                       limit: Optional[int] = None,
@@ -219,15 +222,17 @@ def get_session_data( uri: str,
 
     column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
+    filters_args = _get_filter_by_args(like, model)
+    
     session = session_maker()
     
     parsed = urlparse(uri)
     
     if parsed.scheme in ['mssql+pyodbc']:  
-        data = session.query(model).filter_by(**filters).with_entities(
+        data = session.query(model).filter_by(**filters).filter(*filters_args).with_entities(
               *[model.c[col.name].label(col.name) for col in model.columns]).all()
     else:
-         data = session.query(model).filter_by(**filters).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
+         data = session.query(model).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
               *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
     
     session.close()
@@ -241,6 +246,7 @@ def get_resource_data(*,
                       object_location: Optional[str],
                       object_location_schema: Optional[str],
                       filters: Dict[str, str],
+                      like : Dict[str, str],
                       fields: List[str],
                       sort: List[OrderBy],
                       limit: Optional[int] = None,
@@ -248,7 +254,7 @@ def get_resource_data(*,
     """Return a iterable of dictionaries with data of resource."""
     
     re_decimal = "\.0\s*$"  # allow e.g. '1.0' as an int, but not '1.2
-    data = get_session_data(uri, object_location, object_location_schema, filters, fields, sort, limit, offset)
+    data = get_session_data(uri, object_location, object_location_schema, filters, like, fields, sort, limit, offset)
     
     """" When no typing objects are present, as when executing plain SQL strings, adefault "outputtypehandler" is present which will generally return numeric
     values which specify precision and scale as Python ``Decimal`` objects default "outputtypehandler" is present which will generally return numeric
@@ -317,6 +323,14 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
             sort_methods.append(column.desc())
 
     return sort_methods
+
+def _get_filter_by_args(dict_args: dict, model: Table):
+    """Create constructor of filter like"""  
+    try:
+        
+        return [model.columns[key].like("%"+value+"%") for key, value in dict_args.items()]
+    except KeyError as err:
+         raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
 
 
 def validate_uri(uri: str) -> None:
