@@ -129,7 +129,7 @@ def validate_resource(*, uri: str, object_location: Optional[str],
                              object_location=object_location,
                              object_location_schema=object_location_schema,
                              filters={},
-                             like={},
+                             like="",
                              fields=[],
                              sort=[])
 
@@ -166,7 +166,7 @@ def validator_max_excel_allowed(uri: str,
                       object_location: Optional[str],
                       object_location_schema: Optional[str],
                       filters: Dict[str, str],
-                      like: Dict[str,str],
+                      like: str,
                       fields: List[str],
                       sort: List[OrderBy],
                       limit: Optional[int] = None,
@@ -207,7 +207,7 @@ def get_session_data( uri: str,
                       object_location: Optional[str],
                       object_location_schema: Optional[str],
                       filters: Dict[str, str],
-                      like: Dict[str, str],
+                      like: str,
                       fields: List[str],
                       sort: List[OrderBy],
                       limit: Optional[int] = None,
@@ -248,7 +248,7 @@ def get_resource_data(*,
                       object_location: Optional[str],
                       object_location_schema: Optional[str],
                       filters: Dict[str, str],
-                      like : Dict[str, str],
+                      like : str,
                       fields: List[str],
                       sort: List[OrderBy],
                       limit: Optional[int] = None,
@@ -326,13 +326,22 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
 
     return sort_methods
 
-def _get_filter_by_args(dict_args: dict, model: Table):
+def _get_filter_by_args(list_args: str, model: Table):
     """Create constructor of filter like"""  
-    try:
-        
-        return [model.columns[key].like("%"+value+"%") for key, value in dict_args.items()]
-    except KeyError as err:
-         raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
+    filters =[]
+    if list_args and  len(list_args) != 2:
+        try:
+            list_args = _get_filter_by_args(list_args.split(","), model)
+            for value in (list_args):
+                if re.search(r'[{/}]', (value)):
+                    value = re.sub(r'[{/}]', " ", (value))
+                if re.search(r'[:]', (value)):
+                    value = re.sub(r'[:]', ",", (value))
+                key = eval(value)[0]
+                filters.append(model.columns[key].like("%"+eval(value)[1]+"%"))
+        except KeyError as err:
+                raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
+    return(filters)
 
 
 def validate_uri(uri: str) -> None:

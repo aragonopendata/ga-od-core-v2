@@ -348,7 +348,7 @@ class DownloadView(APIViewMixin):
         for _, value in like.items():
             if type(value) not in (str, int, float, bool, None) and value is not None:
                 raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Null or None', 400)
-        return like
+        return request.query_params.get('like')
     @staticmethod
     def _get_sort(request: Request) -> List[OrderBy]:
         """Get sort options from query string.

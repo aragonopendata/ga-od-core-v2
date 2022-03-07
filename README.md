@@ -88,3 +88,19 @@ URL: [/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_resource-confi
 
 To discover all endpoints please check following
 swagger: [GA_OD_Core/ui/](GA_OD_Core/ui/)
+
+### Reset login attempts
+
+If we try to access our account unsuccessfully multiple times, our account will be locked an the next message will appear:
+    
+    Access locked: too many login attempts. Contact an admin to unlock your account.
+
+If we want to reset these attempts, we have to execute one of the next commands (depending on the case) inside the docker container:
+
+    python manage.py axes_reset
+    python manage.py axes_reset_ip [ip ...]
+    python manage.py axes_reset_username [username ...]
+    python manage.py axes_reset_logs (age)
+
+
+The first one will reset all lockouts and access records. The second one  will clear lockouts and records for the given IP addresses. The third one will clear lockouts and records for the given usernames. And finally, the last one will reset AccessLog records that are older than the given age where the default is 30 days.
