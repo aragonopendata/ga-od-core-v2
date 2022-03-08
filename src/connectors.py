@@ -326,12 +326,12 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
 
     return sort_methods
 
-def _get_filter_by_args(list_args: str, model: Table):
+def _get_filter_by_args(args: str, model: Table):
     """Create constructor of filter like"""  
     filters =[]
-    if list_args and  len(list_args) != 2:
+    if args and  len(args) != 2:
         try:
-            list_args = _get_filter_by_args(list_args.split(","), model)
+            list_args = args.split(",")
             for value in (list_args):
                 if re.search(r'[{/}]', (value)):
                     value = re.sub(r'[{/}]', " ", (value))
