@@ -338,7 +338,7 @@ def _get_filter_by_args(args: str, model: Table):
                 if re.search(r'[:]', (value)):
                     value = re.sub(r'[:]', ",", (value))
                 key = eval(value)[0]
-                filters.append(model.columns[key].like("%"+eval(value)[1]+"%"))
+                filters.append(model.columns[key].ilike(f'%{eval(value)[1]}%'))
         except KeyError as err:
                 raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
     return(filters)
