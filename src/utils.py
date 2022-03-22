@@ -15,6 +15,51 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from exceptions import BadGateway
 from serializers import DictSerializer
 
+from geoalchemy2 import functions, Geometry, elements
+from geoalchemy2.shape import to_shape 
+from sqlalchemy import func
+from shapely_geojson import dumps, Feature
+
+from django.core.serializers.base import DeserializationError
+from django.core.serializers.python import (
+    Deserializer as PythonDeserializer, Serializer as PythonSerializer,
+)
+from django.utils.duration import duration_iso_string
+from django.utils.functional import Promise
+from django.utils.timezone import is_aware
+
+    
+def serializerJsonEncoder(o):
+       
+            # See "Date Time String Format" in the ECMA-262 specification.
+        if isinstance(o, datetime.datetime):
+            r = o.isoformat()
+            if o.microsecond:
+                r = r[:23] + r[26:]
+            if r.endswith('+00:00'):
+                r = r[:-6] + 'Z'
+            return r
+        elif isinstance(o, datetime.date):
+            return o.isoformat()
+        elif isinstance(o, datetime.time):
+            if is_aware(o):
+                raise ValueError("JSON can't represent timezone-aware times.")
+            r = o.isoformat()
+            if o.microsecond:
+                r = r[:12]
+            return r
+        elif isinstance(o, datetime.timedelta):
+            return duration_iso_string(o)
+        elif isinstance(o, (decimal.Decimal, uuid.UUID, Promise)):
+            return str(o)
+        # See 'Geometry Format' transform geoJson format
+        elif isinstance(o, elements.WKBElement):
+            shply_geom = Feature(to_shape(o))
+            return shply_geom.__geo_interface__
+        else:
+            return o
+
+
 
 def get_return_list(data: Iterable[dict]) -> ReturnList:
     """From a iterable of dicts convert to Django ReturnList. ReturnList is a object that must be send to render
@@ -23,7 +68,9 @@ def get_return_list(data: Iterable[dict]) -> ReturnList:
 
     # FIXME: this convert dates to string, in some renders like xlsx produce a bad representation.
     #  This is required to fixit and find a better solution. :(
-    parsed_data = json.loads(json.dumps(list(data), cls=DjangoJSONEncoder))
+    # a new presonal serializers DjangoJSONEncoder, similar django.core.serializers.json include GeoJson serializar))
+
+    parsed_data = json.loads(json.dumps(list(data), default=serializerJsonEncoder))
     for item in parsed_data:
         return_list.append(item)
 

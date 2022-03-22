@@ -25,6 +25,7 @@ from sqlalchemy.orm import class_mapper
 from sqlalchemy.types import TypeDecorator, Numeric, Float
 from sqlalchemy.dialects import postgresql
 from urllib.parse import urlparse
+from geoalchemy2 import Geometry
 
 import datetime
 import decimal
