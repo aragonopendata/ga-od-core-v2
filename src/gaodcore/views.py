@@ -12,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from connectors import get_resource_data, get_resource_columns, NoObjectError, DriverConnectionError, \
     NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError, MimeTypeError, \
-    validator_max_excel_allowed, TooManyRowsErrorExcel, get_GeoJson_resource 
+    validator_max_excel_allowed, TooManyRowsErrorExcel, get_resource_data_feature
 from gaodcore.negotations import LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list
