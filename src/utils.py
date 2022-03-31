@@ -61,8 +61,8 @@ def serializerJsonEncoder(o):
             return str(o)
         # See 'Geometry Format' transform geoJson format
         elif isinstance(o, elements.WKBElement):
-            shply_geom = Feature(to_shape(o))
-            return shply_geom.__geo_interface__
+            shply_geom = str(to_shape(o))
+            return shply_geom
         else:
             return o
 
@@ -77,6 +77,7 @@ def get_return_list(data: Iterable[dict]) -> ReturnList:
     #  This is required to fixit and find a better solution. :(
     # a new presonal serializers DjangoJSONEncoder, similar django.core.serializers.json include GeoJson serializar))
 
+    
     parsed_data = json.loads(json.dumps(list(data), default=serializerJsonEncoder))
     for item in parsed_data:
         return_list.append(item)

@@ -12,7 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from connectors import get_resource_data, get_resource_columns, NoObjectError, DriverConnectionError, \
     NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError, MimeTypeError, \
-    validator_max_excel_allowed, TooManyRowsErrorExcel    
+    validator_max_excel_allowed, TooManyRowsErrorExcel, get_GeoJson_resource 
 from gaodcore.negotations import LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list
@@ -27,7 +27,6 @@ _RESOURCE_MAX_ROWS_EXCEL = 1048576
 
 def _get_data_public_error(func: Callable, *args, **kwargs) -> List[Dict[str, Any]]:
     try:
-        print("antes del public error")
         return func(*args, **kwargs)
     except (FieldNoExistsError, SortFieldNoExistsError) as err:
         raise ValidationError(err, 400) from err
@@ -176,10 +175,11 @@ class DownloadView(APIViewMixin):
         filters = self._get_filters(request)
         like = self._get_like(request)
         sort = self._get_sort(request)
+        format= self._get_format(request)
         
         resource_config = _get_resource(resource_id=resource_id)
 
-        if request.accepted_renderer.format == "xlsx":
+        if format == "xlsx":
             if not validator_max_excel_allowed(uri=resource_config.connector_config.uri,
                                        object_location=resource_config.object_location,
                                        object_location_schema=resource_config.object_location_schema,
@@ -191,9 +191,31 @@ class DownloadView(APIViewMixin):
                                        sort=sort) :
                 raise ValidationError("An xlsx cannot be generated with so many lines, please request it in another format", 407) from TooManyRowsErrorExcel
            #    raise ValidationError({'error' : 'An xlsx cannot be generated with so many lines, please request it in another format'})    
-           
+
+   
         
-        data = _get_data_public_error(get_resource_data,
+        
+        reourceGeojon = get_GeoJson_resource(uri=resource_config.connector_config.uri,object_location=resource_config.object_location,object_location_schema=resource_config.object_location_schema)
+        if reourceGeojon and format == 'json':
+            featureCollection= True
+        else:
+            featureCollection = False
+
+        if featureCollection:
+            data = _get_data_public_error(get_resource_data_featrure,
+                                      uri=resource_config.connector_config.uri,
+                                      object_location=resource_config.object_location,
+                                      object_location_schema=resource_config.object_location_schema,
+                                      filters=filters,
+                                      like=like,
+                                      limit=limit,
+                                      offset=offset,
+                                      fields=fields,
+                                      sort=sort)
+            
+        
+        else:
+            data = _get_data_public_error(get_resource_data,
                                       uri=resource_config.connector_config.uri,
                                       object_location=resource_config.object_location,
                                       object_location_schema=resource_config.object_location_schema,
@@ -204,14 +226,17 @@ class DownloadView(APIViewMixin):
                                       fields=fields,
                                       sort=sort)
         
-        if request.accepted_renderer.format == "xlsx":
+        
+        if format == "xlsx":
             response = get_response_xlsx(get_return_list(data))
-        elif  request.accepted_renderer.format == "csv":  
+        elif format == "csv":  
             response = get_response_csv(get_return_list(data))
+        elif featureCollection:
+             response = Response(data)
         else: 
             response = Response(get_return_list(data))
         
-        if self.is_download_endpoint(request) or request.accepted_renderer.format == "xlsx":
+        if self.is_download_endpoint(request) or format == "xlsx":
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
             disposition = f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
             response["content-disposition"] = disposition
@@ -243,6 +268,7 @@ class DownloadView(APIViewMixin):
         if not resource_id:
             raise ValidationError("Is required specify resource_id in query string.")
         return resource_id
+
 
     @staticmethod
     def _get_int_field(request: Request, field) -> int:
@@ -375,7 +401,20 @@ class DownloadView(APIViewMixin):
                 raise ValidationError(f'Sort value {item} is not allowed. Too many arguments.')
 
         return sort
+    
+    @staticmethod
+    def _get_format(request: Request) -> str:
+        """Get Response_type from query string.
 
+        @param request: Django response instance.
+        @return:Response_content_type.
+        """
+        try:
+            format = request.accepted_renderer.format
+        except ValueError as err:
+            raise ValidationError('Invalid Response_contnt_type.', 400) from err
+
+        return format
 
 class ShowColumnsView(XLSXFileMixin, APIViewMixin):
     """This view allows to get datatype of each column from a resource."""
