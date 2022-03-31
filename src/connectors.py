@@ -25,7 +25,7 @@ from sqlalchemy.orm import class_mapper
 from sqlalchemy.types import TypeDecorator, Numeric, Float
 from sqlalchemy.dialects import postgresql
 from urllib.parse import urlparse
-from geoalchemy2 import Geometry
+from  geoalchemy2 import Geometry, functions as geofunc, elements
 
 import datetime
 import decimal
@@ -139,8 +139,7 @@ def validate_resource_mssql(*, uri: str, object_location: Optional[str],
 
      """Validate if resource is available . Return data of resource, a iterable of
     dictionaries."""
-    
-     
+       
      
      fields=[]
      sort=[]
@@ -203,6 +202,69 @@ def sanitize_control_charcters(text):
     else:
         return(text)
 
+def get_GeoJson_resource(uri: str, object_location: Optional[str],
+                         object_location_schema: Optional[str]) -> Boolean:
+
+    """From resource return if is GeoJson resource 
+
+    @param cache: if not exists connection save on cache.
+    @return: True or False GeoJosn Resource
+    """
+    engine = _get_engine(uri)
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    
+   
+    if (isinstance(column.type, Geometry) in column.type for column in model.columns):
+            geoJson =True
+    else:    
+            geoJon =False
+    engine.dispose()     
+    return(geoJon)
+
+def get_resource_data_feature( uri: str,
+                      object_location: Optional[str],
+                      object_location_schema: Optional[str],
+                      filters: Dict[str, str],
+                      like: str,
+                      fields: List[str],
+                      sort: List[OrderBy],
+                      limit: Optional[int] = None,
+                      offset: int = 0):
+    """data like GeoJSON .Encoding data a variety of geographic data structures."""
+    """Data like Feature_Collection_"""
+
+    engine = _get_engine(uri)
+    session_maker = sessionmaker(bind=engine)
+
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+
+    column_dict = {column.name: column for column in model.columns}
+    columns = _get_columns(column_dict, fields)
+    filters_args = _get_filter_by_args(like, model)
+    
+    session = session_maker()
+    
+    parsed = urlparse(uri)
+    
+    
+    
+    if parsed.scheme in ['mssql+pyodbc']:  
+        data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).with_entities(
+              *[model.c[col.name].label(col.name) for col in model.columns]).all()
+    else:
+         data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
+              *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+    
+    session.close()
+    engine.dispose()
+    wrapped= ({
+        "type": "FeatureCollection",
+        "features": [json.loads(mytuple[0]) for mytuple in data]
+        })
+        
+       
+    return(wrapped)
+    
 
 def get_session_data( uri: str,
                       object_location: Optional[str],
