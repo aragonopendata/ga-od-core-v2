@@ -212,9 +212,12 @@ def get_GeoJson_resource(uri: str, object_location: Optional[str],
     """
     engine = _get_engine(uri)
     model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    geoJson =False
     
-    
-    geoJson =(isinstance(column, Geometry) in column for column in model.columns)
+    for column in model.columns:
+         if str(column.type).startswith("geography"):
+            geoJson = True
+
     engine.dispose()     
     return(geoJson)
 
