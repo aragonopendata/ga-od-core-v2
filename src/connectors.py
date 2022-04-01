@@ -215,7 +215,7 @@ def get_GeoJson_resource(uri: str, object_location: Optional[str],
     geoJson =False
     
     for column in model.columns:
-         if str(column.type).startswith("geography"):
+         if str(column.type).startswith("geometry") or str(column.type).startswith("geography") :
             geoJson = True
 
     engine.dispose()     
