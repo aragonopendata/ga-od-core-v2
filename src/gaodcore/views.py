@@ -202,7 +202,7 @@ class DownloadView(APIViewMixin):
             featureCollection = False
 
         if featureCollection:
-            data = _get_data_public_error(get_resource_data_featrure,
+            data = _get_data_public_error(get_resource_data_feature,
                                       uri=resource_config.connector_config.uri,
                                       object_location=resource_config.object_location,
                                       object_location_schema=resource_config.object_location_schema,
