@@ -249,11 +249,10 @@ def get_resource_data_feature( uri: str,
     
     
     if parsed.scheme in ['mssql+pyodbc']:  
-        data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).with_entities(
-              *[model.c[col.name].label(col.name) for col in model.columns]).all()
+        data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).all()
     else:
-         data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
-              *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+         data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
+               
     
     session.close()
     engine.dispose()
