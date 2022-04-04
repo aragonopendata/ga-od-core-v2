@@ -251,12 +251,13 @@ def get_resource_data_feature( uri: str,
     
     
     if parsed.scheme in ['mssql+pyodbc']:  
-        data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).with_entities(
+        data = session.query(model).filter_by(**filters).filter(*filters_args).with_entities(
      *[model.c[col.name].label(col.name) for col in model.columns]).all()
     else:
-         data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).with_entities(
+         data = session.query(model).filter_by(**filters).filter(*filters_args).with_entities(
      *[model.c[col.name].label(col.name) for col in model.columns]).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
 
+    geoJson = (dict(zip([column.name for column in columns], row)) for row in data)
     properties=[]
     feat=[]
     for row, item in enumerate(geoJson):
@@ -264,7 +265,6 @@ def get_resource_data_feature( uri: str,
          for col, (key, value) in enumerate(item.items()):
              if isinstance(value, elements.WKBElement):
                   shply_geom = (to_shape(value))
-                  
              else:
                  properties.append(item)
          propertiesDict = dict(properties)
