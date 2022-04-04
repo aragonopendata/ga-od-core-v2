@@ -26,6 +26,8 @@ from sqlalchemy.types import TypeDecorator, Numeric, Float
 from sqlalchemy.dialects import postgresql
 from urllib.parse import urlparse
 from  geoalchemy2 import Geometry, functions as geofunc, elements
+from shapely_geojson import dumps, Feature, FeatureCollection
+from geoalchemy2.shape import to_shape 
 
 import datetime
 import decimal
@@ -249,18 +251,36 @@ def get_resource_data_feature( uri: str,
     
     
     if parsed.scheme in ['mssql+pyodbc']:  
-        data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).all()
+        data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).with_entities(
+     *[model.c[col.name].label(col.name) for col in model.columns]).all()
     else:
-         data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
-               
+         data = session.query(geofunc.ST_AsGeoJSON(model)).filter_by(**filters).filter(*filters_args).with_entities(
+     *[model.c[col.name].label(col.name) for col in model.columns]).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
+
+    properties=[]
+    feat=[]
+    for row, item in enumerate(geoJson):
+         properties=[]
+         for col, (key, value) in enumerate(item.items()):
+             if isinstance(value, elements.WKBElement):
+                  shply_geom = (to_shape(value))
+                  
+             else:
+                 properties.append(item)
+         propertiesDict = dict(properties)
+         
+         feat.append(Feature(shply_geom,propertiesDict))
+         
     
-    session.close()
-    engine.dispose()
+
+    
     wrapped= ({
         "type": "FeatureCollection",
-        "features": [json.loads(mytuple[0]) for mytuple in data]
+        "features": feat
         })
         
+    session.close()
+    engine.dispose()
        
     return(wrapped)
     
