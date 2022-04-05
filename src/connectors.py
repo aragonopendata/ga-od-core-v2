@@ -28,7 +28,7 @@ from urllib.parse import urlparse
 from  geoalchemy2 import Geometry, functions as geofunc, elements
 from shapely_geojson import dumps, Feature, FeatureCollection
 from geoalchemy2.shape import to_shape 
-
+from sqlalchemy import func, select
 import datetime
 import decimal
 import json
@@ -235,6 +235,8 @@ def get_resource_data_feature( uri: str,
     """data like GeoJSON .Encoding data a variety of geographic data structures."""
     """Data like Feature_Collection_"""
 
+    """Not posible to implement GeoFunc.ST_AsGeoJSON with model, postgis version  is < 3.0 """
+
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
@@ -243,42 +245,46 @@ def get_resource_data_feature( uri: str,
     column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
     filters_args = _get_filter_by_args(like, model)
-    
     session = session_maker()
     
     parsed = urlparse(uri)
     
     
+    #Get Column Geom - fields Properties
+
+    properties= ''
+    propertiesField =[]
+    for i, col in enumerate(model.columns):
+        if str(col.type).startswith("geography") or str(col.type).startswith("geometry"):
+            Geom = model.c[col.name].label(col.name) 
+        else:
+            if properties:
+                properties = properties + model.c[col.name].label(col.name)
+            else:
+                properties =model.c[col.name].label(col.name)
+                propertiesField.append(col)
     
+    #Get A JSon Properties and A GeoJson
     if parsed.scheme in ['mssql+pyodbc']:  
-        data = session.query(model).filter_by(**filters).filter(*filters_args).with_entities(
-     *[model.c[col.name].label(col.name) for col in model.columns]).all()
+        data = session.query(((func.jsonb_agg(properties))).label("properties"), (geoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).all()
     else:
-         data = session.query(model).filter_by(**filters).filter(*filters_args).with_entities(
-     *[model.c[col.name].label(col.name) for col in model.columns]).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
+         data = session.query(((func.jsonb_agg(properties))).label("properties"), (geoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
 
-    geoJson = (dict(zip([column.name for column in columns], row)) for row in data)
-    properties=[]
-    feat=[]
-    for row, item in enumerate(geoJson):
-         properties=[]
-         for col, (key, value) in enumerate(item.items()):
-             if isinstance(value, elements.WKBElement):
-                  shply_geom = (to_shape(value))
-             else:
-                 properties.append(item)
-         propertiesDict = dict(properties)
-         
-         feat.append(Feature(shply_geom,propertiesDict))
-         
+    #Serializar Feature Collection
+    featuresTot = []
     
-
-    
-    wrapped= ({
-        "type": "FeatureCollection",
-        "features": feat
-        })
+    for item in data:
         
+        properties = dict(zip([column.name for column in  propertiesField],  item[0]))
+        
+        featureType = {
+            'type': 'Feature',
+            'geometry': json.loads((item[1])),
+            'properties': properties}
+        featuresTot.append(featureType)
+    
+    wrapped = { "type":"FeatureCollection", "features": featuresTot }
+    
     session.close()
     engine.dispose()
        
