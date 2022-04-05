@@ -258,12 +258,12 @@ def get_resource_data_feature( uri: str,
         if str(col.type).startswith("geography") or str(col.type).startswith("geometry"):
             Geom = model.c[col.name].label(col.name) 
         else:
-            if properties:
-                properties = properties + model.c[col.name].label(col.name)
-            else:
+            if len(properties) is   0:
                 properties =model.c[col.name].label(col.name)
                 propertiesField.append(col)
-    
+            else:
+                properties = properties + model.c[col.name].label(col.name)
+                
     #Get A JSon Properties and A GeoJson
     if parsed.scheme in ['mssql+pyodbc']:  
         data = session.query(((func.jsonb_agg(properties))).label("properties"), (geoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).all()
