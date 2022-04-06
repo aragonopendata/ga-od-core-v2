@@ -268,12 +268,13 @@ def get_resource_data_feature( uri: str,
     else:
          data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
 
+    columnsProperties = _get_columns(column_dict, propertiesField)
     #Serializar Feature Collection
     featuresTot = []    
     for item in data:
         item = list(item)
-        geometry= list(item).pop()
-        properties = dict(zip([column.name for column in  propertiesField],  item))
+        geometry= item.pop()
+        properties = dict(zip([column.name for column in  columnsProperties],  item))
         featureType = {
             'type': 'Feature',
             'geometry': json.loads(geometry),
