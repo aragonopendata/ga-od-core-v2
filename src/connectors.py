@@ -241,7 +241,8 @@ def get_resource_data_feature( uri: str,
     session_maker = sessionmaker(bind=engine)
 
     model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
-
+    column_dict = {column.name: column for column in model.columns}
+    columns = _get_columns(column_dict, fields)
     filters_args = _get_filter_by_args(like, model)
     session = session_maker()
     
