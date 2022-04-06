@@ -269,9 +269,9 @@ def get_resource_data_feature( uri: str,
     #Get A JSon Properties and A GeoJson
     
     if parsed.scheme in ['mssql+pyodbc']:  
-        data = session.query(((func.jsonb_agg(properties))).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).all()
+        data = session.query(((func.jsonb_agg(text(properties)))).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).all()
     else:
-         data = session.query(((func.jsonb_agg(properties))).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
+         data = session.query(((func.jsonb_agg(text(properties)))).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
 
     #Serializar Feature Collection
     featuresTot = []
