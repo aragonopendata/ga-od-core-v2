@@ -25,7 +25,7 @@ from sqlalchemy.orm import class_mapper
 from sqlalchemy.types import TypeDecorator, Numeric, Float
 from sqlalchemy.dialects import postgresql
 from urllib.parse import urlparse
-from  geoalchemy2 import Geometry, functions as geofunc, elements
+from  geoalchemy2 import Geometry,  elements, functions as GeoFunc
 from shapely_geojson import dumps, Feature, FeatureCollection
 from geoalchemy2.shape import to_shape 
 from sqlalchemy import func, select
@@ -266,9 +266,9 @@ def get_resource_data_feature( uri: str,
                 propertiesField.append(col)
     #Get A JSon Properties and A GeoJson
     if parsed.scheme in ['mssql+pyodbc']:  
-        data = session.query(((func.jsonb_agg(properties))).label("properties"), (geoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).all()
+        data = session.query(((func.jsonb_agg(properties))).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).all()
     else:
-         data = session.query(((func.jsonb_agg(properties))).label("properties"), (geoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
+         data = session.query(((func.jsonb_agg(properties))).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
 
     #Serializar Feature Collection
     featuresTot = []
