@@ -264,7 +264,8 @@ def get_resource_data_feature( uri: str,
             else:
                 properties = properties + model.c[col.name].label(col.name)
                 propertiesField.append(col)
-    properties = properties.replace("+", ",")
+    properties = re.sub(r'[+]', ":", properties)
+    
     #Get A JSon Properties and A GeoJson
     
     if parsed.scheme in ['mssql+pyodbc']:  
