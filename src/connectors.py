@@ -252,13 +252,13 @@ def get_resource_data_feature( uri: str,
     
     #Get Column Geom - fields Properties
 
-    properties= ""
+    properties = ""
     propertiesField =[]
     for i, col in enumerate(model.columns):
         if str(col.type).startswith("geography") or str(col.type).startswith("geometry"):
             Geom = model.c[col.name].label(col.name) 
         else:
-            if len(properties) ==  0:
+            if len(str(properties)) ==  0:
                 properties =model.c[col.name].label(col.name)
                 propertiesField.append(col)
             else:
