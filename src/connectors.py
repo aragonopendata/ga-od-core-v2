@@ -235,7 +235,7 @@ def get_resource_data_feature( uri: str,
     """data like GeoJSON .Encoding data a variety of geographic data structures."""
     """Data like Feature_Collection_"""
 
-    """Not posible to implement GeoFunc.ST_AsGeoJSON with model, postgis version  is < 3.0 """
+    """Not posible to implement GeoFunc.ST_AsGeoJSON(rows) with model, postgis version  is < 3.0 """
 
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
@@ -251,29 +251,33 @@ def get_resource_data_feature( uri: str,
     #Get Column Geom - other fields in Properties
 
     propertiesCol=[]
+    propertiesField=[]
     for i, col in enumerate(model.columns):
         if str(col.type).startswith("geography") or str(col.type).startswith("geometry"):
             Geom = model.c[col.name].label(col.name) 
         else:
-            propertiesCol.append(col.name)
+            propertiesField.append(col.name)
             propertiesCol.append(model.c[col.name].label(col.name))
     
     
-    #Get A JSon Properties and A GeoJson
-    
+    #Get A JSon Properties ( not possible json_build_object PostgreSQL 9.2.24 on x86_64-unknown-linux-gnu, compiled by gcc (GCC) 4.8.5 20150623 (Red Hat 4.8.5-16), 64-bit
+    # version of Postgress not allowed _ Postgres and A GeoJson  only _ https://www.postgresql.org/docs/9.2/functions-json.html" 
+    # https://www.postgresql.org/docs/current/functions-json.html -> to convert columns to a json in a query 
     if parsed.scheme in ['mssql+pyodbc']:  
-        data = session.query((func.json_build_object(*propertiesCol)).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).all()
+        data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).all()
     else:
-         data = session.query((func.json_build_object(*propertiesCol)).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
+         data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
 
     #Serializar Feature Collection
     featuresTot = []    
     for item in data:
-        
+        item = list(item)
+        geometry= list(item).pop()
+        properties = dict(zip([column.name for column in  propertiesField],  item))
         featureType = {
             'type': 'Feature',
-            'geometry': json.loads((item[1])),
-            'properties': item[0]}
+            'geometry': json.loads(geometry),
+            'properties': properties}
         featuresTot.append(featureType)
     
     wrapped = { "type":"FeatureCollection", "features": featuresTot }
