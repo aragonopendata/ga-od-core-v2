@@ -254,24 +254,27 @@ def get_resource_data_feature( uri: str,
 
     properties = ""
     propertiesField =[]
+    propertiesCol=[]
     for i, col in enumerate(model.columns):
         if str(col.type).startswith("geography") or str(col.type).startswith("geometry"):
             Geom = model.c[col.name].label(col.name) 
         else:
             if len(str(properties)) ==  0:
                 properties =model.c[col.name].label(col.name)
+                propertiesCol.append(model.c[col.name].label(col.name))
                 propertiesField.append(col)
             else:
                 properties = properties + model.c[col.name].label(col.name)
+                propertiesCol.append(model.c[col.name].label(col.name))
                 propertiesField.append(col)
     properties = re.sub(r'[+]', ",", str(properties))
     
     #Get A JSon Properties and A GeoJson
     
     if parsed.scheme in ['mssql+pyodbc']:  
-        data = session.query(((func.jsonb_agg(text(properties)))).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).all()
+        data = session.query(((func.jsonb_agg(propertiesCol))).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).all()
     else:
-         data = session.query(((func.jsonb_agg(text(properties)))).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
+         data = session.query(((func.jsonb_agg(propertiesCol))).label("properties"), (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).group_by(Geom).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
 
     #Serializar Feature Collection
     featuresTot = []
