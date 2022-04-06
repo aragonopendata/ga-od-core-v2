@@ -264,7 +264,7 @@ def get_resource_data_feature( uri: str,
             else:
                 properties = properties + model.c[col.name].label(col.name)
                 propertiesField.append(col)
-    properties = re.sub(r'[+]', ":", properties)
+    properties = re.sub(r'[+]', ",", str(properties))
     
     #Get A JSon Properties and A GeoJson
     
