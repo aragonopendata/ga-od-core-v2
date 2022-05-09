@@ -270,11 +270,25 @@ def get_resource_data_feature( uri: str,
 
     columnsProperties = _get_columns(column_dict, propertiesField)
     #Serializar Feature Collection
+    re_decimal = "\.0\s*$"  # allow e.g. '1.0' as an int, but not '1.2
     featuresTot = []    
     for item in data:
         item = list(item)
         geometry= item.pop()
+        for column in item:
+              if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)) and  re.search(re_decimal, str(column)) != None:
+                    column = int(column)  
+              elif isinstance(column, float) and re.search(re_decimal, str(column)) != None:
+                      column = int(column)  
+              elif isinstance(column, Numeric) and re.search(re_decimal, str(column)) != None:
+                          column = int(column) 
+              else:
+                        column =  sanitize_control_charcters(column)
+         
         properties = dict(zip([column.name for column in  columnsProperties],  item))
+        
+
+
         featureType = {
             'type': 'Feature',
             'geometry': json.loads(geometry),
@@ -362,6 +376,8 @@ def get_resource_data(*,
             if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)) and  re.search(re_decimal, str(column)) != None:
                     dataTempTuplas.append(int(column))
             elif isinstance(column, float) and re.search(re_decimal, str(column)) != None:
+                    dataTempTuplas.append(int(column))
+            elif isinstance(column, Numeric) and re.search(re_decimal, str(column)) != None:
                     dataTempTuplas.append(int(column))
             else: 
                     dataTempTuplas.append(sanitize_control_charcters(column))
