@@ -252,6 +252,7 @@ def get_resource_data_feature( uri: str,
 
     propertiesCol=[]
     propertiesField=[]
+    re_decimal = "\.0*$"  # allow e.g. '1.0000000000' as an int, but not '1.2
     for i, col in enumerate(model.columns):
         if str(col.type).startswith("geography") or str(col.type).startswith("geometry"):
             Geom = model.c[col.name].label(col.name) 
@@ -270,20 +271,21 @@ def get_resource_data_feature( uri: str,
 
     columnsProperties = _get_columns(column_dict, propertiesField)
     #Serializar Feature Collection
-    re_decimal = "\.0\s*$"  # allow e.g. '1.0' as an int, but not '1.2
+    re_decimal = "\.0*$"  # allow e.g. '1.0' as an int, but not '1.2
     featuresTot = []    
     for item in data:
         item = list(item)
         geometry= item.pop()
-        for column in item:
+        print(item)
+        for i, column in enumerate(item):
               if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)) and  re.search(re_decimal, str(column)) != None:
-                    column = int(column)  
+                      item[i] = int(column) 
               elif isinstance(column, float) and re.search(re_decimal, str(column)) != None:
-                      column = int(column)  
+                      item[i] = int(column)  
               elif isinstance(column, Numeric) and re.search(re_decimal, str(column)) != None:
-                          column = int(column) 
+                         item[i] = int(column) 
               else:
-                        column =  sanitize_control_charcters(column)
+                         item[i] =  sanitize_control_charcters(column)
          
         properties = dict(zip([column.name for column in  columnsProperties],  item))
         
