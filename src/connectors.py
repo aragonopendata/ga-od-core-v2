@@ -35,6 +35,9 @@ import json
 import uuid
 import re
 from pydoc import text
+from django.utils.duration import duration_iso_string
+from django.utils.functional import Promise
+from django.utils.timezone import is_aware
 
 
 from django.utils.functional import Promise
@@ -252,7 +255,7 @@ def get_resource_data_feature( uri: str,
 
     propertiesCol=[]
     propertiesField=[]
-    re_decimal = "\.0*$"  # allow e.g. '1.0000000000' as an int, but not '1.2
+    
     for i, col in enumerate(model.columns):
         if str(col.type).startswith("geography") or str(col.type).startswith("geometry"):
             Geom = model.c[col.name].label(col.name) 
@@ -270,27 +273,54 @@ def get_resource_data_feature( uri: str,
          data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
 
     columnsProperties = _get_columns(column_dict, propertiesField)
+  
     #Serializar Feature Collection
-    
     featuresTot = []    
+    re_decimal = "\.0*$"  # allow e.g. '1.0000000000' as an int, but not '1.2
     for item in data:
         item = list(item)
         geometry= item.pop()
         print(item)
         for i, column in enumerate(item):
-              if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)) and  re.search(re_decimal, str(column)) != None:
+              if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)):
+                  if  re.search(re_decimal, str(column)) != None:
                       item[i] = int(column) 
-              elif isinstance(column, float) and re.search(re_decimal, str(column)) != None:
+                  else:
+                      item[i] = str(column) 
+              elif isinstance(column, float):
+                  if re.search(re_decimal, str(column)) != None:
                       item[i] = int(column)  
-              elif isinstance(column, Numeric) and re.search(re_decimal, str(column)) != None:
-                         item[i] = int(column) 
+                  else:
+                      item[i] = str(column)
+              elif isinstance(column, Numeric):
+                  if re.search(re_decimal, str(column)) != None:
+                      item[i] = int(column) 
+                  else:
+                      item[i] = str(column)
+              elif isinstance(column, datetime.datetime):
+                    r = column.isoformat()
+                    if column.microsecond:
+                        r = r[:23] + r[26:]
+                    if r.endswith('+00:00'):
+                        r = r[:-6] + 'Z'
+                    item[i] = r
+              elif isinstance(column, datetime.date):
+                    item[i] =  column.isoformat()
+              elif isinstance(column, datetime.time):
+                    r = column.isoformat()
+                    if column.microsecond:
+                        r = r[:12]
+                    item[i] = r
+              elif isinstance(column, datetime.timedelta):
+                    item[i] =  duration_iso_string(column)
+               
               else:
                          item[i] = sanitize_control_charcters(column)
          
         properties = dict(zip([column.name for column in  columnsProperties],  item))
         
 
-
+        #create feature
         featureType = {
             'type': 'Feature',
             'geometry': json.loads(geometry),
