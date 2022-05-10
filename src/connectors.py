@@ -271,7 +271,7 @@ def get_resource_data_feature( uri: str,
 
     columnsProperties = _get_columns(column_dict, propertiesField)
     #Serializar Feature Collection
-    re_decimal = "\.0*$"  # allow e.g. '1.0' as an int, but not '1.2
+    
     featuresTot = []    
     for item in data:
         item = list(item)
@@ -285,7 +285,7 @@ def get_resource_data_feature( uri: str,
               elif isinstance(column, Numeric) and re.search(re_decimal, str(column)) != None:
                          item[i] = int(column) 
               else:
-                         item[i] =  sanitize_control_charcters(column)
+                         item[i] = sanitize_control_charcters(column)
          
         properties = dict(zip([column.name for column in  columnsProperties],  item))
         
