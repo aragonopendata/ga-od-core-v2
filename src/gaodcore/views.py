@@ -113,7 +113,12 @@ class DownloadView(APIViewMixin):
                                                openapi.IN_QUERY,
                                                description='Matching conditions to select, e.g '
                                                '{“key1”: “a”, “key2”: “b”}.',
-                                               type=openapi.TYPE_OBJECT),
+                                               type=openapi.TYPE_STRING),
+                             openapi.Parameter('like',
+                                               openapi.IN_QUERY,
+                                               description='Matching conditions to select, e.g '
+                                               '{“key1”: “a”, “key2”: “b”}.',
+                                               type=openapi.TYPE_STRING),
                              openapi.Parameter('offset',
                                                openapi.IN_QUERY,
                                                description="Offset this number of rows.",
@@ -127,11 +132,6 @@ class DownloadView(APIViewMixin):
                                                description="Fields to return. Default: all fields in original order.",
                                                type=openapi.TYPE_ARRAY,
                                                items=openapi.Items(type=openapi.TYPE_STRING)),
-                             openapi.Parameter('like',
-                                               openapi.IN_QUERY,
-                                               description='Matching conditions to select, e.g '
-                                               '{“key1”: “a”, “key2”: “b”}.',
-                                               type=openapi.TYPE_OBJECT),
                              openapi.Parameter('columns',
                                                openapi.IN_QUERY,
                                                description="Alias of fields.",
