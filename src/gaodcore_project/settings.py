@@ -143,7 +143,7 @@ REST_FRAMEWORK = {
 
 SWAGGER_SETTINGS ={
 
-    'VALIDATION_URL':None
+    'VALIDATOR_URL': None
 }
 LOGGING = {
     'version': 1,
