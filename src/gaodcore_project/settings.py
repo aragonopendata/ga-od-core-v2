@@ -141,10 +141,10 @@ REST_FRAMEWORK = {
     ),
 }
 
-SWAGGER_SETTINGS ={
-
-    'VALIDATION_URL':None
+SWAGGER_SETTINGS = {
+     'VALIDATION_URL': None
 }
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
