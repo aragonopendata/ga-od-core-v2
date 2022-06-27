@@ -21,10 +21,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Config project
 CONFIG = Config.get_config()
 
-SWAGGER_SETTINGS ={
-
-    'VALIDATION_URL':None
-}
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
@@ -145,6 +141,10 @@ REST_FRAMEWORK = {
     ),
 }
 
+SWAGGER_SETTINGS ={
+
+    'VALIDATION_URL':None
+}
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
