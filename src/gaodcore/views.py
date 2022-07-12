@@ -21,7 +21,9 @@ import xlsxwriter
 import io
 from django.http import HttpResponse 
 from rest_framework.utils.serializer_helpers import ReturnList
+import re
 
+import urllib.parse
 
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
 
@@ -132,6 +134,16 @@ class DownloadView(APIViewMixin):
                                                description='Matching conditions to select, e.g '
                                                '{“key1”: “a”, “key2”: “b”}.',
                                                type=openapi.TYPE_OBJECT),
+                             openapi.Parameter('api-uri-str',
+                                               openapi.IN_QUERY,
+                                               description='Parameters call api : parameter : value'
+                                               '{“key1”: “a”, “key2”: “b”}.',
+                                               type=openapi.TYPE_STRING),
+                             openapi.Parameter('api-uri',
+                                               openapi.IN_QUERY,
+                                               description='Parameters call api : parameter : value'
+                                               '{“key1”: “a”, “key2”: “b”}.',
+                                               type=openapi.TYPE_OBJECT),
                              openapi.Parameter('columns',
                                                openapi.IN_QUERY,
                                                description="Alias of fields.",
@@ -176,7 +188,25 @@ class DownloadView(APIViewMixin):
         like = self._get_like(request)
         sort = self._get_sort(request)
         format= self._get_format(request)
+        uriparametersstring = self._get_parameters(request)
+        uriparamametersobject = self._get_parameters_object(request)
+        resource_config = _get_resource(resource_id=resource_id)
         
+       
+        if uriparametersstring:
+              
+               uri =  resource_config.connector_config.uri + "?" + urllib.parse.quote(uriparametersstring)
+        else:   
+               uri =  resource_config.connector_config.uri
+        print(uri)
+       
+        if uriparamametersobject and  len(uriparamametersobject) != 2:
+                uri = resource_config.connector_config.uri + "?" + urllib.parse.quote(self._get_parameters_uri(uriparamametersobject))
+        else:
+               uri =  uri
+                 
+
+        print(uri)
         resource_config = _get_resource(resource_id=resource_id)
 
         if format == "xlsx":
@@ -375,6 +405,78 @@ class DownloadView(APIViewMixin):
             if type(value) not in (str, int, float, bool, None) and value is not None:
                 raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Null or None', 400)
         return request.query_params.get('like')
+    
+    @staticmethod
+    def _get_parameters(request: Request) -> Dict[str, Any]:
+        """Get filters_like from query string.
+
+        @param request: Django response instance.
+        @return: filters_like. SQL where parameters. Format {"column": value, ...}.
+        """
+        try:
+            parameters = json.loads(request.query_params.get('api-uri', '{}'))
+           
+        except JSONDecodeError as err:
+            raise ValidationError('Invalid JSON.', 400) from err
+
+        if not isinstance(parameters, dict):
+            raise ValidationError('Invalid format: eg. {“key1”: “a”, “key2”: “b”}', 400)
+        for _, value in parameters.items():
+            if type(value) not in (str, int, float, bool, None) and value is not None:
+                raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Null or None', 400)
+        return request.query_params.get('api-uri')
+    @staticmethod
+    def _get_parameters(args: str) -> str:
+        
+        """Create constructor of filter like"""  
+    
+        if args and  len(args) != 2:
+            try:
+                list_args = args.split(",")
+                for index, value in enumerate(list_args):
+                    value = value
+                    if re.search(r'[{/}]', (value)):
+                        value = re.sub(r'[{/}]', "", (value))
+                        print(value)
+                    if re.search(r'["]', (value)):
+                        value = re.sub(r'["]', "", (value))
+                        print(value)
+                    if re.search(r'[:]', (value)):
+                        value = re.sub(r'[:]', "=", (value))
+                        print(value)
+                    
+                    list_args[index]=value
+                    
+                    
+            except KeyError as err:
+                    raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
+        print(list_args)
+        parametros =""
+        for index, param in enumerate(list_args):
+            if index > 0:
+                parametros = parametros + "&" + param
+            else:
+                parametros = parametros + param
+        print(parametros)
+        return(parametros)
+    @staticmethod
+    def _get_parameters_uri(args: str):
+        """Create constructor of filter like"""  
+    
+        if args and  len(args) != 2:
+            try:
+                list_args = args.split(",")
+                for value in (list_args):
+                    if re.search(r'[{/}]', (value)):
+                        value = re.sub(r'[{/}]', " ", (value))
+                    if re.search(r'[:]', (value)):
+                        value = re.sub(r'[:]', "=", (value))
+                    key = eval(value)[0]
+                    
+            except KeyError as err:
+                    raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
+        return(args)
+
     @staticmethod
     def _get_sort(request: Request) -> List[OrderBy]:
         """Get sort options from query string.
