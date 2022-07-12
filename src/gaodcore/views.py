@@ -407,7 +407,7 @@ class DownloadView(APIViewMixin):
         return request.query_params.get('like')
     
     @staticmethod
-    def _get_parameters(request: Request) -> Dict[str, Any]:
+    def _get_parameters_object(request: Request) -> Dict[str, Any]:
         """Get filters_like from query string.
 
         @param request: Django response instance.
@@ -425,8 +425,24 @@ class DownloadView(APIViewMixin):
             if type(value) not in (str, int, float, bool, None) and value is not None:
                 raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Null or None', 400)
         return request.query_params.get('api-uri')
+    
     @staticmethod
-    def _get_parameters(args: str) -> str:
+    def _get_parameters(request: Request) -> str:
+        
+        """Get Response_type from query string.
+
+        @param request: Django response instance.
+        @return:Response_content_type."""
+
+        try:
+            uri = request.query_params.get('api-uri')
+        except ValueError as err:
+            raise ValidationError('Invalid Response_contnt_type.', 400) from err
+
+        return uri
+    
+    @staticmethod
+    def _get_parameters_uri(args: str):
         
         """Create constructor of filter like"""  
     
@@ -446,36 +462,19 @@ class DownloadView(APIViewMixin):
                         print(value)
                     
                     list_args[index]=value
-                    
+                 
                     
             except KeyError as err:
                     raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
-        print(list_args)
+       
         parametros =""
         for index, param in enumerate(list_args):
             if index > 0:
                 parametros = parametros + "&" + param
             else:
                 parametros = parametros + param
-        print(parametros)
+        
         return(parametros)
-    @staticmethod
-    def _get_parameters_uri(args: str):
-        """Create constructor of filter like"""  
-    
-        if args and  len(args) != 2:
-            try:
-                list_args = args.split(",")
-                for value in (list_args):
-                    if re.search(r'[{/}]', (value)):
-                        value = re.sub(r'[{/}]', " ", (value))
-                    if re.search(r'[:]', (value)):
-                        value = re.sub(r'[:]', "=", (value))
-                    key = eval(value)[0]
-                    
-            except KeyError as err:
-                    raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
-        return(args)
 
     @staticmethod
     def _get_sort(request: Request) -> List[OrderBy]:
