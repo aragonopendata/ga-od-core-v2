@@ -435,7 +435,9 @@ class DownloadView(APIViewMixin):
         @return:Response_content_type."""
 
         try:
-            uri = (request.query_params.get('api-uri-str')).replace ("", "%20") 
+            uri = request.query_params.get('api-uri-str')
+            if uri:
+                uri=uri.replace("", "%20")
         except ValueError as err:
             raise ValidationError('Invalid Response_contnt_type.', 400) from err
 
