@@ -435,7 +435,7 @@ class DownloadView(APIViewMixin):
         @return:Response_content_type."""
 
         try:
-            uri = re.sub(r'[ ]', "%20", (request.query_params.get('api-uri-str')))
+            uri = re.sub(r'[" "]', "%20", (request.query_params.get('api-uri-str')))
         except ValueError as err:
             raise ValidationError('Invalid Response_contnt_type.', 400) from err
 
@@ -460,8 +460,8 @@ class DownloadView(APIViewMixin):
                     if re.search(r'[:]', (value)):
                         value = re.sub(r'[:]', "=", (value))
                         print(value)
-                    if re.search(r'[ ]', (value)):
-                        value = re.sub(r'[ ]', "%20", (value))
+                    if re.search(r'[" "]', (value)):
+                        value = re.sub(r'[" "]', "%20", (value))
                         print(value)
                     
                     list_args[index]=value
