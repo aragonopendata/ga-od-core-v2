@@ -195,13 +195,13 @@ class DownloadView(APIViewMixin):
        
         if uriparametersstring:
               
-               uri =  resource_config.connector_config.uri + "?" + urllib.parse.quote(uriparametersstring)
+               uri =  resource_config.connector_config.uri + "?" + (uriparametersstring)
         else:   
                uri =  resource_config.connector_config.uri
         print(uri)
        
         if uriparamametersobject and  len(uriparamametersobject) != 2:
-                uri = resource_config.connector_config.uri + "?" + urllib.parse.quote(self._get_parameters_uri(uriparamametersobject))
+                uri = resource_config.connector_config.uri + "?" + (self._get_parameters_uri(uriparamametersobject))
         else:
                uri =  uri
                  
@@ -435,7 +435,7 @@ class DownloadView(APIViewMixin):
         @return:Response_content_type."""
 
         try:
-            uri = request.query_params.get('api-uri-str')
+            uri = re.sub(r'[ ]', "%20", (request.query_params.get('api-uri-str')))
         except ValueError as err:
             raise ValidationError('Invalid Response_contnt_type.', 400) from err
 
@@ -459,6 +459,9 @@ class DownloadView(APIViewMixin):
                         print(value)
                     if re.search(r'[:]', (value)):
                         value = re.sub(r'[:]', "=", (value))
+                        print(value)
+                    if re.search(r'[ ]', (value)):
+                        value = re.sub(r'[ ]', "%20", (value))
                         print(value)
                     
                     list_args[index]=value
