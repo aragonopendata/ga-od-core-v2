@@ -198,7 +198,7 @@ class DownloadView(APIViewMixin):
                uri =  resource_config.connector_config.uri + "?" + (uriparametersstring)
         else:   
                uri =  resource_config.connector_config.uri
-        print(uri)
+        
        
         if uriparamametersobject and  len(uriparamametersobject) != 2:
                 uri = resource_config.connector_config.uri + "?" + (self._get_parameters_uri(uriparamametersobject))
@@ -206,11 +206,11 @@ class DownloadView(APIViewMixin):
                uri =  uri
                  
 
-        print(uri)
+        
         resource_config = _get_resource(resource_id=resource_id)
 
         if format == "xlsx":
-            if not validator_max_excel_allowed(uri=resource_config.connector_config.uri,
+            if not validator_max_excel_allowed(uri=uri,
                                        object_location=resource_config.object_location,
                                        object_location_schema=resource_config.object_location_schema,
                                        filters=filters,
@@ -225,7 +225,7 @@ class DownloadView(APIViewMixin):
    
         
         
-        reourceGeojon = get_GeoJson_resource(uri=resource_config.connector_config.uri,object_location=resource_config.object_location,object_location_schema=resource_config.object_location_schema)
+        reourceGeojon = get_GeoJson_resource(uri=uri,object_location=resource_config.object_location,object_location_schema=resource_config.object_location_schema)
         if reourceGeojon and format == 'json':
             featureCollection= True
         else:
@@ -233,7 +233,7 @@ class DownloadView(APIViewMixin):
 
         if featureCollection:
             data = _get_data_public_error(get_resource_data_feature,
-                                      uri=resource_config.connector_config.uri,
+                                      uri=uri,
                                       object_location=resource_config.object_location,
                                       object_location_schema=resource_config.object_location_schema,
                                       filters=filters,
@@ -246,7 +246,7 @@ class DownloadView(APIViewMixin):
         
         else:
             data = _get_data_public_error(get_resource_data,
-                                      uri=resource_config.connector_config.uri,
+                                      uri=uri,
                                       object_location=resource_config.object_location,
                                       object_location_schema=resource_config.object_location_schema,
                                       filters=filters,
@@ -435,7 +435,7 @@ class DownloadView(APIViewMixin):
         @return:Response_content_type."""
 
         try:
-            uri = re.sub(r'[" "]', "%20", (request.query_params.get('api-uri-str')))
+            uri = (request.query_params.get('api-uri-str')).replace ("", "%20") 
         except ValueError as err:
             raise ValidationError('Invalid Response_contnt_type.', 400) from err
 
