@@ -41,6 +41,7 @@ from django.utils.timezone import is_aware
 
 
 from django.utils.functional import Promise
+import math
 
 _DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql+pyodbc', 'oracle', 'sqlite'}
 _HTTP_SCHEMAS = {'http', 'https'}
@@ -283,19 +284,22 @@ def get_resource_data_feature( uri: str,
         print(item)
         for i, column in enumerate(item):
               if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)):
-                  if  re.search(re_decimal, str(column)) != None:
+                  parte_decimal, parte_entera = math.modf(column)
+                  if (parte_decimal) == 0.0:
                       item[i] = int(column) 
                   else:
                       item[i] = str(column) 
               elif isinstance(column, float):
-                  if re.search(re_decimal, str(column)) != None:
+                 parte_decimal, parte_entera = math.modf(column)
+                 if (parte_decimal) == 0.0:
                       item[i] = int(column)  
-                  else:
+                 else:
                       item[i] = str(column)
               elif isinstance(column, Numeric):
-                  if re.search(re_decimal, str(column)) != None:
+                 parte_decimal, parte_entera = math.modf(column)
+                 if (parte_decimal) == 0.0:
                       item[i] = int(column) 
-                  else:
+                 else:
                       item[i] = str(column)
               elif isinstance(column, datetime.datetime):
                     r = column.isoformat()
@@ -405,12 +409,15 @@ def get_resource_data(*,
   
     for item in data:
         for column in item:
-            if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)) and  re.search(re_decimal, str(column)) != None:
-                    dataTempTuplas.append(int(column))
-            elif isinstance(column, float) and re.search(re_decimal, str(column)) != None:
-                    dataTempTuplas.append(int(column))
-            elif isinstance(column, Numeric) and re.search(re_decimal, str(column)) != None:
-                    dataTempTuplas.append(int(column))
+            if (isinstance(column, (decimal.Decimal, uuid.UUID, Promise))) or (isinstance(column, float)) or (isinstance(column, Numeric)):
+                    parte_decimal, parte_entera = math.modf(column)
+                    if (parte_decimal) == 0.0:
+                        dataTempTuplas.append(int(column))
+                    else:
+                        dataTempTuplas.append(sanitize_control_charcters(column))
+                    
+
+
             else: 
                     dataTempTuplas.append(sanitize_control_charcters(column))
                     
