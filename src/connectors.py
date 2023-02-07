@@ -203,8 +203,8 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
 #Add feature to sanitize text include control characters
 def sanitize_control_charcters(text):
     
-    if re.search(r'[\x00-\x08\x0B-\x0C\x0E-\x1F\n]]', str(text)):
-        return re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F\n]', " ", text)
+    if re.search(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]', str(text)):
+        return re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]', " ", text)
     else:
         return(text)
 
