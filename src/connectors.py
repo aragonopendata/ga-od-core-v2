@@ -500,10 +500,12 @@ def validate_uri(uri: str) -> None:
 
 def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
     if not charset:
+        
         charset = cchardet.detect(data)['encoding']
-   
-    data = data.decode(charset,errors="ignore")
-   
+    try:
+        data = data.decode(charset)
+    except:
+        data = data.decode('utf-8', 'ignore')
     dialect = csv.Sniffer().sniff(data)
     return list(csv.DictReader(StringIO(data), dialect=dialect))
 
