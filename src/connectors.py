@@ -499,11 +499,11 @@ def validate_uri(uri: str) -> None:
 
 
 def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
-    print( charset)
+    
     if not charset:
     
-        charset = cchardet.detect(data)['encoding'] 
-        print(charset)
+        #charset = cchardet.detect(data)['encoding'] 
+        #pasamos a charset 8 porque sino identifica como gb18030 - o ISO15 que no es capaz de decodificar
         charset= 'utf-8'
     print(charset)
     try:
