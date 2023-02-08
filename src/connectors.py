@@ -499,14 +499,17 @@ def validate_uri(uri: str) -> None:
 
 
 def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
+    print( charset)
     if not charset:
-        
-        charset = cchardet.detect(data)['encoding']
+    
+        charset = cchardet.detect(data)['encoding'] 
+        print(charset)
+        charset= 'utf-8'
     print(charset)
     try:
-        data = data.decode(charset)
+        data = data.decode(charset,'ignore')
     except:
-        data = data.decode('gbk', 'ignore')
+        data = data.decode('utf-8', 'ignore')
     dialect = csv.Sniffer().sniff(data)
     return list(csv.DictReader(StringIO(data), dialect=dialect))
 
