@@ -205,7 +205,11 @@ def sanitize_control_charcters(text):
     
     if re.search(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]', str(text)):
         text=  re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]', "", text)
-    return(text.decode('utf-8'))
+    try:
+        text =  text.decode('utf-8')
+    except:
+        pass
+    return text
 def get_GeoJson_resource(uri: str, object_location: Optional[str],
                          object_location_schema: Optional[str]) -> Boolean:
 
