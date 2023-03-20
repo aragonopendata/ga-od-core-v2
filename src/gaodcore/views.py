@@ -93,7 +93,7 @@ def get_response_csv(data:ReturnList)-> HttpResponse:
     return response
 
 class DownloadView(APIViewMixin):
-    """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón."""
+    """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón. If JSON response type is selected and the view has a shape field the response will be in GEOJSON format"""
     _PREVIEW_LIMIT = 1000
     _DOWNLOAD_ENDPOINT = ('/GA_OD_Core/download', '/GA_OD_Core/download')
 
@@ -167,7 +167,9 @@ class DownloadView(APIViewMixin):
                                                type=openapi.TYPE_INTEGER),
                          ])
     def get(self, request: Request, **_kwargs) -> Response:
-        """This method allows get serialized public data from databases or APIs of Gobierno de Aragón."""
+        """ Este metodo permite acceder a los datos publicos de las bases de datos o APIs del Gobierno de Aragón. Si se selecciona el formato JSON y alguno de los campos que devuelve la función es tipo "shape" la respuesta sera en formato GEOJSON.
+        
+        This method allows get serialized public data from databases or APIs of Gobierno de Aragón. If JSON format is chosen and any field type returned by the function is "shape", the answer format will be GEOJSON"""
         resource_id = self._get_resource_id(request)
         offset = self._get_offset(request)
         limit = self._get_limit(request)
@@ -416,8 +418,8 @@ class DownloadView(APIViewMixin):
 
         return format
 
-class ShowColumnsView(XLSXFileMixin, APIViewMixin):
-    """This view allows to get datatype of each column from a resource."""
+class ShowColumnsView(XLSXFileMixin, APIViewMixin): 
+    """This view allows to get datatype of each column from a resource. If the view has a shape file download and preview endpoints' response will be in geojson format if JSON response type is selected- """
     @staticmethod
     @swagger_auto_schema(tags=['default'],
                          manual_parameters=[
@@ -431,7 +433,12 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
                                                type=openapi.TYPE_NUMBER),
                          ])
     def get(request: Request, **_kwargs) -> Response:
-        """This method allows to get datatype of each column from a resource."""
+        """
+        Devuelve todos los campos de un recurso/vista. 
+        
+        Si la vista tiene algun campo tipo "shape" en las funciones preview y download la respuestas JSON se devolveran en formato GEOJSON.
+        
+        This view allows to get datatype of each column from a resource. If the view has any "shape" field in the preview and download functions, the JSON responses will be returned in GEOJSON format. """
         resource_id = request.query_params.get('resource_id') or request.query_params.get('view_id')
         resource_config = _get_resource(resource_id=resource_id)
         data = _get_data_public_error(get_resource_columns,
@@ -443,11 +450,16 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
 
 
 class ResourcesView(XLSXFileMixin, APIViewMixin):  # pylint: disable=too-few-public-methods
-    """This view allow to get a list of public resources."""
+    """
+    Devuelve el listado de todas las vistas que se pueden consultar.     
+    This view allow to get a list of public resources."""
     @staticmethod
     @swagger_auto_schema(tags=['default'])
     def get(_: Request, **_kwargs) -> Response:
-        """This view allow to get a list of public resources."""
+        """ 
+        Devuelve el listado de todas las vistas que se pueden consultar.
+        
+        This view allow to get a list of public resources."""
         resources = ({
             'id': resource.id,
             'name': resource.name,
