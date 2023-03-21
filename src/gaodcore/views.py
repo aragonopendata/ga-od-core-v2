@@ -434,9 +434,7 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
                          ])
     def get(request: Request, **_kwargs) -> Response:
         """
-        Devuelve todos los campos de un recurso/vista. 
-        
-        Si la vista tiene algun campo tipo "shape" en las funciones preview y download la respuestas JSON se devolveran en formato GEOJSON.
+        Devuelve todos los campos de un recurso/vista. Si la vista tiene algun campo tipo "shape" en las funciones preview y download la respuestas JSON se devolveran en formato GEOJSON.
         
         This view allows to get datatype of each column from a resource. If the view has any "shape" field in the preview and download functions, the JSON responses will be returned in GEOJSON format. """
         resource_id = request.query_params.get('resource_id') or request.query_params.get('view_id')
@@ -458,7 +456,6 @@ class ResourcesView(XLSXFileMixin, APIViewMixin):  # pylint: disable=too-few-pub
     def get(_: Request, **_kwargs) -> Response:
         """ 
         Devuelve el listado de todas las vistas que se pueden consultar.
-        
         This view allow to get a list of public resources."""
         resources = ({
             'id': resource.id,
