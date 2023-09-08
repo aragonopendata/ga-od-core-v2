@@ -510,7 +510,11 @@ def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
         data = data.decode(charset,'ignore')
     except:
         data = data.decode('utf-8', 'ignore')
-    dialect = csv.Sniffer().sniff(data)
+    if data:
+        dialect = csv.Sniffer().sniff(data)
+    else:
+        dialect = "excel"
+    
     return list(csv.DictReader(StringIO(data), dialect=dialect))
 
 
@@ -557,19 +561,25 @@ def _get_engine_from_api(uri: str) -> Engine:
                 raise DriverConnectionError('The url could not be reached.')
     except (HTTPError, URLError) as err:
         raise DriverConnectionError('The url could not be reached.') from err
-    max_key = max(data, key=len).keys()
-    for item in data:
-        if len(max_key) > len(item.keys()):
-            for k in max_key:
-                item.setdefault(k, None)
+    if data:
+        max_key = max(data, key=len).keys()
+        for item in data:
+            if len(max_key) > len(item.keys()):
+                for k in max_key:
+                    item.setdefault(k, None)
     engine = create_engine("sqlite:///:memory:", echo=True, future=True)
     metadata = MetaData()
-    table = _get_table_from_dict(data, engine, metadata)
-    session_maker = sessionmaker(bind=engine)
-    session = session_maker()
-    session.execute(table.insert(), data)
-    session.commit()
-    session.close()
+    if data:
+        table = _get_table_from_dict(data, engine, metadata)
+    else:
+        table = Table(_TEMPORAL_TABLE_NAME, metadata, Column('id', Integer, primary_key = True), prefixes=['TEMPORARY'])
+        metadata.create_all(engine)
+    if data:
+        session_maker = sessionmaker(bind=engine)
+        session = session_maker()
+        session.execute(table.insert(), data)
+        session.commit()
+        session.close()
     return engine
 
 
