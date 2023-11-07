@@ -31,8 +31,8 @@ from django.utils.timezone import is_aware
 import datetime
 import decimal
 import uuid
-
-
+import pandas as pd
+import logging
 
 
 
@@ -84,6 +84,14 @@ def get_return_list(data: Iterable[dict]) -> ReturnList:
 
     return return_list
 
+def modify_header(return_list, columns_name):
+
+    if len(columns_name) > 0 and len(columns_name) == len(list(return_list[0].keys())):
+        df=pd.DataFrame(return_list)
+        columns_modification_dict = dict(zip(list(return_list[0].keys()), columns_name))
+        df=df.rename(index=str, columns=columns_modification_dict)
+        return df.to_dict('records')
+    return return_list
 
 def download_check(response: Union[aiohttp.client_reqrep.ClientResponse, requests.Response]) -> bool:
     """Check if response of aiohttp or response of request is correct."""

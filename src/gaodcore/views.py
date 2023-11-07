@@ -15,7 +15,7 @@ from connectors import get_resource_data, get_resource_columns, NoObjectError, D
     validator_max_excel_allowed, TooManyRowsErrorExcel, get_resource_data_feature, get_GeoJson_resource
 from gaodcore.negotations import LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
-from utils import get_return_list
+from utils import get_return_list, modify_header
 from views import APIViewMixin
 import xlsxwriter
 import io
@@ -175,6 +175,7 @@ class DownloadView(APIViewMixin):
         limit = self._get_limit(request)
         fields = self._get_fields(request)
         filters = self._get_filters(request)
+        columns = self._get_columns(request)
         like = self._get_like(request)
         sort = self._get_sort(request)
         format= self._get_format(request)
@@ -230,13 +231,13 @@ class DownloadView(APIViewMixin):
         
         
         if format == "xlsx":
-            response = get_response_xlsx(get_return_list(data))
+            response = get_response_xlsx(modify_header(get_return_list(data),columns))
         elif format == "csv":  
-            response = get_response_csv(get_return_list(data))
+            response = get_response_csv(modify_header(get_return_list(data),columns))
         elif featureCollection:
              response = Response(data)
         else: 
-            response = Response(get_return_list(data))
+            response = Response(modify_header(get_return_list(data),columns))
         
         if self.is_download_endpoint(request) or format == "xlsx":
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
@@ -262,16 +263,28 @@ class DownloadView(APIViewMixin):
         fields_param = ""
         if request.query_params.get('fields'):
             fields_param = request.query_params.get('fields')
-        elif request.query_params.get('columns'):
-            fields_param = request.query_params.get('columns')
-
         if fields_param:
             if "," not in fields_param:
-                fields = request.query_params.getlist('fields') or request.query_params.getlist('columns', [])
+                fields = request.query_params.getlist('fields')
             else:
                 for field in fields_param.split(','):
                     fields.append(field)
         return fields
+    
+    @staticmethod
+    def _get_columns(request: Request):
+        #Las columnas se pueden obtener tanto con el parametro columns como con el parametro fields. El formato de este parametro puede ser fields=field1,field2 o fields=field1 & fields=fields2 (este es el que utiliza el swagger)
+        columns = []
+        columns_param = ""
+        if request.query_params.get('columns'):
+            columns_param = request.query_params.get('columns')
+        if columns_param:
+            if "," not in columns_param:
+                columns = request.query_params.getlist('columns', [])
+            else:
+                for field in columns_param.split(','):
+                    columns.append(field)
+        return columns
 
     @staticmethod
     def _get_resource_id(request: Request) -> int:
