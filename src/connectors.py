@@ -370,10 +370,10 @@ def get_session_data( uri: str,
     
     if parsed.scheme in ['mssql+pyodbc']:  
         data = session.query(model).filter_by(**filters).filter(*filters_args).with_entities(
-              *[model.c[col.name].label(col.name) for col in model.columns]).all()
+              *[model.c[col.name].label(col.name) for col in columns]).all()
     else:
          data = session.query(model).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
-              *[model.c[col.name].label(col.name) for col in model.columns]).offset(offset).limit(limit).all()
+              *[model.c[col.name].label(col.name) for col in columns]).offset(offset).limit(limit).all()
     
     session.close()
     engine.dispose()

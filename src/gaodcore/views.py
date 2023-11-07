@@ -173,7 +173,7 @@ class DownloadView(APIViewMixin):
         resource_id = self._get_resource_id(request)
         offset = self._get_offset(request)
         limit = self._get_limit(request)
-        fields = request.query_params.getlist('fields') or request.query_params.getlist('columns', [])
+        fields = self._get_fields(request)
         filters = self._get_filters(request)
         like = self._get_like(request)
         sort = self._get_sort(request)
@@ -254,6 +254,24 @@ class DownloadView(APIViewMixin):
 
     def is_download_endpoint(self, request: Request):
         return any((request.get_full_path().startswith(endpoint) for endpoint in self._DOWNLOAD_ENDPOINT))
+
+    @staticmethod
+    def _get_fields(request: Request):
+        #Las columnas se pueden obtener tanto con el parametro columns como con el parametro fields. El formato de este parametro puede ser fields=field1,field2 o fields=field1 & fields=fields2 (este es el que utiliza el swagger)
+        fields = []
+        fields_param = ""
+        if request.query_params.get('fields'):
+            fields_param = request.query_params.get('fields')
+        elif request.query_params.get('columns'):
+            fields_param = request.query_params.get('columns')
+
+        if fields_param:
+            if "," not in fields_param:
+                fields = request.query_params.getlist('fields') or request.query_params.getlist('columns', [])
+            else:
+                for field in fields_param.split(','):
+                    fields.append(field)
+        return fields
 
     @staticmethod
     def _get_resource_id(request: Request) -> int:
