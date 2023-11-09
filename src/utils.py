@@ -91,6 +91,9 @@ def modify_header(return_list, columns_name):
         columns_modification_dict = dict(zip(list(return_list[0].keys()), columns_name))
         df=df.rename(index=str, columns=columns_modification_dict)
         return df.to_dict('records')
+    elif len(columns_name) > 0:
+        raise ValidationError("El número de columnas tiene que ser igual al numero de fields o al número total de columnas por defecto", 400) from TooManyRowsErrorExcel
+
     return return_list
 
 def download_check(response: Union[aiohttp.client_reqrep.ClientResponse, requests.Response]) -> bool:
