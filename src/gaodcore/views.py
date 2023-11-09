@@ -177,10 +177,6 @@ class DownloadView(APIViewMixin):
         filters = self._get_filters(request)
         columns = self._get_columns(request)
 
-        if columns and len(columns) != len(fields):
-            raise ValidationError("El número de columnas tiene que ser igual al numero de fields o al número total de columnas por defecto", 400) from TooManyRowsErrorExcel
-
-
         like = self._get_like(request)
         sort = self._get_sort(request)
         format= self._get_format(request)
