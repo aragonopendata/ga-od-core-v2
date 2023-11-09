@@ -167,15 +167,20 @@ class DownloadView(APIViewMixin):
                                                type=openapi.TYPE_INTEGER),
                          ])
     def get(self, request: Request, **_kwargs) -> Response:
-        """ Este metodo permite acceder a los datos publicos de las bases de datos o APIs del Gobierno de Aragón. Si se selecciona el formato JSON y alguno de los campos que devuelve la función es tipo "shape" la respuesta sera en formato GEOJSON.
+        """ Este metodo permite acceder a los datos publicos de las bases de datos o APIs del Gobierno de Aragón. Si se selecciona el formato JSON y alguno de los campos que devuelve la función es tipo "shape" la respuesta sera en formato GEOJSON. Los parametros "fields" y "columns" no funcionan cuando se solicitan los datos en formato GEOJSON.
         
-        This method allows get serialized public data from databases or APIs of Gobierno de Aragón. If JSON format is chosen and any field type returned by the function is "shape", the answer format will be GEOJSON"""
+        This method allows get serialized public data from databases or APIs of Gobierno de Aragón. If JSON format is chosen and any field type returned by the function is "shape", the answer format will be GEOJSON. If data is in Geojson format, "fields" and "columns" parameters will not work."""
         resource_id = self._get_resource_id(request)
         offset = self._get_offset(request)
         limit = self._get_limit(request)
         fields = self._get_fields(request)
         filters = self._get_filters(request)
         columns = self._get_columns(request)
+
+        if columns and len(columns) != len(fields):
+            raise ValidationError("El número de columnas tiene que ser igual al numero de fields o al número total de columnas por defecto", 400) from TooManyRowsErrorExcel
+
+
         like = self._get_like(request)
         sort = self._get_sort(request)
         format= self._get_format(request)
