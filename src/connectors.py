@@ -209,6 +209,8 @@ def sanitize_control_charcters(text):
         text =  text.decode('utf-8')
     except:
         pass
+    if isinstance(text,str):
+        text = text.strip()
     return text
 def get_GeoJson_resource(uri: str, object_location: Optional[str],
                          object_location_schema: Optional[str]) -> Boolean:
