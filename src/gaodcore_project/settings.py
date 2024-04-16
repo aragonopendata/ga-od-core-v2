@@ -38,7 +38,7 @@ ALLOWED_HOSTS = CONFIG.common_config.allowed_hosts
 INSTALLED_APPS = [
     'django.contrib.admin', 'django.contrib.auth', 'django.contrib.contenttypes', 'django.contrib.sessions',
     'django.contrib.messages', 'django.contrib.staticfiles', 'gaodcore', 'gaodcore_manager', 'drf_yasg',
-    'rest_framework', 'axes'
+    'rest_framework', 'axes', 'easyaudit',
 ]
 
 MIDDLEWARE = [
@@ -51,6 +51,8 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'axes.middleware.AxesMiddleware',
+    'easyaudit.middleware.easyaudit.EasyAuditMiddleware',
+
 ]
 
 AUTHENTICATION_BACKENDS = [
@@ -169,3 +171,5 @@ CACHES = {
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+DJANGO_EASY_AUDIT_REGISTERED_URLS = [r'^/GA_OD_Core/views', r'^/GA_OD_Core/preview', r'^/GA_OD_Core/show_columns', r'/GA_OD_Core/download', r'/GA_OD_Core_admin/manager/connector-config', r'/GA_OD_Core_admin/manager/resource-config']
