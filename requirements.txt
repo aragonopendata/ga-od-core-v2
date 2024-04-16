@@ -25,3 +25,4 @@ GeoAlchemy2~=0.11.1
 shapely~=1.8.1.post1
 shapely-geojson~=0.0.1
 openpyxl~=3.0.10
+django-easy-audit
