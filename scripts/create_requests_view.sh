@@ -1,6 +1,6 @@
 set -e
 export PGPASSWORD=$POSTGRES_PASSWORD
-psql -h postgres -p 5432 -d $POSTGRES_DB  -U $POSTGRES_USER  -c "create OR REPLACE view public.v_requests_gaodcore as SELECT datetime, url,
+psql -h $POSTGRESQL_HOST -p $POSTGRESQL_PORT -d $POSTGRES_DB  -U $POSTGRES_USER  -c "create OR REPLACE view public.v_requests_gaodcore as SELECT datetime, url,
 				 case
 				 	when query_string!='' and query_string LIKE '%resource_id=%&%' and (url = '/GA_OD_Core/preview' or url = '/GA_OD_Core/download')
 				 		then
