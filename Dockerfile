@@ -36,10 +36,12 @@ RUN apt-get install -y unixodbc unixodbc-dev freetds-dev freetds-bin  freetds-de
 RUN apt-get install -y libgssapi-krb5-2
 RUN apt install -y wget
 
+RUN apt-get update
+RUN apt install postgresql-client -y
 
 RUN echo "[FreeTDS]\n\ 
-Description = FreeTDS unixODBC Driver\n\
-Driver = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so" >> /etc/odbcinst.ini
+    Description = FreeTDS unixODBC Driver\n\
+    Driver = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so" >> /etc/odbcinst.ini
 RUN apt clean -y
 RUN cp /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so /usr/local/lib/
 
@@ -48,11 +50,13 @@ WORKDIR $GAODCORE_DIR
 
 
 # Install MySQL
-RUN apt-get install libmariadb-dev
+RUN apt-get install libmariadb-dev -y
 
 COPY requirements.txt ./
 RUN pip install -r requirements.txt
 
 COPY ./src .
+COPY ./scripts ./scripts
+RUN chmod +x scripts/create_requests_view.sh 
 
-CMD bash -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && python manage.py createcachetable && gunicorn gaodcore_project.wsgi --bind :8000 --workers 9 --timeout 240"
+CMD bash -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && python manage.py createcachetable && ./scripts/create_requests_view.sh  && gunicorn gaodcore_project.wsgi --bind :8000 --workers 9 --timeout 240"
