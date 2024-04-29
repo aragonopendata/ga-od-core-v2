@@ -25,6 +25,12 @@ psql -h $POSTGRESQL_HOST -p $POSTGRESQL_PORT -d $POSTGRES_DB  -U $POSTGRES_USER 
 				 as resource_name,
                  query_string,
                  user_id,
-                 remote_ip 
+                 remote_ip,
+                 case
+    				when ear.remote_ip <> ''::text and ear.remote_ip LIKE '%,%'::text
+    			then split_part(remote_ip,',',1)
+    			else 
+    				remote_ip
+    			 end as ip
                  from easyaudit_requestevent ear;
 "
