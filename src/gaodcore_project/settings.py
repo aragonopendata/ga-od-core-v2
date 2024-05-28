@@ -173,3 +173,4 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 DJANGO_EASY_AUDIT_REGISTERED_URLS = [r'^/GA_OD_Core/views', r'^/GA_OD_Core/preview', r'^/GA_OD_Core/show_columns', r'/GA_OD_Core/download', r'/GA_OD_Core_admin/manager/connector-config', r'/GA_OD_Core_admin/manager/resource-config']
+DJANGO_EASY_AUDIT_REMOTE_ADDR_HEADER = 'HTTP_X_FORWARDED_FOR'
