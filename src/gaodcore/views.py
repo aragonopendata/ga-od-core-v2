@@ -2,6 +2,8 @@ import json
 import io
 import csv
 from json.decoder import JSONDecodeError
+import sys
+import copy
 from typing import Optional, Dict, Any, List, Callable
 
 from drf_renderer_xlsx.mixins import XLSXFileMixin
@@ -12,9 +14,9 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from connectors import get_resource_data, get_resource_columns, NoObjectError, DriverConnectionError, \
     NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError, MimeTypeError, \
-    validator_max_excel_allowed, TooManyRowsErrorExcel, get_resource_data_feature, get_GeoJson_resource
+    validator_max_excel_allowed, TooManyRowsErrorExcel, get_resource_data_feature, get_GeoJson_resource, update_resource_size
 from gaodcore.negotations import LegacyContentNegotiation
-from gaodcore_manager.models import ResourceConfig
+from gaodcore_manager.models import ResourceConfig, ResourceSizeConfig
 from utils import get_return_list, modify_header
 from views import APIViewMixin
 import xlsxwriter
@@ -230,15 +232,22 @@ class DownloadView(APIViewMixin):
                                       fields=fields,
                                       sort=sort)
         
-        
         if format == "xlsx":
-            response = get_response_xlsx(modify_header(get_return_list(data),columns))
-        elif format == "csv":  
-            response = get_response_csv(modify_header(get_return_list(data),columns))
+            data = get_return_list(data)
+            update_resource_size(resource_id=resource_id, registries=len(data),size=sys.getsizeof(data))
+            response = get_response_xlsx(modify_header(data,columns))
+        elif format == "csv": 
+            data = get_return_list(data)
+            update_resource_size(resource_id=resource_id, registries=len(data),size=sys.getsizeof(data))
+ 
+            response = get_response_csv(modify_header(data,columns))
         elif featureCollection:
              response = Response(data)
         else: 
-            response = Response(modify_header(get_return_list(data),columns))
+            data = get_return_list(data)
+            update_resource_size(resource_id=resource_id, registries=len(data),size=sys.getsizeof(data))
+
+            response = Response(modify_header(data,columns))
         
         if self.is_download_endpoint(request) or format == "xlsx":
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name

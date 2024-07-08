@@ -43,6 +43,11 @@ from django.utils.timezone import is_aware
 from django.utils.functional import Promise
 import math
 
+from gaodcore_project.settings import CONFIG
+from django.conf import settings
+from gaodcore_manager.models import ResourceConfig, ResourceSizeConfig
+from gaodcore_manager import models
+
 _DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql+pyodbc', 'oracle', 'sqlite'}
 _HTTP_SCHEMAS = {'http', 'https'}
 _RESOURCE_MAX_ROWS = 1048576
@@ -444,6 +449,16 @@ def get_resource_data(*,
 
     return (dict(zip([column.name for column in columns], row)) for row in data)
 
+
+def update_resource_size(resource_id, registries, size):
+    try:
+        resource = ResourceConfig.objects.select_related().get(id=resource_id, enabled=True, connector_config__enabled=True)
+    except ResourceConfig.DoesNotExist as err:
+        raise ValidationError("Resource not exists or is not available", 400) from err
+    
+    rsc = ResourceSizeConfig(registries=registries,size=size)
+    rsc.resource_id=resource
+    rsc.save()
 
 def _get_columns(columns_dict: Dict[str, Column], column_names: List[str]) -> Iterable[Column]:
     """Get SQLAlchemy column instances from column names."""
