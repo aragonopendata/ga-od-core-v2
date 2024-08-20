@@ -1,11 +1,11 @@
 set -e
 export PGPASSWORD=$POSTGRES_PASSWORD
-psql -h $POSTGRESQL_HOST -p $POSTGRESQL_PORT -d $POSTGRES_DB  -U $POSTGRES_USER  -c " drop materialized view if exists public.v_requests_gaodcore;
+psql -h $POSTGRESQL_HOST -p $POSTGRESQL_PORT -d $POSTGRES_DB  -U $POSTGRES_USER  -c "
 			drop materialized view if exists public.v_resources_count;
 			drop materialized view if exists public.v_ip_count;
 			drop materialized view if exists public.v_resources_ip;
-
-            create OR REPLACE view public.v_requests_gaodcore as SELECT datetime, url,
+                        drop materialized view if exists public.v_requests_gaodcore;
+            CREATE materialized VIEW public.v_requests_gaodcore as SELECT datetime, url,
 				 case
 				 	when query_string!='' and query_string ~ 'resource_id=[0-9]*&' and (url = '/GA_OD_Core/preview' or url = '/GA_OD_Core/download')
 				 		then
@@ -42,19 +42,5 @@ psql -h $POSTGRESQL_HOST -p $POSTGRESQL_PORT -d $POSTGRES_DB  -U $POSTGRES_USER 
  CREATE materialized VIEW public.v_ip_count as select ip, count(ip) from v_requests_gaodcore vrg  group by ip  ;
  create materialized view public.v_resources_ip as select resource_name, count(distinct(ip)) as numero_llamadas from v_requests_gaodcore vrg group by resource_name;
  
-
-CREATE OR REPLACE FUNCTION public.sp_update_materialized_views()
- RETURNS void
- LANGUAGE plpgsql
-AS $function$
-BEGIN
-	REFRESH MATERIALIZED VIEW public.v_requests_gaodcore;
-	REFRESH MATERIALIZED VIEW public.v_resources_count;
-	REFRESH MATERIALIZED VIEW public.v_ip_count;
-	REFRESH MATERIALIZED VIEW public.v_resources_ip;
-END;
-$function$
-;
-
 
 "
