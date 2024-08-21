@@ -12,7 +12,13 @@ interval = os.getenv("INTERVAL", "5 days")
 
 
 def get_connection_url() -> str:
-    return f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}"
+    username = os.getenv("POSTGRES_USER")
+    password = os.getenv("POSTGRES_PASSWORD")
+    host = os.getenv("POSTGRESQL_HOST")
+    port = os.getenv("POSTGRESQL_PORT")
+    db = os.getenv("POSTGRES_DB")
+
+    return f"postgresql://{username}:{password}@{host}:{port}/{db}"
 
 
 def call_resource_api(resource_id: int) -> None:
