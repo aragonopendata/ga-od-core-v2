@@ -12,7 +12,7 @@ interval = os.getenv("INTERVAL", "5 days")
 
 
 def get_connection_url() -> str:
-    return f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRESQL_HOST')}:{os.getenv('POSTGRESQL_PORT')}/{os.getenv('POSTGRES_DB')}"
+    return f"postgresql://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}"
 
 
 def call_resource_api(resource_id: int) -> None:
@@ -78,12 +78,15 @@ def main():
         print(f"Error connecting to database: {e}")
         exit(1)
 
-    print("Adding new resources")
-    update_new_resources(conn)
-    print("Updating resources")
-    update_resources(conn, interval)
-
-    conn.close()
+    try:
+        print("Adding new resources")
+        update_new_resources(conn)
+        print("Updating resources")
+        update_resources(conn, interval)
+    except KeyboardInterrupt:
+        print("Exiting...")
+    finally:
+        conn.close()
 
 
 if __name__ == '__main__':
