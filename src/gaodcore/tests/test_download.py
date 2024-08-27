@@ -144,8 +144,8 @@ def test_download_limit_error(endpoint: str, accept_error, client: Client, full_
 def test_download_pagination(endpoint: str, client: Client, full_example):
     download_response = client.get(endpoint, {
         'resource_id': full_example.resources.table.id,
-        '_page': "1",
-        '_page_size': "1"
+        '_page': "2",
+        '_pageSize': "1"
     })
 
     with open(os.path.join(os.path.dirname(__file__), "download_postgresql.json"), r'rb') as file:
@@ -158,8 +158,8 @@ def test_download_pagination(endpoint: str, client: Client, full_example):
 def test_download_pagination_overflow(endpoint: str, client: Client, full_example):
     download_response = client.get(endpoint, {
         'resource_id': full_example.resources.table.id,
-        '_page': "2",
-        '_page_size': "1"
+        '_page': "3",
+        '_pageSize': "1"
     })
 
     assert [] == json.loads(download_response.content)
@@ -170,7 +170,7 @@ def test_download_pagination_page_error(endpoint: str, accept_error, client: Cli
     download_response = client.get(endpoint, {
         'resource_id': full_example.resources.table.id,
         '_page': "a",
-        '_page_size': "1"
+        '_pageSize': "1"
     },
                                    HTTP_ACCEPT=accept_error)
 
@@ -183,12 +183,11 @@ def test_download_pagination_page_size_error(endpoint: str, accept_error, client
     download_response = client.get(endpoint, {
         'resource_id': full_example.resources.table.id,
         '_page': "1",
-        '_page_size': "a"
-    },
-                                   HTTP_ACCEPT=accept_error)
+        '_pageSize': "a"
+    }, HTTP_ACCEPT=accept_error)
 
     assert download_response.status_code == 400
-    validate_error(download_response.content, 'Value of _page_size is not a number.', accept_error)
+    validate_error(download_response.content, 'Value of _pageSize is not a number.', accept_error)
 
 
 @pytest.mark.django_db
