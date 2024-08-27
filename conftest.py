@@ -245,7 +245,7 @@ def compare_files(directory: str, file_without_extension, mimetype: str, content
                 elif mimetype == 'text/csv':
                     assert [row for row in DictReader(f)] == [row for row in DictReader(io.StringIO(content.decode()))]
                 elif mimetype == 'application/yaml':
-                    assert yaml.load(f.read()) == yaml.load(content)
+                    assert yaml.load(f.read(), Loader=yaml.SafeLoader) == yaml.load(content, Loader=yaml.SafeLoader)
                 else:
                     raise NotImplementedError
     else:
