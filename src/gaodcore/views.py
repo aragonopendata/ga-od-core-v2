@@ -414,8 +414,8 @@ class DownloadView(APIViewMixin):
             raise ValidationError('Invalid format: eg. {“key1”: “a”, “key2”: “b”}', 400)
 
         for _, value in filters.items():
-            if type(value) not in (str, int, float, bool, None) and value is not None:
-                raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Null or None', 400)
+            if type(value) not in (str, int, float, bool, dict, None) and value is not None:
+                raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Dict, Null or None', 400)
         return filters
     
     @staticmethod
