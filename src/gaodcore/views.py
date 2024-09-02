@@ -2,6 +2,8 @@ import json
 import io
 import csv
 from json.decoder import JSONDecodeError
+import sys
+import copy
 from typing import Optional, Dict, Any, List, Callable
 
 from drf_renderer_xlsx.mixins import XLSXFileMixin
@@ -12,16 +14,18 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from connectors import get_resource_data, get_resource_columns, NoObjectError, DriverConnectionError, \
     NotImplementedSchemaError, OrderBy, FieldNoExistsError, SortFieldNoExistsError, MimeTypeError, \
-    validator_max_excel_allowed, TooManyRowsErrorExcel, get_resource_data_feature, get_GeoJson_resource
+    validator_max_excel_allowed, TooManyRowsErrorExcel, get_resource_data_feature, get_GeoJson_resource, update_resource_size
 from gaodcore.negotations import LegacyContentNegotiation
-from gaodcore_manager.models import ResourceConfig
+from gaodcore_manager.models import ResourceConfig, ResourceSizeConfig
 from utils import get_return_list, modify_header
 from views import APIViewMixin
 import xlsxwriter
 import io
 from django.http import HttpResponse 
 from rest_framework.utils.serializer_helpers import ReturnList
+import logging
 
+logger = logging.getLogger(__name__)
 
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
 
@@ -91,6 +95,7 @@ def get_response_csv(data:ReturnList)-> HttpResponse:
             writer.writerow(csv_header)  
         writer.writerow(csv_data)  
     return response
+
 
 class DownloadView(APIViewMixin):
     """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón. If JSON response type is selected and the view has a shape field the response will be in GEOJSON format"""
@@ -167,9 +172,14 @@ class DownloadView(APIViewMixin):
                                                type=openapi.TYPE_INTEGER),
                          ])
     def get(self, request: Request, **_kwargs) -> Response:
-        """ Este metodo permite acceder a los datos publicos de las bases de datos o APIs del Gobierno de Aragón. Si se selecciona el formato JSON y alguno de los campos que devuelve la función es tipo "shape" la respuesta sera en formato GEOJSON. Los parametros "fields" y "columns" no funcionan cuando se solicitan los datos en formato GEOJSON.
+        """ Este metodo permite acceder a los datos publicos de las bases de datos o APIs del Gobierno de Aragón.
+         Si se selecciona el formato JSON y alguno de los campos que devuelve la función es tipo "shape" la respuesta
+         sera en formato GEOJSON. Los parametros "fields" y "columns" no funcionan cuando se solicitan los datos en
+         formato GEOJSON.
         
-        This method allows get serialized public data from databases or APIs of Gobierno de Aragón. If JSON format is chosen and any field type returned by the function is "shape", the answer format will be GEOJSON. If data is in Geojson format, "fields" and "columns" parameters will not work."""
+        This method allows get serialized public data from databases or APIs of Gobierno de Aragón. If JSON format is
+        chosen and any field type returned by the function is "shape", the answer format will be GEOJSON. If data is
+        in Geojson format, "fields" and "columns" parameters will not work."""
         resource_id = self._get_resource_id(request)
         offset = self._get_offset(request)
         limit = self._get_limit(request)
@@ -182,8 +192,10 @@ class DownloadView(APIViewMixin):
         format= self._get_format(request)
         
         resource_config = _get_resource(resource_id=resource_id)
+        logger.info('Downloading resource: %s', resource_config)
 
         if format == "xlsx":
+            logger.info('Downloading resource in xlsx format: %s', resource_config)
             if not validator_max_excel_allowed(uri=resource_config.connector_config.uri,
                                        object_location=resource_config.object_location,
                                        object_location_schema=resource_config.object_location_schema,
@@ -196,16 +208,23 @@ class DownloadView(APIViewMixin):
                 raise ValidationError("An xlsx cannot be generated with so many lines, please request it in another format", 407) from TooManyRowsErrorExcel
            #    raise ValidationError({'error' : 'An xlsx cannot be generated with so many lines, please request it in another format'})    
 
-   
-        
-        
-        reourceGeojon = get_GeoJson_resource(uri=resource_config.connector_config.uri,object_location=resource_config.object_location,object_location_schema=resource_config.object_location_schema)
+        try:
+            reourceGeojon = get_GeoJson_resource(uri=resource_config.connector_config.uri,object_location=resource_config.object_location,object_location_schema=resource_config.object_location_schema)
+        except DriverConnectionError as err:
+            logger.warning('Connection is not available. : %s', err)
+            logger.warning('Resource: %s, Uri: %s - Location: %s - Schema: %s', resource_id, resource_config.connector_config.uri, resource_config.object_location, resource_config.object_location_schema)
+            raise ValidationError('Connection is not available.', 500) from err
+        except NoObjectError as err:
+            logger.warning('Object is not available. : %s', err)
+            logger.warning('Resource: %s, Uri: %s - Location: %s - Schema: %s', resource_id, resource_config.connector_config.uri, resource_config.object_location, resource_config.object_location_schema)
+            raise ValidationError('Object is not available.', 500) from err
         if reourceGeojon and format == 'json':
             featureCollection= True
         else:
             featureCollection = False
 
         if featureCollection:
+            logger.info('Downloading resource in geojson format. FeatureCollection')
             data = _get_data_public_error(get_resource_data_feature,
                                       uri=resource_config.connector_config.uri,
                                       object_location=resource_config.object_location,
@@ -219,6 +238,7 @@ class DownloadView(APIViewMixin):
             
         
         else:
+            logger.info('Downloading resource in json format.')
             data = _get_data_public_error(get_resource_data,
                                       uri=resource_config.connector_config.uri,
                                       object_location=resource_config.object_location,
@@ -230,22 +250,27 @@ class DownloadView(APIViewMixin):
                                       fields=fields,
                                       sort=sort)
         
-        
         if format == "xlsx":
-            response = get_response_xlsx(modify_header(get_return_list(data),columns))
-        elif format == "csv":  
-            response = get_response_csv(modify_header(get_return_list(data),columns))
+            data = get_return_list(data)
+            update_resource_size(resource_id=resource_id, registries=len(data),size=sys.getsizeof(data))
+            response = get_response_xlsx(modify_header(data,columns))
+        elif format == "csv": 
+            data = get_return_list(data)
+            update_resource_size(resource_id=resource_id, registries=len(data),size=sys.getsizeof(data))
+ 
+            response = get_response_csv(modify_header(data,columns))
         elif featureCollection:
              response = Response(data)
         else: 
-            response = Response(modify_header(get_return_list(data),columns))
+            data = get_return_list(data)
+            update_resource_size(resource_id=resource_id, registries=len(data),size=sys.getsizeof(data))
+
+            response = Response(modify_header(data,columns))
         
         if self.is_download_endpoint(request) or format == "xlsx":
             filename = request.query_params.get('name') or request.query_params.get('nameRes') or resource_config.name
             disposition = f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
             response["content-disposition"] = disposition
-            
-                
 
         return response
     
