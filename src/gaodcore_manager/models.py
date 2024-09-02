@@ -44,3 +44,22 @@ class ResourceConfig(models.Model):
 
     def __str__(self):
         return str(self.name)
+    
+
+class ResourceSizeConfig(models.Model):
+    resource_id = models.ForeignKey(ResourceConfig,primary_key=True,
+                                         on_delete=models.CASCADE,
+                                         help_text="Foreign key of ResourceConfig.")
+
+    registries = models.BigIntegerField(
+        null=True,
+        help_text="Number of resgistries of the resource"
+        )
+    size = models.BigIntegerField(
+        null=True,
+        help_text="Size in Mb of the resource "
+        )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return str(self.resource_id)

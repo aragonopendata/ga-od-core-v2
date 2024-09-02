@@ -43,6 +43,11 @@ from django.utils.timezone import is_aware
 from django.utils.functional import Promise
 import math
 
+from gaodcore_project.settings import CONFIG
+from django.conf import settings
+from gaodcore_manager.models import ResourceConfig, ResourceSizeConfig
+from gaodcore_manager import models
+
 _DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql+pyodbc', 'oracle', 'sqlite'}
 _HTTP_SCHEMAS = {'http', 'https'}
 _RESOURCE_MAX_ROWS = 1048576
@@ -105,10 +110,10 @@ def _get_model(*, engine: Engine, object_location: str, object_location_schema: 
     try:
         return Table(object_location, meta_data, autoload=True, autoload_with=engine, schema=object_location_schema)
     except sqlalchemy.exc.NoSuchTableError as err:
-        logging.exception("Object not available.")
+        logging.warning("Table does not exist. Table: %s, Schema: %s, Url: %s", object_location, object_location_schema, engine.url)
         raise NoObjectError("Object not available.") from err
     except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError, sqlalchemy.exc.ProgrammingError) as err:
-        logging.exception("Connection not available.")
+        logging.warning("Connection not available. Url: %s", engine.url)
         raise DriverConnectionError("Connection not available.") from err
 
 
@@ -120,10 +125,11 @@ def get_resource_columns(uri: str, object_location: Optional[str],
     @return: list of dictionaries with column name and data type
     """
     engine = _get_engine(uri)
-    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
-
+    try:
+        model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    finally:
+        engine.dispose()
     data = ({"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)} for column in model.columns)
-    engine.dispose()
     return data
 
 
@@ -271,12 +277,14 @@ def get_resource_data_feature( uri: str,
     
     #Get A JSon Properties ( not possible json_build_object PostgreSQL 9.2.24 on x86_64-unknown-linux-gnu, compiled by gcc (GCC) 4.8.5 20150623 (Red Hat 4.8.5-16), 64-bit
     # version of Postgress not allowed _ Postgres and A GeoJson  only _ https://www.postgresql.org/docs/9.2/functions-json.html" 
-    # https://www.postgresql.org/docs/current/functions-json.html -> to convert columns to a json in a query 
-    if parsed.scheme in ['mssql+pyodbc']:  
-        data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).all()
-    else:
-         data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
-
+    # https://www.postgresql.org/docs/current/functions-json.html -> to convert columns to a json in a query
+    try:
+        if parsed.scheme in ['mssql+pyodbc']:
+            data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).all()
+        else:
+             data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
+    except sqlalchemy.exc.ProgrammingError as err:
+        raise NoObjectError("Object not available.") from err
     columnsProperties = _get_columns(column_dict, propertiesField)
   
     #Serializar Feature Collection
@@ -285,7 +293,6 @@ def get_resource_data_feature( uri: str,
     for item in data:
         item = list(item)
         geometry= item.pop()
-        print(item)
         for i, column in enumerate(item):
               if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)):
                   parte_decimal, parte_entera = math.modf(column)
@@ -445,6 +452,16 @@ def get_resource_data(*,
     return (dict(zip([column.name for column in columns], row)) for row in data)
 
 
+def update_resource_size(resource_id, registries, size):
+    try:
+        resource = ResourceConfig.objects.select_related().get(id=resource_id, enabled=True, connector_config__enabled=True)
+    except ResourceConfig.DoesNotExist as err:
+        raise ValidationError("Resource not exists or is not available", 400) from err
+    
+    rsc = ResourceSizeConfig(registries=registries,size=size)
+    rsc.resource_id=resource
+    rsc.save()
+
 def _get_columns(columns_dict: Dict[str, Column], column_names: List[str]) -> Iterable[Column]:
     """Get SQLAlchemy column instances from column names."""
     if column_names:
@@ -507,7 +524,6 @@ def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
         #charset = cchardet.detect(data)['encoding'] 
         #pasamos a charset 8 porque sino identifica como gb18030 - o ISO15 que no es capaz de decodificar
         charset= 'utf-8'
-    print(charset)
     try:
         data = data.decode(charset,'ignore')
     except:
