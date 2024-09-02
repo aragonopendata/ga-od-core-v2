@@ -11,7 +11,7 @@ from enum import Enum
 from http import HTTPStatus
 from io import StringIO
 from sqlite3 import Date
-from typing import Optional, Dict, List, Any, Iterable
+from typing import Optional, Dict, List, Any, Iterable, Union
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from rest_framework.exceptions import ValidationError
@@ -43,10 +43,8 @@ from django.utils.timezone import is_aware
 from django.utils.functional import Promise
 import math
 
-from gaodcore_project.settings import CONFIG
-from django.conf import settings
-from gaodcore_manager.models import ResourceConfig, ResourceSizeConfig
-from gaodcore_manager import models
+from gaodcore.operators import get_function_for_operator
+from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
 
 _DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql+pyodbc', 'oracle', 'sqlite'}
 _HTTP_SCHEMAS = {'http', 'https'}
@@ -350,15 +348,15 @@ def get_resource_data_feature( uri: str,
     return(wrapped)
     
 
-def get_session_data( uri: str,
-                      object_location: Optional[str],
-                      object_location_schema: Optional[str],
-                      filters: Dict[str, str],
-                      like: str,
-                      fields: List[str],
-                      sort: List[OrderBy],
-                      limit: Optional[int] = None,
-                      offset: int = 0):
+def get_session_data(uri: str,
+                     object_location: Optional[str],
+                     object_location_schema: Optional[str],
+                     filters: Dict[str, Union[str, dict]],
+                     like: str,
+                     fields: List[str],
+                     sort: List[OrderBy],
+                     limit: Optional[int] = None,
+                     offset: int = 0):
    
     """sqlalchemy.exc.CompileError: MSSQL requires an order_by when using an OFFSET or a non-simple LIMIT clause """
     """(pyodbc.ProgrammingError) ('42000', '[42000] [FreeTDS][SQL Server]The text, ntext, and image data types cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')"""
@@ -372,7 +370,8 @@ def get_session_data( uri: str,
     column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
     filters_args = _get_filter_by_args(like, model)
-    
+    filters, filters_args = _get_filter_operators(filters, filters_args)
+
     session = session_maker()
     
     parsed = urlparse(uri)
@@ -389,6 +388,18 @@ def get_session_data( uri: str,
     
     return(data)
 
+def _get_filter_operators(filters: Dict[str, Union[str, dict]], filters_args: list):
+    changed_filters = []
+    for field in filters:
+        if isinstance(filters[field],dict):
+            filter = filters[field]
+            operator = list(filter.keys())[0]
+            filter_function = get_function_for_operator(operator)
+            filters_args.append(filter_function(field, filters[field]))
+            changed_filters.append(field)
+    for field in changed_filters:
+        filters.pop(field)
+    return filters, filters_args
 
 def get_resource_data(*,
                       uri: str,
@@ -524,6 +535,7 @@ def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
         #charset = cchardet.detect(data)['encoding'] 
         #pasamos a charset 8 porque sino identifica como gb18030 - o ISO15 que no es capaz de decodificar
         charset= 'utf-8'
+    print(charset)
     try:
         data = data.decode(charset,'ignore')
     except:
