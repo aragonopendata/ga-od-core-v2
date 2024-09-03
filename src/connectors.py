@@ -1,7 +1,6 @@
 """Module that deal with external resources."""
 
 import csv
-import json
 import logging
 import urllib.request
 from collections import OrderedDict
@@ -13,32 +12,20 @@ from io import StringIO
 from sqlite3 import Date
 from typing import Optional, Dict, List, Any, Iterable, Union
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
 from rest_framework.exceptions import ValidationError
-from pydoc import text
-import cchardet
 import sqlalchemy.exc
 from sqlalchemy import create_engine, Table, MetaData, Column, Boolean, Text, Integer, DateTime, Time, REAL
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm import class_mapper
-from sqlalchemy.types import TypeDecorator, Numeric, Float
-from sqlalchemy.dialects import postgresql
+from sqlalchemy.types import Numeric
 from urllib.parse import urlparse
-from geoalchemy2 import Geometry,  elements, functions as GeoFunc
-from shapely_geojson import dumps, Feature, FeatureCollection
-from geoalchemy2.shape import to_shape 
-from sqlalchemy import func, select
+from geoalchemy2 import functions as GeoFunc
 import datetime
 import decimal
 import json
 import uuid
 import re
-from pydoc import text
 from django.utils.duration import duration_iso_string
-from django.utils.functional import Promise
-from django.utils.timezone import is_aware
-
 
 from django.utils.functional import Promise
 import math
@@ -101,8 +88,21 @@ class OrderBy:
 
 
 def _get_model(*, engine: Engine, object_location: str, object_location_schema: str) -> Table:
+    """
+    Get SQLAlchemy model from object_location and object_location_schema.
     # Note: if object_location is None meaning that original data is not in a database so is writen in a temporarily
     #  table.
+
+    @param engine: SQLAlchemy Engine instance to connect to the database.
+    @param object_location: The name of the table or object location.
+    @param object_location_schema: The schema of the object location.
+
+    @return: SQLAlchemy Table object representing the specified table.
+
+    @raises NoObjectError: If the specified table does not exist.
+    @raises DriverConnectionError: If there is an issue with the database connection.
+    """
+
     object_location = object_location or _TEMPORAL_TABLE_NAME
     meta_data = MetaData(bind=engine)
     try:
@@ -216,6 +216,8 @@ def sanitize_control_charcters(text):
     if isinstance(text,str):
         text = text.strip()
     return text
+
+
 def get_GeoJson_resource(uri: str, object_location: Optional[str],
                          object_location_schema: Optional[str]) -> Boolean:
 
@@ -326,12 +328,12 @@ def get_resource_data_feature( uri: str,
                     item[i] = r
               elif isinstance(column, datetime.timedelta):
                     item[i] =  duration_iso_string(column)
-               
+
               else:
                          item[i] = sanitize_control_charcters(column)
-         
+
         properties = dict(zip([column.name for column in  columnsProperties],  item))
-        
+
 
         #create feature
         featureType = {
@@ -339,14 +341,13 @@ def get_resource_data_feature( uri: str,
             'geometry': json.loads(geometry),
             'properties': properties}
         featuresTot.append(featureType)
-    
+
     wrapped = { "type":"FeatureCollection", "features": featuresTot }
-    
+
     session.close()
     engine.dispose()
-       
-    return(wrapped)
-    
+
+    return wrapped
 
 def get_session_data(uri: str,
                      object_location: Optional[str],
@@ -357,11 +358,32 @@ def get_session_data(uri: str,
                      sort: List[OrderBy],
                      limit: Optional[int] = None,
                      offset: int = 0):
-   
-    """sqlalchemy.exc.CompileError: MSSQL requires an order_by when using an OFFSET or a non-simple LIMIT clause """
-    """(pyodbc.ProgrammingError) ('42000', '[42000] [FreeTDS][SQL Server]The text, ntext, and image data types cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')"""
-    """ mssql no order no limit no offset"""
-   
+    """
+    Retrieve data from a resource based on the provided parameters.
+
+    This function connects to a database or API specified by the URI and retrieves data from the specified
+    table or object location. It applies filters, LIKE-based filtering, field selection, sorting, and pagination
+    to the query.
+
+    @param uri: The URI of the resource.
+    @param object_location: The name of the table or object location.
+    @param object_location_schema: The schema of the object location.
+    @param filters: A dictionary of filters to apply to the query. Each key is a field name, and the value can be a string or a dictionary specifying an operator and value.
+    @param like: A string for LIKE-based filtering.
+    @param fields: A list of field names to include in the result.
+    @param sort: A list of OrderBy objects to sort the result.
+    @param limit: An optional limit on the number of rows to return.
+    @param offset: The number of rows to skip before starting to return rows.
+
+    @return: An iterable of tuples containing the data of the resource.
+
+    @raises sqlalchemy.exc.CompileError: If the query compilation fails.
+    @raises sqlalchemy.exc.ProgrammingError: If there is a programming error in the query.
+    """
+    # sqlalchemy.exc.CompileError: MSSQL requires an order_by when using an OFFSET or a non-simple LIMIT clause
+    # (pyodbc.ProgrammingError) ('42000', '[42000] [FreeTDS][SQL Server]The text, ntext, and image data types cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')
+    # mssql no order no limit no offset
+
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
@@ -373,19 +395,19 @@ def get_session_data(uri: str,
     filters, filters_args = _get_filter_operators(filters, filters_args)
 
     session = session_maker()
-    
+
     parsed = urlparse(uri)
-    
-    if parsed.scheme in ['mssql+pyodbc']:  
+
+    if parsed.scheme in ['mssql+pyodbc']:
         data = session.query(model).filter_by(**filters).filter(*filters_args).with_entities(
               *[model.c[col.name].label(col.name) for col in columns]).all()
     else:
          data = session.query(model).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
               *[model.c[col.name].label(col.name) for col in columns]).offset(offset).limit(limit).all()
-    
+
     session.close()
     engine.dispose()
-    
+
     return(data)
 
 def _get_filter_operators(filters: Dict[str, Union[str, dict]], filters_args: list):
@@ -412,10 +434,10 @@ def get_resource_data(*,
                       limit: Optional[int] = None,
                       offset: int = 0) -> Iterable[Dict[str, Any]]:
     """Return a iterable of dictionaries with data of resource."""
-    
+
     re_decimal = "\.0\s*$"  # allow e.g. '1.0' as an int, but not '1.2
     data = get_session_data(uri, object_location, object_location_schema, filters, like, fields, sort, limit, offset)
-    
+
     """" When no typing objects are present, as when executing plain SQL strings, adefault "outputtypehandler" is present which will generally return numeric
     values which specify precision and scale as Python ``Decimal`` objects default "outputtypehandler" is present which will generally return numeric
     values which specify precision and scale as Python ``Decimal`` objects.  To disable this coercion to decimal for performance reasons, pass the flag
@@ -428,7 +450,7 @@ def get_resource_data(*,
 
     dataTemp = []
     dataTempTuplas= []
-  
+
     for item in data:
         for column in item:
             if (isinstance(column, (decimal.Decimal, uuid.UUID, Promise))) or (isinstance(column, float)) or (isinstance(column, Numeric)):
@@ -437,19 +459,19 @@ def get_resource_data(*,
                         dataTempTuplas.append(int(column))
                     else:
                         dataTempTuplas.append(sanitize_control_charcters(column))
-                    
 
 
-            else: 
+
+            else:
                     dataTempTuplas.append(sanitize_control_charcters(column))
-                    
+
         dataTemp.append(tuple(dataTempTuplas))
         dataTempTuplas.clear()
     data =dataTemp
 
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
-    
+
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
     model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
@@ -468,7 +490,7 @@ def update_resource_size(resource_id, registries, size):
         resource = ResourceConfig.objects.select_related().get(id=resource_id, enabled=True, connector_config__enabled=True)
     except ResourceConfig.DoesNotExist as err:
         raise ValidationError("Resource not exists or is not available", 400) from err
-    
+
     rsc = ResourceSizeConfig(registries=registries,size=size)
     rsc.resource_id=resource
     rsc.save()
@@ -500,7 +522,7 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
     return sort_methods
 
 def _get_filter_by_args(args: str, model: Table):
-    """Create constructor of filter like"""  
+    """Create constructor of filter like"""
     filters =[]
     if args and  len(args) != 2:
         try:
@@ -523,28 +545,28 @@ def validate_uri(uri: str) -> None:
     try:
         with engine.connect() as _:
             pass
-    except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError, sqlalchemy.exc.ProgrammingError) as err:
+    except sqlalchemy.exc.DatabaseError as err:
         logging.exception("Connection not available.")
         raise DriverConnectionError("Connection not available.") from err
 
 
 def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
-    
+
     if not charset:
-    
-        #charset = cchardet.detect(data)['encoding'] 
+
+        #charset = cchardet.detect(data)['encoding']
         #pasamos a charset 8 porque sino identifica como gb18030 - o ISO15 que no es capaz de decodificar
         charset= 'utf-8'
     print(charset)
     try:
         data = data.decode(charset,'ignore')
-    except:
+    except UnicodeDecodeError:
         data = data.decode('utf-8', 'ignore')
     if data:
         dialect = csv.Sniffer().sniff(data)
     else:
         dialect = "excel"
-    
+
     return list(csv.DictReader(StringIO(data), dialect=dialect))
 
 
