@@ -13,3 +13,4 @@ pytest-rerunfailures
 pytest-xdist
 tox
 yapf
+testcontainers~=4.8.1

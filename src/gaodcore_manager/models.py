@@ -2,6 +2,17 @@ from django.db import models
 
 
 class ConnectorConfig(models.Model):
+    """
+    Model representing the configuration for a connection to a database or api.
+
+    @param id: AutoField - Primary key of ConnectorConfig.
+    @param name: CharField - Human readable name. This must be identifiable and unique.
+    @param uri: TextField - This can have an HTTP/S API or database URI. Example: "https://domain.es/file.ext" or
+                 "oracle://username:password@host".
+    @param enabled: BooleanField - Resource will be offered if connector and resource are enabled.
+    @param created_at: DateTimeField - Timestamp when the record was created.
+    @param updated_at: DateTimeField - Timestamp when the record was last updated.
+    """
     id = models.AutoField(primary_key=True, help_text="Primary key of ConnectorConfig.")
     name = models.CharField(max_length=255,
                             unique=True,
@@ -19,6 +30,18 @@ class ConnectorConfig(models.Model):
 
 
 class ResourceConfig(models.Model):
+    """
+      Model representing the configuration for a resource.
+
+      @param id: AutoField - Primary key of ResourceConfig.
+      @param name: CharField - Human readable name. This must be identifiable and unique.
+      @param connector_config: ForeignKey - Foreign key to ConnectorConfig.
+      @param enabled: BooleanField - Indicates whether the resource will be offered if both the connector and resource are enabled.
+      @param object_location: CharField - Only used in database resources. It can be a table, view, function, etc. API resources must be null.
+      @param object_location_schema: CharField - Only used in database resources. Not required if in the default schema. API resources must be null.
+      @param created_at: DateTimeField - Timestamp when the record was created.
+      @param updated_at: DateTimeField - Timestamp when the record was last updated.
+      """
     id = models.AutoField(primary_key=True, help_text="Primary key of ResourceConfig.")
     name = models.CharField(max_length=255,
                             unique=True,
