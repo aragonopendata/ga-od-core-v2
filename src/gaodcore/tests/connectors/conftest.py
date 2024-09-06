@@ -15,6 +15,7 @@ class Car(Base):
     @param name: str - Car name
     @param brand: str - Car brand
     @param year: int - Car year
+    @param price: int - Car price
     @param purchase_date: date - Car purchase date
     """
     __tablename__ = 'cars'
@@ -27,6 +28,7 @@ class Car(Base):
     name = Column(String)
     brand = Column(String)
     year = Column(Integer)
+    price = Column(Integer)
     purchase_date = Column(Date)
 
     @staticmethod
@@ -43,10 +45,10 @@ class Car(Base):
         session.close()
 
     @staticmethod
-    def add_car(name: str, brand: str, year: int, purchase_date: date):
+    def add_car(name: str, brand: str, year: int, price: int, purchase_date: date):
         engine = create_engine(postgres.get_connection_url())
         session = sessionmaker(bind=engine)()
-        car = Car(name=name, brand=brand, year=year, purchase_date=purchase_date)
+        car = Car(name=name, brand=brand, year=year, price=price, purchase_date=purchase_date)
         session.add(car)
         session.commit()
         session.close()
