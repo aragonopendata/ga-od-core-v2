@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Callable
 
 from rest_framework.exceptions import ValidationError
@@ -14,10 +15,18 @@ def get_function_for_operator(operator: str) -> Callable:
         "$gte": filter_gte,
         "$lte": filter_lte
     }
-    result =  filter_operators.get(operator)
+    result = filter_operators.get(operator)
     if result is None:
         raise ValidationError(f"Operator {operator} not implemented")
     return result
+
+
+def format_type(value):
+    if isinstance(value, str):
+        value = f"'{value}'"
+    elif isinstance(value, date):
+        value = f"'{value.isoformat()}'"
+    return value
 
 
 def filter_gt(field: str, filter: dict) -> text:
@@ -27,7 +36,10 @@ def filter_gt(field: str, filter: dict) -> text:
         @return: SQL clause
     """
     value = filter["$gt"]
+    value = format_type(value)
+
     return text(f"{field} > {value}")
+
 
 def filter_lt(field: str, filter: dict) -> text:
     """Translate a filter string to a SQL clause.
@@ -36,7 +48,10 @@ def filter_lt(field: str, filter: dict) -> text:
         @return: SQL clause
     """
     value = filter["$lt"]
+    value = format_type(value)
+
     return text(f"{field} < {value}")
+
 
 def filter_eq(field: str, filter: dict) -> text:
     """Translate a filter string to a SQL clause.
@@ -45,7 +60,10 @@ def filter_eq(field: str, filter: dict) -> text:
         @return: SQL clause
     """
     value = filter["$eq"]
+    value = format_type(value)
+
     return text(f"{field} = {value}")
+
 
 def filter_ne(field: str, filter: dict) -> text:
     """Translate a filter string to a SQL clause.
@@ -54,7 +72,10 @@ def filter_ne(field: str, filter: dict) -> text:
         @return: SQL clause
     """
     value = filter["$ne"]
+    value = format_type(value)
+
     return text(f"{field} != {value}")
+
 
 def filter_gte(field: str, filter: dict) -> text:
     """Translate a filter string to a SQL clause.
@@ -63,7 +84,10 @@ def filter_gte(field: str, filter: dict) -> text:
         @return: SQL clause
     """
     value = filter["$gte"]
+    value = format_type(value)
+
     return text(f"{field} >= {value}")
+
 
 def filter_lte(field: str, filter: dict) -> text:
     """Translate a filter string to a SQL clause.
@@ -72,5 +96,6 @@ def filter_lte(field: str, filter: dict) -> text:
         @return: SQL clause
     """
     value = filter["$lte"]
-    return text(f"{field} <= {value}")
+    value = format_type(value)
 
+    return text(f"{field} <= {value}")
