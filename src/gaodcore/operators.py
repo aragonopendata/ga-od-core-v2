@@ -3,7 +3,9 @@ from typing import Callable
 
 from rest_framework.exceptions import ValidationError
 from sqlalchemy import text
+import logging
 
+logger = logging.getLogger(__name__)
 
 def get_function_for_operator(operator: str) -> Callable:
     """ Return the operator function based on the filter type. """
@@ -17,6 +19,7 @@ def get_function_for_operator(operator: str) -> Callable:
     }
     result = filter_operators.get(operator)
     if result is None:
+        logger.warning(f"Operator {operator} not implemented")
         raise ValidationError(f"Operator {operator} not implemented")
     return result
 

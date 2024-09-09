@@ -10,7 +10,7 @@ from enum import Enum
 from http import HTTPStatus
 from io import StringIO
 from sqlite3 import Date
-from typing import Optional, Dict, List, Any, Iterable, Union
+from typing import Optional, Dict, List, Any, Iterable, Union, Tuple
 from urllib.error import HTTPError, URLError
 from rest_framework.exceptions import ValidationError
 import sqlalchemy.exc
@@ -410,14 +410,15 @@ def get_session_data(uri: str,
 
     return(data)
 
-def _get_filter_operators(filters: Dict[str, Union[str, dict]], filters_args: list):
+def _get_filter_operators(filters: Dict[str, Union[str, dict]], filters_args: list) -> Tuple[dict, list]:
+    """Takes operator clauses from filters, transforms them into SQLAlchemy clauses, and moves them to filters_args."""
     changed_filters = []
     for field in filters:
-        if isinstance(filters[field],dict):
+        if isinstance(filters[field],dict): # if filter is a dict, it has an operator. Ex. {"$gt": 2020}
             filter = filters[field]
-            operator = list(filter.keys())[0]
-            filter_function = get_function_for_operator(operator)
-            filters_args.append(filter_function(field, filters[field]))
+            for operator in filter: # It can have more than one operator. ex. {"$gt": 2020, "$lt": 2022}
+                filter_function = get_function_for_operator(operator)
+                filters_args.append(filter_function(field, filters[field]))
             changed_filters.append(field)
     for field in changed_filters:
         filters.pop(field)
