@@ -4,7 +4,7 @@ from datetime import date
 import pytest
 from rest_framework.exceptions import ValidationError
 
-from connectors import get_resource_data
+from connectors import get_resource_data, _get_filter_operators
 from .conftest import Car
 
 
@@ -13,9 +13,9 @@ def car_table():
     Car.create_table()
     Car.add_car("Model S", "Tesla", 2020, 34000,
                 date(2020, 7, 13))
-    Car.add_car("Model 3", "Tesla", 2021,   40000,
+    Car.add_car("Model 3", "Tesla", 2021, 40000,
                 date(2021, 4, 28))
-    Car.add_car("Corsa", "Opel", 2019,  20000,
+    Car.add_car("Corsa", "Opel", 2019, 20000,
                 date(2019, 2, 21))
     Car.add_car("Astra", "Opel", 2018, 25000,
                 date(2018, 11, 15))
@@ -37,11 +37,13 @@ def get_resource_with_filters(configs, filters):
         limit=None,
     ))
 
+
 def try_filters(configs: dict, filters: dict, expected_number: int, expected_names: Iterable[str]):
     result = get_resource_with_filters(configs, filters)
     assert len(result) == expected_number
     for r in result:
         assert r["name"] in expected_names
+
 
 @pytest.mark.django_db
 def test_create_table(configs, car_table):
@@ -86,6 +88,7 @@ def test_get_resource_gte_int(configs, car_table):
     for r in result:
         assert r["name"] in ["Model 3", "Model S"]
 
+
 @pytest.mark.django_db
 def test_get_resource_lt_int(configs, car_table):
     test_filters = {'year': {"$lt": 2018}}
@@ -103,6 +106,7 @@ def test_get_resource_lte_int(configs, car_table):
     assert len(result) == 2
     for r in result:
         assert r["name"] in ["Clio", "Astra"]
+
 
 @pytest.mark.django_db
 def test_get_resource_gt_date(configs, car_table):
@@ -123,6 +127,7 @@ def test_get_resource_ne_int(configs, car_table):
     for r in result:
         assert r["name"] in expected_names
 
+
 @pytest.mark.django_db
 def test_get_resource_eq_int(configs, car_table):
     test_filters = {'year': {"$eq": 2019}}
@@ -130,6 +135,7 @@ def test_get_resource_eq_int(configs, car_table):
 
     assert len(result) == 1
     assert result[0]["name"] == "Corsa"
+
 
 @pytest.mark.django_db
 def test_get_resource_eq_str(configs, car_table):
@@ -139,6 +145,7 @@ def test_get_resource_eq_str(configs, car_table):
     assert len(result) == 1
     assert result[0]["name"] == "Model S"
 
+
 @pytest.mark.django_db
 def test_get_resource_eq_date(configs, car_table):
     test_filters = {'purchase_date': {"$eq": date(2020, 7, 13)}}
@@ -147,6 +154,7 @@ def test_get_resource_eq_date(configs, car_table):
     assert len(result) == 1
     assert result[0]["name"] == "Model S"
 
+
 @pytest.mark.django_db
 def test_get_resource_gt_lt_int(configs, car_table):
     test_filters = {'year': {"$gt": 2018}, 'price': {"$lt": 30000}}
@@ -154,3 +162,32 @@ def test_get_resource_gt_lt_int(configs, car_table):
 
     assert len(result) == 1
     assert result[0]["name"] == "Corsa"
+
+
+@pytest.mark.django_db
+def test_get_resource_gt_and_lt_int(configs, car_table):
+    test_filters = {'$and': [{'year': {"$gt": 2018}}, {'price': {"$lt": 30000}}]}
+    result = get_resource_with_filters(configs, test_filters)
+
+    assert len(result) == 1
+    assert result[0]["name"] == "Corsa"
+
+
+@pytest.mark.parametrize("filters, expected", [
+    ({'year': {"$lt": 2018}}, ({}, ["year < 2018"])),
+    ({'year': {"$lte": 2018}}, ({}, ["year <= 2018"])),
+    ({'year': {"$gt": 2018}}, ({}, ["year > 2018"])),
+    ({'year': {"$gte": 2018}}, ({}, ["year >= 2018"])),
+    ({'year': {"$eq": 2018}}, ({}, ["year = 2018"])),
+    ({'year': {"$ne": 2018}}, ({}, ["year != 2018"])),
+    ({'year': {"$gt": 2018, "$lt": 2020}}, ({}, ["year > 2018", "year < 2020"])),
+    ({'year': {"$gt": 2018, "$lt": 2020, "$eq": 2019}}, ({}, ["year > 2018", "year < 2020", "year = 2019"])),
+])
+def test_get_filter_operators(filters, expected):
+    filters_args = []
+    result_filters, result_filters_args = _get_filter_operators(filters, filters_args)
+    result_filters_args = [str(fargs) for fargs in result_filters_args]
+    assert result_filters == expected[0]
+    assert len(result_filters_args) == len(expected[1])
+    for fargs in result_filters_args:
+        assert str(fargs) in expected[1]
