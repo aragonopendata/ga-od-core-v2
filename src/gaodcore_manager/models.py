@@ -70,9 +70,10 @@ class ResourceConfig(models.Model):
     
 
 class ResourceSizeConfig(models.Model):
-    resource_id = models.ForeignKey(ResourceConfig,primary_key=True,
-                                         on_delete=models.CASCADE,
-                                         help_text="Foreign key of ResourceConfig.")
+    resource_id = models.OneToOneField(ResourceConfig,
+                                       primary_key=True,
+                                       on_delete=models.CASCADE,
+                                       help_text="Foreign key of ResourceConfig.")
 
     registries = models.BigIntegerField(
         null=True,
