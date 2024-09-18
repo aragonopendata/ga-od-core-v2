@@ -4,7 +4,7 @@ from datetime import date
 import pytest
 from rest_framework.exceptions import ValidationError
 
-from connectors import get_resource_data, _get_filter_operators
+from connectors import get_resource_data, _get_filter_operators, process_filters_args
 from .conftest import Car
 
 
@@ -173,21 +173,55 @@ def test_get_resource_gt_and_lt_int(configs, car_table):
     assert result[0]["name"] == "Corsa"
 
 
+@pytest.mark.django_db
+def test_get_resource_or(configs, car_table):
+    test_filters = {"$or": [{'name': {"$eq": "Model 3"}}, {'name': {"$eq": "Model S"}}]}
+    result = get_resource_with_filters(configs, test_filters)
+
+    assert len(result) == 2
+    for r in result:
+        assert r["name"] in ["Model 3", "Model S"]
+
+
 @pytest.mark.parametrize("filters, expected", [
-    ({'year': {"$lt": 2018}}, ({}, ["year < 2018"])),
-    ({'year': {"$lte": 2018}}, ({}, ["year <= 2018"])),
-    ({'year': {"$gt": 2018}}, ({}, ["year > 2018"])),
-    ({'year': {"$gte": 2018}}, ({}, ["year >= 2018"])),
-    ({'year': {"$eq": 2018}}, ({}, ["year = 2018"])),
-    ({'year': {"$ne": 2018}}, ({}, ["year != 2018"])),
-    ({'year': {"$gt": 2018, "$lt": 2020}}, ({}, ["year > 2018", "year < 2020"])),
-    ({'year': {"$gt": 2018, "$lt": 2020, "$eq": 2019}}, ({}, ["year > 2018", "year < 2020", "year = 2019"])),
+    ({'year': {"$lt": 2018}}, ({}, [{'year': {"$lt": 2018}}])),
+    ({'year': {"$lte": 2018}}, ({}, [{'year': {"$lte": 2018}}])),
+    ({'year': {"$gt": 2018}}, ({}, [{'year': {"$gt": 2018}}])),
+    ({'year': {"$gte": 2018}}, ({}, [{'year': {"$gte": 2018}}])),
+    ({'year': {"$eq": 2018}}, ({}, [{'year': {"$eq": 2018}}])),
+    ({'year': {"$ne": 2018}}, ({}, [{'year': {"$ne": 2018}}])),
+    ({'year': {"$gt": 2018, "$lt": 2020}}, ({}, [{'year': {"$gt": 2018, "$lt": 2020}}])),
 ])
 def test_get_filter_operators(filters, expected):
     filters_args = []
     result_filters, result_filters_args = _get_filter_operators(filters, filters_args)
-    result_filters_args = [str(fargs) for fargs in result_filters_args]
     assert result_filters == expected[0]
     assert len(result_filters_args) == len(expected[1])
     for fargs in result_filters_args:
-        assert str(fargs) in expected[1]
+        assert fargs in expected[1]
+
+
+@pytest.mark.parametrize("filters, filters_args, expected", [
+    ({"id": {"$gt": 1}}, [], ({}, [{"id": {"$gt": 1}}])),
+    ({"id": {"$gt": 1}, "name": 3}, [], ({"name": 3}, [{"id": {"$gt": 1}}])),
+    ({"id": {"$gt": 1}, "name": 3}, [{"age": {"$lt": "20"}}],
+     ({"name": 3}, [{"age": {"$lt": "20"}}, {"id": {"$gt": 1}}])),
+    ({"$and": [{"age": 1}, {"name": "john"}]}, [], ({}, [{"$and": [{"age": 1}, {"name": "john"}]}])),
+])
+def test_get_filter_operators2(filters, filters_args, expected):
+    result_filters, result_filters_args = _get_filter_operators(filters, filters_args)
+    assert result_filters == expected[0]
+    assert result_filters_args == expected[1]
+
+
+@pytest.mark.parametrize("filters_args, expected", [
+    ([], []),
+    ([{"id": {"$gt": 1}}], ["id > 1"]),
+    ([{"id": {"$gt": 1}, "name": {"$gt": "john"}}], ["id > 1", "name > 'john'"]),
+    ([{"$and": [{"id": {"$gt": 1}}, {"name": {"$gt": "john"}}]}], ["id > 1 AND name > 'john'"]),
+    ([{"$or": [{"id": {"$gt": 1}}, {"name": {"$gt": "john"}}]}], ["id > 1 OR name > 'john'"]),
+])
+def test_process_filters_args(filters_args, expected):
+    result = process_filters_args(filters_args)
+    result = [str(r) for r in result]
+    assert result == expected
