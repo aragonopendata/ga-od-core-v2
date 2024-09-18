@@ -1,8 +1,14 @@
 """Module that deal with external resources."""
 
 import csv
+import datetime
+import decimal
+import json
 import logging
+import math
+import re
 import urllib.request
+import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, datetime, time
@@ -12,23 +18,18 @@ from io import StringIO
 from sqlite3 import Date
 from typing import Optional, Dict, List, Any, Iterable, Union, Tuple
 from urllib.error import HTTPError, URLError
-from rest_framework.exceptions import ValidationError
+from urllib.parse import urlparse
+
 import sqlalchemy.exc
+from django.utils.duration import duration_iso_string
+from django.utils.functional import Promise
+from geoalchemy2 import functions as GeoFunc
+from rest_framework.exceptions import ValidationError
 from sqlalchemy import create_engine, Table, MetaData, Column, Boolean, Text, Integer, DateTime, Time, REAL
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql.elements import and_, or_
 from sqlalchemy.types import Numeric
-from urllib.parse import urlparse
-from geoalchemy2 import functions as GeoFunc
-import datetime
-import decimal
-import json
-import uuid
-import re
-from django.utils.duration import duration_iso_string
-
-from django.utils.functional import Promise
-import math
 
 from gaodcore.operators import get_function_for_operator
 from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
@@ -40,14 +41,15 @@ _TEMPORAL_TABLE_NAME = 'temporal_table'
 _SQLALCHEMY_MAP_TYPE = {bool: Boolean, str: Text, int: Integer, float: REAL, date: Date, datetime: DateTime, time: Time}
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
 
+
 class MimeType(Enum):
     """Enum with some mimetype and his different values."""
-    CSV = ('text/csv', )
+    CSV = ('text/csv',)
     XLSX = (
         'application/xlsx',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
-    JSON = ('application/json', )
+    JSON = ('application/json',)
 
 
 class NotImplementedSchemaError(Exception):
@@ -61,8 +63,10 @@ class DriverConnectionError(Exception):
 class NoObjectError(Exception):
     """Object is not available. Connection was successfully done but object is not available."""
 
+
 class TooManyRowsErrorExcel(Exception):
     """Object Excel have too many rows to process. Excel not allow more rows."""
+
 
 class TooManyRowsError(Exception):
     """Object have too many rows to process. Excel not allow more rows."""
@@ -108,7 +112,8 @@ def _get_model(*, engine: Engine, object_location: str, object_location_schema: 
     try:
         return Table(object_location, meta_data, autoload=True, autoload_with=engine, schema=object_location_schema)
     except sqlalchemy.exc.NoSuchTableError as err:
-        logging.warning("Table does not exist. Table: %s, Schema: %s, Url: %s", object_location, object_location_schema, engine.url)
+        logging.warning("Table does not exist. Table: %s, Schema: %s, Url: %s", object_location, object_location_schema,
+                        engine.url)
         raise NoObjectError("Object not available.") from err
     except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError, sqlalchemy.exc.ProgrammingError) as err:
         logging.warning("Connection not available. Url: %s", engine.url)
@@ -124,7 +129,8 @@ def get_resource_columns(uri: str, object_location: Optional[str],
     """
     engine = _get_engine(uri)
     try:
-        model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+        model = _get_model(engine=engine, object_location=object_location,
+                           object_location_schema=object_location_schema)
     finally:
         engine.dispose()
     data = ({"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)} for column in model.columns)
@@ -144,45 +150,44 @@ def validate_resource(*, uri: str, object_location: Optional[str],
                              fields=[],
                              sort=[])
 
+
 def validate_resource_mssql(*, uri: str, object_location: Optional[str],
-                      object_location_schema: Optional[str]) -> Iterable[Dict[str, Any]]:
+                            object_location_schema: Optional[str]) -> Iterable[Dict[str, Any]]:
+    """Validate if resource is available . Return data of resource, a iterable of
+   dictionaries."""
 
-     """Validate if resource is available . Return data of resource, a iterable of
-    dictionaries."""
-       
-     
-     fields=[]
-     sort=[]
-     
-     engine = _get_engine(uri)
-     session_maker = sessionmaker(bind=engine)
+    fields = []
+    sort = []
 
-     model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    engine = _get_engine(uri)
+    session_maker = sessionmaker(bind=engine)
 
-     column_dict = {column.name: column for column in model.columns}
-     columns = _get_columns(column_dict, fields)
-     session = session_maker()
-    
-     data = session.query(model).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
+    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+
+    column_dict = {column.name: column for column in model.columns}
+    columns = _get_columns(column_dict, fields)
+    session = session_maker()
+
+    data = session.query(model).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
         *[model.c[col.name].label(col.name) for col in model.columns]).all()
-    
-     session.close()
-     engine.dispose()
 
-     return (dict(zip([column.name for column in columns], row)) for row in data)
+    session.close()
+    engine.dispose()
+
+    return (dict(zip([column.name for column in columns], row)) for row in data)
 
 
 def validator_max_excel_allowed(uri: str,
-                      object_location: Optional[str],
-                      object_location_schema: Optional[str],
-                      filters: Dict[str, str],
-                      like: str,
-                      fields: List[str],
-                      sort: List[OrderBy],
-                      limit: Optional[int] = None,
-                      offset: int = 0):
+                                object_location: Optional[str],
+                                object_location_schema: Optional[str],
+                                filters: Dict[str, str],
+                                like: str,
+                                fields: List[str],
+                                sort: List[OrderBy],
+                                limit: Optional[int] = None,
+                                offset: int = 0):
     """Validate if resource  have less rows than allowed."""
-   
+
     data = get_session_data(uri, object_location, object_location_schema, filters, like, fields, sort, limit, offset)
     return len(data) <= _RESOURCE_MAX_ROWS_EXCEL
 
@@ -204,48 +209,48 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
     session.close()
     engine.dispose()
 
-#Add feature to sanitize text include control characters
+
+# Add feature to sanitize text include control characters
 def sanitize_control_charcters(text):
-    
     if re.search(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]', str(text)):
-        text=  re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]', "", text)
+        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]', "", text)
     try:
-        text =  text.decode('utf-8')
+        text = text.decode('utf-8')
     except:
         pass
-    if isinstance(text,str):
+    if isinstance(text, str):
         text = text.strip()
     return text
 
 
 def get_GeoJson_resource(uri: str, object_location: Optional[str],
                          object_location_schema: Optional[str]) -> Boolean:
-
-    """From resource return if is GeoJson resource 
+    """From resource return if is GeoJson resource
 
     @param cache: if not exists connection save on cache.
     @return: True or False GeoJosn Resource
     """
     engine = _get_engine(uri)
     model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
-    geoJson =False
-    
+    geoJson = False
+
     for column in model.columns:
-         if str(column.type).startswith("geometry") or str(column.type).startswith("geography") :
+        if str(column.type).startswith("geometry") or str(column.type).startswith("geography"):
             geoJson = True
 
-    engine.dispose()     
-    return(geoJson)
+    engine.dispose()
+    return (geoJson)
 
-def get_resource_data_feature( uri: str,
-                      object_location: Optional[str],
-                      object_location_schema: Optional[str],
-                      filters: Dict[str, str],
-                      like: str,
-                      fields: List[str],
-                      sort: List[OrderBy],
-                      limit: Optional[int] = None,
-                      offset: int = 0):
+
+def get_resource_data_feature(uri: str,
+                              object_location: Optional[str],
+                              object_location_schema: Optional[str],
+                              filters: Dict[str, str],
+                              like: str,
+                              fields: List[str],
+                              sort: List[OrderBy],
+                              limit: Optional[int] = None,
+                              offset: int = 0):
     """data like GeoJSON .Encoding data a variety of geographic data structures."""
     """Data like Feature_Collection_"""
 
@@ -259,95 +264,97 @@ def get_resource_data_feature( uri: str,
     columns = _get_columns(column_dict, fields)
     filters_args = _get_filter_by_args(like, model)
     session = session_maker()
-    
-    parsed = urlparse(uri)
-        
-    #Get Column Geom - other fields in Properties
 
-    propertiesCol=[]
-    propertiesField=[]
-    
+    parsed = urlparse(uri)
+
+    # Get Column Geom - other fields in Properties
+
+    propertiesCol = []
+    propertiesField = []
+
     for i, col in enumerate(model.columns):
         if str(col.type).startswith("geography") or str(col.type).startswith("geometry"):
-            Geom = model.c[col.name].label(col.name) 
+            Geom = model.c[col.name].label(col.name)
         else:
             propertiesField.append(col.name)
             propertiesCol.append(model.c[col.name].label(col.name))
-    
-    
-    #Get A JSon Properties ( not possible json_build_object PostgreSQL 9.2.24 on x86_64-unknown-linux-gnu, compiled by gcc (GCC) 4.8.5 20150623 (Red Hat 4.8.5-16), 64-bit
+
+    # Get A JSon Properties ( not possible json_build_object PostgreSQL 9.2.24 on x86_64-unknown-linux-gnu, compiled by gcc (GCC) 4.8.5 20150623 (Red Hat 4.8.5-16), 64-bit
     # version of Postgress not allowed _ Postgres and A GeoJson  only _ https://www.postgresql.org/docs/9.2/functions-json.html" 
     # https://www.postgresql.org/docs/current/functions-json.html -> to convert columns to a json in a query
     try:
         if parsed.scheme in ['mssql+pyodbc']:
-            data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).all()
+            data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(
+                **filters).filter(*filters_args).all()
         else:
-             data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)). offset(offset).limit(limit).all()
+            data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(
+                **filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)).offset(offset).limit(
+                limit).all()
     except sqlalchemy.exc.ProgrammingError as err:
         raise NoObjectError("Object not available.") from err
     columnsProperties = _get_columns(column_dict, propertiesField)
-  
-    #Serializar Feature Collection
-    featuresTot = []    
+
+    # Serializar Feature Collection
+    featuresTot = []
     re_decimal = "\.0*$"  # allow e.g. '1.0000000000' as an int, but not '1.2
     for item in data:
         item = list(item)
-        geometry= item.pop()
+        geometry = item.pop()
         for i, column in enumerate(item):
-              if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)):
-                  parte_decimal, parte_entera = math.modf(column)
-                  if (parte_decimal) == 0.0:
-                      item[i] = int(column) 
-                  else:
-                      item[i] = str(column) 
-              elif isinstance(column, float):
-                 parte_decimal, parte_entera = math.modf(column)
-                 if (parte_decimal) == 0.0:
-                      item[i] = int(column)  
-                 else:
-                      item[i] = str(column)
-              elif isinstance(column, Numeric):
-                 parte_decimal, parte_entera = math.modf(column)
-                 if (parte_decimal) == 0.0:
-                      item[i] = int(column) 
-                 else:
-                      item[i] = str(column)
-              elif isinstance(column, datetime.datetime):
-                    r = column.isoformat()
-                    if column.microsecond:
-                        r = r[:23] + r[26:]
-                    if r.endswith('+00:00'):
-                        r = r[:-6] + 'Z'
-                    item[i] = r
-              elif isinstance(column, datetime.date):
-                    item[i] =  column.isoformat()
-              elif isinstance(column, datetime.time):
-                    r = column.isoformat()
-                    if column.microsecond:
-                        r = r[:12]
-                    item[i] = r
-              elif isinstance(column, datetime.timedelta):
-                    item[i] =  duration_iso_string(column)
+            if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)):
+                parte_decimal, parte_entera = math.modf(column)
+                if (parte_decimal) == 0.0:
+                    item[i] = int(column)
+                else:
+                    item[i] = str(column)
+            elif isinstance(column, float):
+                parte_decimal, parte_entera = math.modf(column)
+                if (parte_decimal) == 0.0:
+                    item[i] = int(column)
+                else:
+                    item[i] = str(column)
+            elif isinstance(column, Numeric):
+                parte_decimal, parte_entera = math.modf(column)
+                if (parte_decimal) == 0.0:
+                    item[i] = int(column)
+                else:
+                    item[i] = str(column)
+            elif isinstance(column, datetime.datetime):
+                r = column.isoformat()
+                if column.microsecond:
+                    r = r[:23] + r[26:]
+                if r.endswith('+00:00'):
+                    r = r[:-6] + 'Z'
+                item[i] = r
+            elif isinstance(column, datetime.date):
+                item[i] = column.isoformat()
+            elif isinstance(column, datetime.time):
+                r = column.isoformat()
+                if column.microsecond:
+                    r = r[:12]
+                item[i] = r
+            elif isinstance(column, datetime.timedelta):
+                item[i] = duration_iso_string(column)
 
-              else:
-                         item[i] = sanitize_control_charcters(column)
+            else:
+                item[i] = sanitize_control_charcters(column)
 
-        properties = dict(zip([column.name for column in  columnsProperties],  item))
+        properties = dict(zip([column.name for column in columnsProperties], item))
 
-
-        #create feature
+        # create feature
         featureType = {
             'type': 'Feature',
             'geometry': json.loads(geometry),
             'properties': properties}
         featuresTot.append(featureType)
 
-    wrapped = { "type":"FeatureCollection", "features": featuresTot }
+    wrapped = {"type": "FeatureCollection", "features": featuresTot}
 
     session.close()
     engine.dispose()
 
     return wrapped
+
 
 def get_session_data(uri: str,
                      object_location: Optional[str],
@@ -393,6 +400,7 @@ def get_session_data(uri: str,
     columns = _get_columns(column_dict, fields)
     filters_args = _get_filter_by_args(like, model)
     filters, filters_args = _get_filter_operators(filters, filters_args)
+    filters_args = process_filters_args(filters_args)
 
     session = session_maker()
 
@@ -400,36 +408,77 @@ def get_session_data(uri: str,
 
     if parsed.scheme in ['mssql+pyodbc']:
         data = session.query(model).filter_by(**filters).filter(*filters_args).with_entities(
-              *[model.c[col.name].label(col.name) for col in columns]).all()
+            *[model.c[col.name].label(col.name) for col in columns]).all()
     else:
-         data = session.query(model).filter_by(**filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
-              *[model.c[col.name].label(col.name) for col in columns]).offset(offset).limit(limit).all()
+        data = session.query(model).filter_by(**filters).filter(*filters_args).order_by(
+            *_get_sort_methods(column_dict, sort)).with_entities(
+            *[model.c[col.name].label(col.name) for col in columns]).offset(offset).limit(limit).all()
 
     session.close()
     engine.dispose()
 
-    return(data)
+    return (data)
+
+
+# def _get_filter_operators(filters: Dict[str, Union[str, dict]], filters_args: list) -> Tuple[dict, list]:
+#     """Takes operator clauses from filters, transforms them into SQLAlchemy clauses, and moves them to filters_args."""
+#     changed_filters = []
+#     for field in filters:
+#         if isinstance(filters[field],dict): # if filter is a dict, it has an operator. Ex. {"$gt": 2020}
+#             filter = filters[field]
+#             for operator in filter: # It can have more than one operator. ex. {"$gt": 2020, "$lt": 2022}
+#                 filter_function = get_function_for_operator(operator)
+#                 filters_args.append(filter_function(field, filters[field]))
+#             changed_filters.append(field)
+#     for field in changed_filters:
+#         filters.pop(field)
+#     return filters, filters_args
 
 def _get_filter_operators(filters: Dict[str, Union[str, dict]], filters_args: list) -> Tuple[dict, list]:
-    """Takes operator clauses from filters, transforms them into SQLAlchemy clauses, and moves them to filters_args."""
+    """Takes operator clauses from filters. If it has a dict or a list, it adds it to result and removes it from filters."""
     changed_filters = []
     for field in filters:
-        if isinstance(filters[field],dict): # if filter is a dict, it has an operator. Ex. {"$gt": 2020}
-            filter = filters[field]
-            for operator in filter: # It can have more than one operator. ex. {"$gt": 2020, "$lt": 2022}
-                filter_function = get_function_for_operator(operator)
-                filters_args.append(filter_function(field, filters[field]))
+        if isinstance(filters[field], dict) or isinstance(filters[field], list):
+            filters_args.append({field: filters[field]})
             changed_filters.append(field)
     for field in changed_filters:
         filters.pop(field)
     return filters, filters_args
 
+
+def process_filters_args(filters: list[dict]) -> list:
+    """Process filters and return a list of SQLAlchemy clauses."""
+    result = []
+    for filter in filters:
+        for key in filter:
+            if isinstance(filter[key], dict):
+                for field in filter[key]:
+                    filter_function = get_function_for_operator(field)
+                    result.append(filter_function(key, filter[key]))
+            elif isinstance(filter[key], list):
+                clause_list = []
+                for item in filter[key]:
+                    clause = process_filters_args([item])
+                    clause_list.extend(clause)
+                if key == "$and":
+                    result.append(and_(*clause_list))
+                elif key == "$or":
+                    result.append(or_(*clause_list))
+                else:
+                    raise ValidationError("Filter not valid: %s", filter)
+
+            else:
+                raise ValidationError("Filter not valid")
+
+    return result
+
+
 def get_resource_data(*,
                       uri: str,
                       object_location: Optional[str],
                       object_location_schema: Optional[str],
-                      filters: Dict[str, Union[str,dict]],
-                      like : str,
+                      filters: Dict[str, Union[str, dict]],
+                      like: str,
                       fields: List[str],
                       sort: List[OrderBy],
                       limit: Optional[int] = None,
@@ -448,27 +497,27 @@ def get_resource_data(*,
     .. versionchanged:: 1.2  The numeric handling system for cx_Oracle has been reworked to take advantage of newer cx_Oracle features as well 
     as better integration of outputtypehandlers. """
 
-
     dataTemp = []
-    dataTempTuplas= []
+    dataTempTuplas = []
 
     for item in data:
         for column in item:
-            if (isinstance(column, (decimal.Decimal, uuid.UUID, Promise))) or (isinstance(column, float)) or (isinstance(column, Numeric)):
-                    parte_decimal, parte_entera = math.modf(column)
-                    if (parte_decimal) == 0.0:
-                        dataTempTuplas.append(int(column))
-                    else:
-                        dataTempTuplas.append(sanitize_control_charcters(column))
+            if (isinstance(column, (decimal.Decimal, uuid.UUID, Promise))) or (isinstance(column, float)) or (
+            isinstance(column, Numeric)):
+                parte_decimal, parte_entera = math.modf(column)
+                if (parte_decimal) == 0.0:
+                    dataTempTuplas.append(int(column))
+                else:
+                    dataTempTuplas.append(sanitize_control_charcters(column))
 
 
 
             else:
-                    dataTempTuplas.append(sanitize_control_charcters(column))
+                dataTempTuplas.append(sanitize_control_charcters(column))
 
         dataTemp.append(tuple(dataTempTuplas))
         dataTempTuplas.clear()
-    data =dataTemp
+    data = dataTemp
 
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
@@ -488,13 +537,15 @@ def get_resource_data(*,
 
 def update_resource_size(resource_id, registries, size):
     try:
-        resource = ResourceConfig.objects.select_related().get(id=resource_id, enabled=True, connector_config__enabled=True)
+        resource = ResourceConfig.objects.select_related().get(id=resource_id, enabled=True,
+                                                               connector_config__enabled=True)
     except ResourceConfig.DoesNotExist as err:
         raise ValidationError("Resource not exists or is not available", 400) from err
 
-    rsc = ResourceSizeConfig(registries=registries,size=size)
-    rsc.resource_id=resource
+    rsc = ResourceSizeConfig(registries=registries, size=size)
+    rsc.resource_id = resource
     rsc.save()
+
 
 def _get_columns(columns_dict: Dict[str, Column], column_names: List[str]) -> Iterable[Column]:
     """Get SQLAlchemy column instances from column names."""
@@ -522,10 +573,11 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
 
     return sort_methods
 
+
 def _get_filter_by_args(args: str, model: Table):
     """Create constructor of filter like"""
-    filters =[]
-    if args and  len(args) != 2:
+    filters = []
+    if args and len(args) != 2:
         try:
             list_args = args.split(",")
             for value in (list_args):
@@ -536,8 +588,8 @@ def _get_filter_by_args(args: str, model: Table):
                 key = eval(value)[0]
                 filters.append(model.columns[key].ilike(f'%{eval(value)[1]}%'))
         except KeyError as err:
-                raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
-    return(filters)
+            raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
+    return (filters)
 
 
 def validate_uri(uri: str) -> None:
@@ -552,15 +604,13 @@ def validate_uri(uri: str) -> None:
 
 
 def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
-
     if not charset:
-
-        #charset = cchardet.detect(data)['encoding']
-        #pasamos a charset 8 porque sino identifica como gb18030 - o ISO15 que no es capaz de decodificar
-        charset= 'utf-8'
+        # charset = cchardet.detect(data)['encoding']
+        # pasamos a charset 8 porque sino identifica como gb18030 - o ISO15 que no es capaz de decodificar
+        charset = 'utf-8'
     print(charset)
     try:
-        data = data.decode(charset,'ignore')
+        data = data.decode(charset, 'ignore')
     except UnicodeDecodeError:
         data = data.decode('utf-8', 'ignore')
     if data:
@@ -625,7 +675,7 @@ def _get_engine_from_api(uri: str) -> Engine:
     if data:
         table = _get_table_from_dict(data, engine, metadata)
     else:
-        table = Table(_TEMPORAL_TABLE_NAME, metadata, Column('id', Integer, primary_key = True), prefixes=['TEMPORARY'])
+        table = Table(_TEMPORAL_TABLE_NAME, metadata, Column('id', Integer, primary_key=True), prefixes=['TEMPORARY'])
         metadata.create_all(engine)
     if data:
         session_maker = sessionmaker(bind=engine)
