@@ -48,6 +48,7 @@ def _get_resource(resource_id: int):
     try:
         return ResourceConfig.objects.select_related().get(id=resource_id, enabled=True, connector_config__enabled=True)
     except ResourceConfig.DoesNotExist as err:
+        logger.warning('Resource %s does not exist or is not available: %s', resource_id, err)
         raise ValidationError("Resource not exists or is not available", 400) from err
 
 def get_response_xlsx(data: ReturnList)-> HttpResponse:

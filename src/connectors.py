@@ -33,6 +33,9 @@ from sqlalchemy.types import Numeric
 
 from gaodcore.operators import get_function_for_operator
 from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
+import logging
+
+logger = logging.getLogger(__name__)
 
 _DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql+pyodbc', 'oracle', 'sqlite'}
 _HTTP_SCHEMAS = {'http', 'https'}
@@ -407,15 +410,31 @@ def get_session_data(uri: str,
     parsed = urlparse(uri)
 
     if parsed.scheme in ['mssql+pyodbc']:
-        data = session.query(model).filter_by(**filters).filter(*filters_args).with_entities(
-            *[model.c[col.name].label(col.name) for col in columns]).all()
+        try:
+            data = session.query(model).filter_by(**filters).filter(*filters_args).with_entities(
+                *[model.c[col.name].label(col.name) for col in columns]).all()
+        except sqlalchemy.exc.ProgrammingError as err:
+            raise NoObjectError("Object not available.") from err
+        finally:
+            session.close()
+            engine.dispose()
     else:
-        data = session.query(model).filter_by(**filters).filter(*filters_args).order_by(
-            *_get_sort_methods(column_dict, sort)).with_entities(
-            *[model.c[col.name].label(col.name) for col in columns]).offset(offset).limit(limit).all()
-
-    session.close()
-    engine.dispose()
+        try:
+            data = session.query(model).filter_by(**filters).filter(*filters_args).order_by(
+                *_get_sort_methods(column_dict, sort)).with_entities(
+                *[model.c[col.name].label(col.name) for col in columns]).offset(offset).limit(limit).all()
+        except sqlalchemy.exc.ProgrammingError as err:
+            logger.warning("Object not available. - %s ", err)
+            raise ValidationError("Object not available.") from err
+        except sqlalchemy.exc.InvalidRequestError as err:
+            logger.warning("Invalid Request Error. - %s ", err)
+            raise ValidationError("Invalid Request Error.") from err
+        except Exception as err:
+            logger.warning("Problem in resource query: %s", err)
+            raise ValidationError("Query error") from err
+        finally:
+            session.close()
+            engine.dispose()
 
     return (data)
 
@@ -465,9 +484,11 @@ def process_filters_args(filters: list[dict]) -> list:
                 elif key == "$or":
                     result.append(or_(*clause_list))
                 else:
+                    logger.warning("Filter not valid: %s", filter)
                     raise ValidationError("Filter not valid: %s", filter)
 
             else:
+                logger.warning("Filter not valid: %s", filter)
                 raise ValidationError("Filter not valid")
 
     return result

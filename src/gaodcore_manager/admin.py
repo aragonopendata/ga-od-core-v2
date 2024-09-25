@@ -15,12 +15,12 @@ class ResourceConfigAdmin(admin.ModelAdmin):
         'id', 'name', 'connector_config', 'object_location', 'object_location_schema', 'enabled')
     list_filter = ('enabled',)
     search_fields = (
-        'id', 'name', 'connector_config', 'object_location', 'object_location_schema')
+        'id', 'name', 'connector_config__name', 'object_location', 'object_location_schema')
 
 
 class ResourceSizeConfigAdmin(admin.ModelAdmin):
     list_display = ('resource_id', 'registries', 'size')
-    search_fields = ('resource_id', 'registries', 'size')
+    search_fields = ('registries', 'size')
 
 
 admin.site.register(ConnectorConfig, ConnectorConfigAdmin)
