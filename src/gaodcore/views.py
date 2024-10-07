@@ -320,13 +320,16 @@ class DownloadView(APIViewMixin):
         @param request: Django response instance.
         @return: resource_id.
         """
+        resource_id = request.query_params.get('resource_id') or request.query_params.get('view_id')
+        if not resource_id:
+            raise ValidationError("It is required to specify resource_id in the query string.")
+
         try:
-            resource_id = int(request.query_params.get('resource_id') or request.query_params.get('view_id'))
+            resource_id = int(resource_id)
         except ValueError as err:
+            logger.info('Resource_id is not a number. : %s', err)
             raise ValidationError("Resource_id is not a number.") from err
 
-        if not resource_id:
-            raise ValidationError("Is required specify resource_id in query string.")
         return resource_id
 
 
@@ -415,8 +418,8 @@ class DownloadView(APIViewMixin):
             raise ValidationError('Invalid format: eg. {“key1”: “a”, “key2”: “b”}', 400)
 
         for _, value in filters.items():
-            if type(value) not in (str, int, float, bool, dict, None) and value is not None:
-                raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Dict, Null or None', 400)
+            if type(value) not in (str, int, float, bool, dict, list, None) and value is not None:
+                raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Dict, List, Null or None', 400)
         return filters
     
     @staticmethod

@@ -4,8 +4,10 @@ from datetime import date
 import pytest
 from rest_framework.exceptions import ValidationError
 
-from connectors import get_resource_data, _get_filter_operators, process_filters_args
+from connectors import get_resource_data, _get_filter_operators
+
 from .conftest import Car
+from gaodcore.operators import process_filters_args
 
 
 @pytest.fixture
@@ -225,3 +227,22 @@ def test_process_filters_args(filters_args, expected):
     result = process_filters_args(filters_args)
     result = [str(r) for r in result]
     assert result == expected
+
+@pytest.mark.django_db
+def test_get_resource_and_simple_conditions(configs, car_table):
+    test_filters = {"$and": [{'brand': {"$eq": "Tesla"}}, {'year': {"$eq": 2020}}]}
+    result = get_resource_with_filters(configs, test_filters)
+
+    assert len(result) == 1
+    for r in result:
+        assert r["name"] in ["Model S"]
+
+@pytest.mark.this
+@pytest.mark.django_db
+def test_get_resource_not_simple(configs, car_table):
+    test_filters = {"$not": {'brand': {"$eq": "Tesla"}}}
+    result = get_resource_with_filters(configs, test_filters)
+
+    assert len(result) == 3
+    for r in result:
+        assert r["name"] in ["Corsa", "Astra", "Clio"]
