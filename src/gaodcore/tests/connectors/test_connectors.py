@@ -228,6 +228,7 @@ def test_process_filters_args(filters_args, expected):
     result = [str(r) for r in result]
     assert result == expected
 
+
 @pytest.mark.django_db
 def test_get_resource_and_simple_conditions(configs, car_table):
     test_filters = {"$and": [{'brand': {"$eq": "Tesla"}}, {'year': {"$eq": 2020}}]}
@@ -237,7 +238,7 @@ def test_get_resource_and_simple_conditions(configs, car_table):
     for r in result:
         assert r["name"] in ["Model S"]
 
-@pytest.mark.this
+
 @pytest.mark.django_db
 def test_get_resource_not_simple(configs, car_table):
     test_filters = {"$not": {'brand': {"$eq": "Tesla"}}}
@@ -246,3 +247,37 @@ def test_get_resource_not_simple(configs, car_table):
     assert len(result) == 3
     for r in result:
         assert r["name"] in ["Corsa", "Astra", "Clio"]
+
+
+# test nested and and or. (Brand tesla or opel) and (year 2020 or 2019)
+@pytest.mark.django_db
+def test_get_nested_and_or(configs, car_table):
+    test_filters = {"$and": [{"$or": [{'brand': {"$eq": "Tesla"}}, {'brand': {"$eq": "Opel"}}]},
+                             {"$or": [{'year': {"$eq": 2020}}, {'year': {"$eq": 2019}}]}]}
+    result = get_resource_with_filters(configs, test_filters)
+
+    assert len(result) == 2
+    for r in result:
+        assert r["name"] in ["Model S", "Corsa"]
+
+
+# test not and and. not (brand tesla and year 2020)
+@pytest.mark.django_db
+def test_get_not_and(configs, car_table):
+    test_filters = {"$not": {"$and": [{'brand': {"$eq": "Tesla"}}, {'year': {"$eq": 2020}}]}}
+    result = get_resource_with_filters(configs, test_filters)
+
+    assert len(result) == 4
+    for r in result:
+        assert r["name"] in ["Model 3", "Corsa", "Astra", "Clio"]
+
+
+# test not and or. not (brand tesla or year 2018)
+@pytest.mark.django_db
+def test_get_not_or(configs, car_table):
+    test_filters = {"$not": {"$or": [{'brand': {"$eq": "Tesla"}, 'year': {"$eq": 2018}}]}}
+    result = get_resource_with_filters(configs, test_filters)
+
+    assert len(result) == 2
+    for r in result:
+        assert r["name"] in ["Corsa", "Clio"]
