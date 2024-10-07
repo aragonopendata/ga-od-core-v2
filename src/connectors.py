@@ -28,10 +28,10 @@ from rest_framework.exceptions import ValidationError
 from sqlalchemy import create_engine, Table, MetaData, Column, Boolean, Text, Integer, DateTime, Time, REAL
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.sql.elements import and_, or_
+from sqlalchemy.sql.elements import and_, or_, not_
 from sqlalchemy.types import Numeric
 
-from gaodcore.operators import get_function_for_operator
+from gaodcore.operators import get_function_for_operator, process_filters_args
 from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
 import logging
 
@@ -463,36 +463,6 @@ def _get_filter_operators(filters: Dict[str, Union[str, dict]], filters_args: li
     for field in changed_filters:
         filters.pop(field)
     return filters, filters_args
-
-
-def process_filters_args(filters: list[dict]) -> list:
-    """Process filters and return a list of SQLAlchemy clauses."""
-    result = []
-    for filter in filters:
-        for key in filter:
-            if isinstance(filter[key], dict):
-                for field in filter[key]:
-                    filter_function = get_function_for_operator(field)
-                    result.append(filter_function(key, filter[key]))
-            elif isinstance(filter[key], list):
-                clause_list = []
-                for item in filter[key]:
-                    clause = process_filters_args([item])
-                    clause_list.extend(clause)
-                if key == "$and":
-                    result.append(and_(*clause_list))
-                elif key == "$or":
-                    result.append(or_(*clause_list))
-                else:
-                    logger.warning("Filter not valid: %s", filter)
-                    raise ValidationError("Filter not valid: %s", filter)
-
-            else:
-                logger.warning("Filter not valid: %s", filter)
-                raise ValidationError("Filter not valid")
-
-    return result
-
 
 def get_resource_data(*,
                       uri: str,

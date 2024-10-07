@@ -43,7 +43,6 @@ class TestTranslateFilter:
         assert isinstance(result, TextClause)
         assert result.text == 'key1 = 10'
 
-
 class TestGetFilterOperators:
     def test_get_filter_operators_gt(self):
         filters = {"key1": 2, "key2": {"$gt": 10}}
@@ -53,7 +52,7 @@ class TestGetFilterOperators:
         assert filters == {"key1": 2}
 
         assert len(filters_args) == 1
-        assert filters_args[0].text == 'key2 > 10'
+        assert filters_args[0] == {'key2': {'$gt': 10}}
 
 
 # @pytest.fixture(params=["/GA_OD_Core/download", "/GA_OD_Core/preview"])
