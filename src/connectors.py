@@ -81,6 +81,10 @@ class FieldNoExistsError(Exception):
 
 class SortFieldNoExistsError(Exception):
     """Resource does not have a field."""
+    message = None
+
+    def __init__(self, message="Sort field not exists."):
+        self.message = message
 
 
 class MimeTypeError(Exception):
@@ -429,6 +433,9 @@ def get_session_data(uri: str,
         except sqlalchemy.exc.InvalidRequestError as err:
             logger.warning("Invalid Request Error. - %s ", err)
             raise ValidationError("Invalid Request Error.") from err
+        except SortFieldNoExistsError as err:
+            logger.warning("Sort Field No Exists Error. - %s ", err)
+            raise ValidationError(err.message) from err
         except Exception as err:
             logger.warning("Problem in resource query: %s", err)
             raise ValidationError("Query error") from err
@@ -556,7 +563,7 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
         try:
             column = column_dict[item.field]
         except KeyError as err:
-            raise SortFieldNoExistsError(f'Sort field: {err.args[0]} not exists.') from err
+            raise SortFieldNoExistsError(message=f'Sort field: {err.args[0]} not exists.') from err
         if item.ascending:
             sort_methods.append(column)
         else:
