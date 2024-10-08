@@ -303,7 +303,7 @@ def get_resource_data_feature(uri: str,
 
     # Serializar Feature Collection
     featuresTot = []
-    re_decimal = "\.0*$"  # allow e.g. '1.0000000000' as an int, but not '1.2
+    re_decimal = r"\.0*$"  # allow e.g. '1.0000000000' as an int, but not '1.2
     for item in data:
         item = list(item)
         geometry = item.pop()
@@ -483,7 +483,7 @@ def get_resource_data(*,
                       offset: int = 0) -> Iterable[Dict[str, Any]]:
     """Return a iterable of dictionaries with data of resource."""
 
-    re_decimal = "\.0\s*$"  # allow e.g. '1.0' as an int, but not '1.2
+    re_decimal = r"\.0\s*$"  # allow e.g. '1.0' as an int, but not '1.2
     data = get_session_data(uri, object_location, object_location_schema, filters, like, fields, sort, limit, offset)
 
     """" When no typing objects are present, as when executing plain SQL strings, adefault "outputtypehandler" is present which will generally return numeric
