@@ -5,34 +5,34 @@ psql -h $POSTGRESQL_HOST -p $POSTGRESQL_PORT -d $POSTGRES_DB  -U $POSTGRES_USER 
 			drop materialized view if exists public.v_ip_count;
 			drop materialized view if exists public.v_resources_ip;
                         drop materialized view if exists public.v_requests_gaodcore;
-            CREATE MATERIALIZED VIEW public.v_requests_gaodcore
-            TABLESPACE pg_default
-            AS SELECT to_char(ear.datetime, 'YYYY-MM-DD HH24:MI:SS'::text) AS datetime,
-                ear.url,
-                    CASE
-                        WHEN ear.query_string <> ''::text AND ear.query_string ~ 'resource_id=[0-9]+(&|$)'::text AND (ear.url::text = '/GA_OD_Core/preview'::text OR ear.url::text = '/GA_OD_Core/download'::text) THEN ( SELECT gmr2.name
-                           FROM gaodcore_manager_resourceconfig gmr2
-                          WHERE gmr2.id = (regexp_match(ear.query_string, 'resource_id=([0-9]+)(&|$)'::text))[1]::integer)
-                        WHEN ear.query_string <> ''::text AND ear.query_string ~ 'resource_id=[0-9]+($|&)'::text AND ear.query_string !~ '%resource_id=%&%'::text AND (ear.url::text = '/GA_OD_Core/preview'::text OR ear.url::text = '/GA_OD_Core/download'::text) THEN ( SELECT gmr2.name
-                           FROM gaodcore_manager_resourceconfig gmr2
-                          WHERE gmr2.id = (regexp_match(ear.query_string, 'resource_id=([0-9]+)($|&)'::text))[1]::integer)
-                        WHEN ear.query_string <> ''::text AND ear.query_string ~ 'view_id=[0-9]+(&|$)'::text AND (ear.url::text = '/GA_OD_Core/preview'::text OR ear.url::text = '/GA_OD_Core/download'::text) THEN ( SELECT gmr2.name
-                           FROM gaodcore_manager_resourceconfig gmr2
-                          WHERE gmr2.id = (regexp_match(ear.query_string, 'view_id=([0-9]+)(&|$)'::text))[1]::integer)
-                        WHEN ear.query_string <> ''::text AND ear.query_string ~ 'view_id=[0-9]+($|&)'::text AND ear.query_string !~ '%view_id=%&%'::text AND (ear.url::text = '/GA_OD_Core/preview'::text OR ear.url::text = '/GA_OD_Core/download'::text) THEN ( SELECT gmr2.name
-                           FROM gaodcore_manager_resourceconfig gmr2
-                          WHERE gmr2.id = (regexp_match(ear.query_string, 'view_id=([0-9]+)($|&)'::text))[1]::integer)
-                        ELSE NULL::character varying
-                    END AS resource_name,
-                ear.query_string,
-                ear.user_id,
-                ear.remote_ip,
-                    CASE
-                        WHEN ear.remote_ip::text <> ''::text AND ear.remote_ip::text ~~ '%,%'::text THEN split_part(ear.remote_ip::text, ','::text, 1)::character varying
-                        ELSE ear.remote_ip
-                    END AS ip
-               FROM easyaudit_requestevent ear
-            WITH DATA;
+			CREATE MATERIALIZED VIEW public.v_requests_gaodcore
+			TABLESPACE pg_default
+			AS SELECT to_char(ear.datetime, 'YYYY-MM-DD HH24:MI:SS'::text) AS datetime,
+				ear.url,
+					CASE
+						WHEN ear.query_string <> ''::text AND ear.query_string ~ 'resource_id=[0-9]+(&|$)'::text AND (ear.url::text = '/GA_OD_Core/preview'::text OR ear.url::text = '/GA_OD_Core/download'::text) THEN ( SELECT gmr2.name
+						FROM gaodcore_manager_resourceconfig gmr2
+						WHERE gmr2.id = (regexp_match(ear.query_string, 'resource_id=([0-9]+)(&|$)'::text))[1]::integer)
+						WHEN ear.query_string <> ''::text AND ear.query_string ~ 'resource_id=[0-9]+($|&)'::text AND ear.query_string !~ '%resource_id=%&%'::text AND (ear.url::text = '/GA_OD_Core/preview'::text OR ear.url::text = '/GA_OD_Core/download'::text) THEN ( SELECT gmr2.name
+						FROM gaodcore_manager_resourceconfig gmr2
+						WHERE gmr2.id = (regexp_match(ear.query_string, 'resource_id=([0-9]+)($|&)'::text))[1]::integer)
+						WHEN ear.query_string <> ''::text AND ear.query_string ~ 'view_id=[0-9]+(&|$)'::text AND (ear.url::text = '/GA_OD_Core/preview'::text OR ear.url::text = '/GA_OD_Core/download'::text) THEN ( SELECT gmr2.name
+						FROM gaodcore_manager_resourceconfig gmr2
+						WHERE gmr2.id = (regexp_match(ear.query_string, 'view_id=([0-9]+)(&|$)'::text))[1]::integer)
+						WHEN ear.query_string <> ''::text AND ear.query_string ~ 'view_id=[0-9]+($|&)'::text AND ear.query_string !~ '%view_id=%&%'::text AND (ear.url::text = '/GA_OD_Core/preview'::text OR ear.url::text = '/GA_OD_Core/download'::text) THEN ( SELECT gmr2.name
+						FROM gaodcore_manager_resourceconfig gmr2
+						WHERE gmr2.id = (regexp_match(ear.query_string, 'view_id=([0-9]+)($|&)'::text))[1]::integer)
+						ELSE NULL::character varying
+					END AS resource_name,
+				ear.query_string,
+				ear.user_id,
+				ear.remote_ip,
+					CASE
+						WHEN ear.remote_ip::text <> ''::text AND ear.remote_ip::text ~~ '%,%'::text THEN split_part(ear.remote_ip::text, ','::text, 1)::character varying
+						ELSE ear.remote_ip
+					END AS ip
+			FROM easyaudit_requestevent ear
+			WITH DATA;
 		CREATE materialized VIEW public.v_resources_count as select resource_name, count(resource_name)  from v_requests_gaodcore vrg group by resource_name;
  CREATE materialized VIEW public.v_ip_count as select ip, count(ip) from v_requests_gaodcore vrg  group by ip  ;
  create materialized view public.v_resources_ip as select resource_name, count(distinct(ip)) as numero_llamadas from v_requests_gaodcore vrg group by resource_name;
