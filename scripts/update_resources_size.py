@@ -5,6 +5,9 @@ import psycopg2
 import requests
 from dotenv import load_dotenv
 
+import logging
+logging.basicConfig(level=logging.INFO)
+
 load_dotenv()
 
 api_base_url = os.getenv("API_BASE_URL", "http://localhost:8000/GA_OD_Core")
@@ -24,10 +27,10 @@ def get_connection_url() -> str:
 def call_resource_api(resource_id: int) -> None:
     url = f"{api_base_url}/preview?resource_id={resource_id}"
 
-    print(f"Resource ID: {resource_id}")
-    print(f"URL: {url}")
+    logging.info(f"Resource ID: {resource_id}")
+    logging.info(f"URL: {url}")
     response = requests.get(url)
-    print(f"Status: {response.status_code}\n")
+    logging.info(f"Status: {response.status_code}\n")
 
 
 def update_resources(connection: psycopg2.connect, interval: str = None) -> None:
@@ -65,32 +68,32 @@ def update_new_resources(connection: psycopg2.connect):
 
     resources_to_add = list(set(get_enabled_resources(connection)) - set(get_existing_resources(connection)))
     resources_to_add.sort()
-    print(f"Resources to add: {len(resources_to_add)}\n")
+    logging.info(f"Resources to add: {len(resources_to_add)}\n")
 
     for resource_id in resources_to_add:
         before = time.perf_counter()
         try:
             call_resource_api(resource_id)
         except Exception as e:
-            print(f"Error calling resource API: {e}")
+            logging.warning(f"Error calling resource API: {e}")
         after = time.perf_counter()
-        print(f"Time taken: {after - before:.2f} seconds\n")
+        logging.info(f"Time taken: {after - before:.2f} seconds\n")
 
 
 def main():
     try:
         conn = psycopg2.connect(get_connection_url())
     except psycopg2.Error as e:
-        print(f"Error connecting to database: {e}")
+        logging.warning(f"Error connecting to database: {e}")
         exit(1)
 
     try:
-        print("Adding new resources")
+        logging.info("Adding new resources")
         update_new_resources(conn)
-        print("Updating resources")
+        logging.info("Updating resources")
         update_resources(conn, interval)
     except KeyboardInterrupt:
-        print("Exiting...")
+        logging.info("Exiting...")
     finally:
         conn.close()
 
