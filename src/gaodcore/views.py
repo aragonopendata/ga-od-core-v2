@@ -48,6 +48,7 @@ def _get_resource(resource_id: int):
     try:
         return ResourceConfig.objects.select_related().get(id=resource_id, enabled=True, connector_config__enabled=True)
     except ResourceConfig.DoesNotExist as err:
+        logger.warning('Resource %s does not exist or is not available: %s', resource_id, err)
         raise ValidationError("Resource not exists or is not available", 400) from err
 
 def get_response_xlsx(data: ReturnList)-> HttpResponse:
@@ -319,13 +320,16 @@ class DownloadView(APIViewMixin):
         @param request: Django response instance.
         @return: resource_id.
         """
+        resource_id = request.query_params.get('resource_id') or request.query_params.get('view_id')
+        if not resource_id:
+            raise ValidationError("It is required to specify resource_id in the query string.")
+
         try:
-            resource_id = int(request.query_params.get('resource_id') or request.query_params.get('view_id'))
+            resource_id = int(resource_id)
         except ValueError as err:
+            logger.info('Resource_id is not a number. : %s', err)
             raise ValidationError("Resource_id is not a number.") from err
 
-        if not resource_id:
-            raise ValidationError("Is required specify resource_id in query string.")
         return resource_id
 
 
@@ -355,7 +359,10 @@ class DownloadView(APIViewMixin):
         offset = self._get_int_field(request, 'offset')
         page = self._get_int_field(request, '_page')
         page_size = self._get_int_field(request, '_pageSize')
-        
+
+        if not page and not page_size:
+            return offset
+
         try:
             if page > 0 and page_size:
                 offset = (page -1) * page_size
@@ -411,8 +418,8 @@ class DownloadView(APIViewMixin):
             raise ValidationError('Invalid format: eg. {“key1”: “a”, “key2”: “b”}', 400)
 
         for _, value in filters.items():
-            if type(value) not in (str, int, float, bool, None) and value is not None:
-                raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Null or None', 400)
+            if type(value) not in (str, int, float, bool, dict, list, None) and value is not None:
+                raise ValidationError(f'Value {value} is not a String, Integer, Float, Bool, Dict, List, Null or None', 400)
         return filters
     
     @staticmethod

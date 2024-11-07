@@ -1,7 +1,7 @@
 aiohttp~=3.7.4
 cchardet~=2.1
 cx-Oracle~=8.1.0
-Django~=3.1.7
+Django~=3.1.14
 django-axes~=5.2
 djangorestframework~=3.12.2
 djangorestframework-yaml~=2.0.0
@@ -17,7 +17,7 @@ psycopg2_binary~=2.8.6
 pydantic~=1.8.2
 SQLAlchemy~=1.4
 sqlathanor~=0.7
-requests~=2.25.1
+requests~=2.32.3
 whitenoise~=5.2.0
 pymssql~=2.2.4
 pyodbc~=4.0.32
