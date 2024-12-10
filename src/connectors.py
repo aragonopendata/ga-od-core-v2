@@ -34,6 +34,7 @@ from sqlalchemy.types import Numeric
 from gaodcore.operators import get_function_for_operator, process_filters_args
 from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
 import logging
+from gaodcore.operators import is_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -400,6 +401,7 @@ def get_session_data(uri: str,
 
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
+    parsed = urlparse(uri)
 
     model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
 
@@ -407,11 +409,11 @@ def get_session_data(uri: str,
     columns = _get_columns(column_dict, fields)
     filters_args = _get_filter_by_args(like, model)
     filters, filters_args = _get_filter_operators(filters, filters_args)
-    filters_args = process_filters_args(filters_args)
+    if 'oracle' in parsed.scheme:
+        filters = _process_filters_oracle_dates(filters)
+    filters_args = process_filters_args(filters_args, parsed.scheme)
 
     session = session_maker()
-
-    parsed = urlparse(uri)
 
     if parsed.scheme in ['mssql+pyodbc']:
         try:
@@ -446,19 +448,17 @@ def get_session_data(uri: str,
     return (data)
 
 
-# def _get_filter_operators(filters: Dict[str, Union[str, dict]], filters_args: list) -> Tuple[dict, list]:
-#     """Takes operator clauses from filters, transforms them into SQLAlchemy clauses, and moves them to filters_args."""
-#     changed_filters = []
-#     for field in filters:
-#         if isinstance(filters[field],dict): # if filter is a dict, it has an operator. Ex. {"$gt": 2020}
-#             filter = filters[field]
-#             for operator in filter: # It can have more than one operator. ex. {"$gt": 2020, "$lt": 2022}
-#                 filter_function = get_function_for_operator(operator)
-#                 filters_args.append(filter_function(field, filters[field]))
-#             changed_filters.append(field)
-#     for field in changed_filters:
-#         filters.pop(field)
-#     return filters, filters_args
+def _process_filters_oracle_dates(filters):
+    """Oracle usually expects dates in the format 'dd-Mon-YYYY HH24:MI:SS'. This function processes the filters to
+    convert the dates to this format."""
+    logger.info("Process filters for oracle dates")
+
+    for key in filters:
+        if is_datetime(filters[key]):
+            the_date = datetime.fromisoformat(filters[key])
+            filters[key] = the_date.strftime('%d-%b-%Y %H:%M:%S')
+    return filters
+
 
 def _get_filter_operators(filters: Dict[str, Union[str, dict]], filters_args: list) -> Tuple[dict, list]:
     """Takes operator clauses from filters. If it has a dict or a list, it adds it to result and removes it from filters."""
