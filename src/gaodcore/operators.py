@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Callable, Any
 
 from rest_framework.exceptions import ValidationError
@@ -7,6 +7,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def is_datetime(value):
+    try:
+        datetime.fromisoformat(value)
+        return True
+    except ValueError:
+        return False
 
 # def process_filters_args(filters: list[dict]) -> list:
 #     """Process filters and return a list of SQLAlchemy clauses."""
@@ -42,14 +48,14 @@ logger = logging.getLogger(__name__)
 #     return result
 
 
-def process_filters_args(filters: list[dict]) -> list:
+def process_filters_args(filters: list[dict], scheme: str ="") -> list:
     """Process filters and return a list of SQLAlchemy clauses."""
     result = []
     logger.info("Processing filters: %s", filters)
     for filter in filters:
         for key, value in filter.items():
             if isinstance(value, dict):
-                result.extend(process_dict_filter(key, value))
+                result.extend(process_dict_filter(key, value, scheme))
             elif isinstance(value, list):
                 result.append(process_list_filter(key, value))
             else:
@@ -57,7 +63,7 @@ def process_filters_args(filters: list[dict]) -> list:
     return result
 
 
-def process_dict_filter(key: str, value: dict) -> list:
+def process_dict_filter(key: str, value: dict, schema: str) -> list:
     """Process dictionary filters."""
     result = []
     if key == "$not":
@@ -66,6 +72,9 @@ def process_dict_filter(key: str, value: dict) -> list:
     else:
         for field, field_value in value.items():
             filter_function = get_function_for_operator(field)
+            if "oracle" in schema and is_datetime(field_value):
+                the_date = datetime.fromisoformat(field_value)
+                field_value = the_date.strftime("%d-%b-%Y %H:%M:%S")
             result.append(filter_function(key, {field: field_value}))
     return result
 
