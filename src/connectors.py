@@ -456,7 +456,8 @@ def _process_filters_oracle_dates(filters):
     for key in filters:
         if is_datetime(filters[key]):
             the_date = datetime.fromisoformat(filters[key])
-            filters[key] = the_date.strftime('%d-%b-%Y %H:%M:%S')
+            filters[key] = f"{the_date.strftime('%d-%b-%Y %H:%M:%S')}"
+            # filters[key] = f"TO_DATE('{the_date.isoformat()}', 'YYYY-MM-DD\"T\"HH24:MI:SS')"
     return filters
 
 
