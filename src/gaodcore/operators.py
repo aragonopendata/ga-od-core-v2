@@ -72,10 +72,7 @@ def process_dict_filter(key: str, value: dict, schema: str) -> list:
     else:
         for field, field_value in value.items():
             filter_function = get_function_for_operator(field)
-            if "oracle" in schema and is_datetime(field_value):
-                the_date = datetime.fromisoformat(field_value)
-                field_value = the_date.strftime("%d-%b-%Y %H:%M:%S")
-            result.append(filter_function(key, {field: field_value}))
+            result.append(filter_function(key, {field: field_value}, schema))
     return result
 
 
@@ -117,82 +114,89 @@ def get_function_for_operator(operator: str) -> Callable:
     return result
 
 
-def format_type(value):
+def format_type(value, schema: str = "") -> str:
     if isinstance(value, str):
-        value = f"'{value}'"
+        if "oracle" in schema and is_datetime(value):
+            the_date = datetime.fromisoformat(value)
+            value = f"TO_DATE('{the_date.isoformat()}', 'YYYY-MM-DD\"T\"HH24:MI:SS')"
+        else:
+            value = f"'{value}'"
     elif isinstance(value, date):
-        value = f"'{value.isoformat()}'"
+        if "oracle" in schema:
+            value = f"TO_DATE('{value.isoformat()}', 'YYYY-MM-DD\"T\"HH24:MI:SS')"
+        else:
+            value = f"'{value.isoformat()}'"
     return value
 
-
-def filter_gt(field: str, filter: dict) -> text:
+def filter_gt(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
         @param field: Field name
         @param filter: Filter dictionary
         @return: SQL clause
     """
     value = filter["$gt"]
-    value = format_type(value)
+
+    value = format_type(value, schema)
 
     return text(f"{field} > {value}")
 
 
-def filter_lt(field: str, filter: dict) -> text:
+def filter_lt(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
         @param field: Field name
         @param filter: Filter dictionary
         @return: SQL clause
     """
     value = filter["$lt"]
-    value = format_type(value)
+    value = format_type(value, schema)
 
     return text(f"{field} < {value}")
 
 
-def filter_eq(field: str, filter: dict) -> text:
+def filter_eq(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
         @param field: Field name
         @param filter: Filter dictionary
         @return: SQL clause
     """
     value = filter["$eq"]
-    value = format_type(value)
+    value = format_type(value, schema)
 
     return text(f"{field} = {value}")
 
 
-def filter_ne(field: str, filter: dict) -> text:
+def filter_ne(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
         @param field: Field name
         @param filter: Filter dictionary
         @return: SQL clause
     """
     value = filter["$ne"]
-    value = format_type(value)
+    value = format_type(value, schema)
 
     return text(f"{field} != {value}")
 
 
-def filter_gte(field: str, filter: dict) -> text:
+def filter_gte(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
         @param field: Field name
         @param filter: Filter dictionary
         @return: SQL clause
     """
     value = filter["$gte"]
-    value = format_type(value)
+    value = format_type(value, schema)
 
     return text(f"{field} >= {value}")
 
 
-def filter_lte(field: str, filter: dict) -> text:
+def filter_lte(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
         @param field: Field name
         @param filter: Filter dictionary
         @return: SQL clause
     """
     value = filter["$lte"]
-    value = format_type(value)
+    value = format_type(value, schema)
 
     return text(f"{field} <= {value}")
 
