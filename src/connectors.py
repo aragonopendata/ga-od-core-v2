@@ -28,13 +28,11 @@ from rest_framework.exceptions import ValidationError
 from sqlalchemy import create_engine, Table, MetaData, Column, Boolean, Text, Integer, DateTime, Time, REAL
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.sql.elements import and_, or_, not_
 from sqlalchemy.types import Numeric
 
-from gaodcore.operators import get_function_for_operator, process_filters_args
-from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
-import logging
 from gaodcore.operators import is_datetime
+from gaodcore.operators import process_filters_args
+from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
 
 logger = logging.getLogger(__name__)
 
@@ -270,7 +268,7 @@ def get_resource_data_feature(uri: str,
     model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
     column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
-    filters_args = _get_filter_by_args(like, model)
+    filters_args = _process_like_filter(like, model)
     session = session_maker()
 
     parsed = urlparse(uri)
@@ -407,11 +405,13 @@ def get_session_data(uri: str,
 
     column_dict = {column.name: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
-    filters_args = _get_filter_by_args(like, model)
+    filters_args = []
+    like_filters = _process_like_filter(like, model)
     filters, filters_args = _get_filter_operators(filters, filters_args)
     if 'oracle' in parsed.scheme:
         filters = _process_filters_oracle_dates(filters)
     filters_args = process_filters_args(filters_args, parsed.scheme)
+    filters_args.extend(like_filters)
 
     session = session_maker()
 
@@ -502,7 +502,7 @@ def get_resource_data(*,
     for item in data:
         for column in item:
             if (isinstance(column, (decimal.Decimal, uuid.UUID, Promise))) or (isinstance(column, float)) or (
-            isinstance(column, Numeric)):
+                    isinstance(column, Numeric)):
                 parte_decimal, parte_entera = math.modf(column)
                 if (parte_decimal) == 0.0:
                     dataTempTuplas.append(int(column))
@@ -573,13 +573,13 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
     return sort_methods
 
 
-def _get_filter_by_args(args: str, model: Table):
+def _process_like_filter(args: str, model: Table) -> list:
     """Create constructor of filter like"""
     filters = []
     if args and len(args) != 2:
         try:
             list_args = args.split(",")
-            for value in (list_args):
+            for value in list_args:
                 if re.search(r'[{/}]', (value)):
                     value = re.sub(r'[{/}]', " ", (value))
                 if re.search(r'[:]', (value)):
@@ -588,7 +588,7 @@ def _get_filter_by_args(args: str, model: Table):
                 filters.append(model.columns[key].ilike(f'%{eval(value)[1]}%'))
         except KeyError as err:
             raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
-    return (filters)
+    return filters
 
 
 def validate_uri(uri: str) -> None:

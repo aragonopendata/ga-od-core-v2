@@ -95,3 +95,22 @@ class TestDownloadViewWithOperators():
                                                   "fields": ["id"],
                                                   "filters": '{ "id": { "$invalid": 2 } }'})
         assert download_response.status_code == 400
+
+    @pytest.mark.django_db
+    def test_download_view_id_with_like_filter(self, endpoint: str, client: Client, full_example):
+        """Test download view with like filter, filter name with RX, like in 'RX-78-2 Gundam'"""
+        download_response = client.get(endpoint, {'view_id': full_example.resources.table.id,
+                                                  "fields": ["id"],
+                                                  "like": '{ "name": "RX"}'})
+        response = download_response.json()
+        response.sort(key=lambda item: item['id'])
+        assert response == [{'id': 1}]
+
+    @pytest.mark.django_db
+    def test_download_view_id_with_like_wrong_filter(self, endpoint: str, client: Client, full_example):
+        """Test download view with like filter, filter with wrong name, expecting empty result"""
+        download_response = client.get(endpoint, {'view_id': full_example.resources.table.id,
+                                                  "fields": ["id"],
+                                                  "like": '{ "name": "AEIOU"}'})
+        response = download_response.json()
+        assert len(response) == 0
