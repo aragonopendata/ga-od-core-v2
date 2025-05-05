@@ -9,10 +9,11 @@ https://docs.djangoproject.com/en/3.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.1/ref/settings/
 """
-import os
+
 from pathlib import Path
 
 from gaodcore_project.config import Config
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 
@@ -165,21 +166,21 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
+ 	    'file': {
+            'class': 'logging.FileHandler',
+            'filename': '/var/log/django/django.log',
+            'formatter': 'verbose',
+        }
     },
     'root': {
-        'handlers': ['console'],
+        'handlers': ['console','file'],
         'level': 'WARNING',
     },
     'loggers': {
 
         'django': {
             'handlers': ['console'],
-            'level':  os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
-            'propagate': False,
-        },
-        'sqlalchemy': {
-            'handlers': ['console'],
-            'level': 'WARNING',
+            'level':  os.getenv('DJANGO_LOG_LEVEL', 'WARNING'),
             'propagate': False,
         },
     },
@@ -198,9 +199,3 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 DJANGO_EASY_AUDIT_REGISTERED_URLS = [r'^/GA_OD_Core/views', r'^/GA_OD_Core/preview', r'^/GA_OD_Core/show_columns', r'/GA_OD_Core/download', r'/GA_OD_Core_admin/manager/connector-config', r'/GA_OD_Core_admin/manager/resource-config']
 DJANGO_EASY_AUDIT_REMOTE_ADDR_HEADER = 'HTTP_X_FORWARDED_FOR'
-
-
-try:
-    from .local_settings import *
-except ImportError:
-    pass
