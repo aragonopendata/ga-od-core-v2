@@ -11,7 +11,7 @@ import urllib.request
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from enum import Enum
 from http import HTTPStatus
 from io import StringIO
@@ -325,21 +325,21 @@ def get_resource_data_feature(uri: str,
                     item[i] = int(column)
                 else:
                     item[i] = str(column)
-            elif isinstance(column, datetime.datetime):
+            elif isinstance(column, datetime):
                 r = column.isoformat()
                 if column.microsecond:
                     r = r[:23] + r[26:]
                 if r.endswith('+00:00'):
                     r = r[:-6] + 'Z'
                 item[i] = r
-            elif isinstance(column, datetime.date):
+            elif isinstance(column, date):
                 item[i] = column.isoformat()
-            elif isinstance(column, datetime.time):
+            elif isinstance(column, time):
                 r = column.isoformat()
                 if column.microsecond:
                     r = r[:12]
                 item[i] = r
-            elif isinstance(column, datetime.timedelta):
+            elif isinstance(column, timedelta):
                 item[i] = duration_iso_string(column)
 
             else:
