@@ -1,0 +1,44 @@
+services:
+  django:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "6001:8000"
+    volumes:
+      - "./config.yaml:/etc/gaodecore/config.yaml"
+    environment:
+      - CONFIG_PATH=/etc/gaodecore/config.yaml
+      - POSTGRESQL_HOST=postgres-gaodcore
+      - POSTGRESQL_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-gaodcore}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-gaodcore}
+      - POSTGRES_DB=${POSTGRES_DB:-ga_od_core}
+      - "API_BASE_URL=https://desopendata.aragon.es/GA_OD_Core"
+      - "DJANGO_LOG_LEVEL=${DJANGO_LOG_LEVEL:-INFO}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17
+    container_name: postgres-gaodcore
+    restart: always
+#    ports:
+#      - "5432:5432"
+    volumes:
+      - postgres_storage:/var/lib/postgresql/data
+    environment:
+      - TZ=Europe/Madrid
+      - POSTGRES_USER=${POSTGRES_USER:-gaodcore}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-gaodcore}
+      - POSTGRES_DB=${POSTGRES_DB:-gaodcore}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_storage:
