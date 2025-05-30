@@ -24,7 +24,9 @@ services:
       - infraestructura_opendata
 
   postgres:
-    image: postgres:17
+    build:
+      context: docker/postgres
+      dockerfile: Dockerfile
     container_name: postgres-gaodcore
     restart: always
 #    ports:
