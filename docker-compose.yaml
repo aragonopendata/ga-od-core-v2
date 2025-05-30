@@ -20,6 +20,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - infraestructura_opendata
 
   postgres:
     image: postgres:17
@@ -39,6 +41,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - infraestructura_opendata
 
 volumes:
   postgres_storage:
+
+networks:
+  infraestructura_opendata:
+    external: true
