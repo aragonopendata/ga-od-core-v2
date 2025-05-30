@@ -168,13 +168,13 @@ LOGGING = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'WARNING',
+        'level':  os.getenv('DJANGO_LOG_LEVEL', 'WARNING'),
     },
     'loggers': {
 
         'django': {
             'handlers': ['console'],
-            'level':  os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+            'level':  os.getenv('DJANGO_LOG_LEVEL', 'WARNING'),
             'propagate': False,
         },
         'django.request': {

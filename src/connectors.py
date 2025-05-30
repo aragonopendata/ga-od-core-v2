@@ -122,7 +122,7 @@ def _get_model(*, engine: Engine, object_location: str, object_location_schema: 
                         engine.url)
         raise NoObjectError("Object not available.") from err
     except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError, sqlalchemy.exc.ProgrammingError) as err:
-        logging.warning("Connection not available. Url: %s", engine.url)
+        logging.warning("Connection not available. Url: %s, Error: %s", engine.url, err)
         raise DriverConnectionError("Connection not available.") from err
 
 
