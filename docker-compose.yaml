@@ -7,9 +7,9 @@ services:
     ports:
       - "6001:8000"
     volumes:
-      - "./config.yaml:/etc/gaodecore/config.yaml"
+      - "./config.yaml:/etc/gaodcore/config.yaml"
     environment:
-      - CONFIG_PATH=/etc/gaodecore/config.yaml
+      - CONFIG_PATH=/etc/gaodcore/config.yaml
       - POSTGRESQL_HOST=postgres-gaodcore
       - POSTGRESQL_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-gaodcore}
