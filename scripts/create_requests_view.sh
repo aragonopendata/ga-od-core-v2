@@ -1,4 +1,5 @@
 set -e
+echo "Creating views for GA_OD_Core requests..."
 export PGPASSWORD=$POSTGRES_PASSWORD
 psql -h $POSTGRESQL_HOST -p $POSTGRESQL_PORT -d $POSTGRES_DB  -U $POSTGRES_USER  -c "
 			drop materialized view if exists public.v_resources_count;

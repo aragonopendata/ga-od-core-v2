@@ -177,6 +177,11 @@ LOGGING = {
             'level':  os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
             'propagate': False,
         },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
         'sqlalchemy': {
             'handlers': ['console'],
             'level': 'WARNING',

@@ -62,5 +62,5 @@ RUN chmod +x scripts/create_requests_view.sh
 CMD bash -c "python manage.py migrate --noinput \
     && python manage.py collectstatic --noinput \
     && python manage.py createcachetable \
-    && bash -x ./scripts/create_requests_view.sh \
+    && bash ./scripts/create_requests_view.sh \
     && gunicorn gaodcore_project.wsgi --bind :8000 --workers 9 --timeout 240"
