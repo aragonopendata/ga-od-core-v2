@@ -19,7 +19,7 @@ def uri_validator(uri):
     except MimeTypeError as err:
         raise MimeTypeError("Mimetype of content-type is not allowed. Only allowed: JSON mimetypes.") from err
     except DriverConnectionError as err:
-        raise ValidationError('Connection is not available.', 400) from err
+        raise ValidationError('Connection is not available.', 503) from err
 
 
 def resource_validator(uri: str, object_location: str,
