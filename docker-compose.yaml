@@ -6,8 +6,6 @@ services:
     restart: always
     ports:
       - "6001:8000"
-    volumes:
-      - "./config.yaml:/etc/gaodcore/config.yaml"
     environment:
       - CONFIG_PATH=/etc/gaodcore/config.yaml
       - POSTGRESQL_HOST=postgres-gaodcore
@@ -17,11 +15,19 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-ga_od_core}
       - "API_BASE_URL=https://desopendata.aragon.es/GA_OD_Core"
       - "DJANGO_LOG_LEVEL=${DJANGO_LOG_LEVEL:-INFO}"
+    configs:
+      - source: gaodcore-config
+        target: /etc/gaodcore/config.yaml
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - infraestructura_opendata
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -I -f http://localhost:8000/GA_OD_Core/ui/" ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
 
   postgres:
     build:
@@ -37,7 +43,7 @@ services:
       - TZ=Europe/Madrid
       - POSTGRES_USER=${POSTGRES_USER:-gaodcore}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-gaodcore}
-      - POSTGRES_DB=${POSTGRES_DB:-gaodcore}
+      - POSTGRES_DB=${POSTGRES_DB:-ga_od_core}
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB" ]
       interval: 10s
@@ -45,6 +51,10 @@ services:
       retries: 5
     networks:
       - infraestructura_opendata
+
+configs:
+  gaodcore-config:
+    file: config.yaml
 
 volumes:
   postgres_storage:

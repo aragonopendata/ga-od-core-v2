@@ -164,6 +164,7 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'WARNING'),
         },
     },
     'root': {
