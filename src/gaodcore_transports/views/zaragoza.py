@@ -16,6 +16,9 @@ from rest_framework.response import Response
 from gaodcore_project.settings import CONFIG
 from utils import get_return_list, download, download_async, gather_limited
 from views import APIViewMixin
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -359,4 +362,8 @@ class SAEView(APIViewMixin):  # pylint: disable=too-few-public-methods
     def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
         url = CONFIG.projects.transport.zaragoza.get_url(self._ENDPOINT)
-        return Response(get_return_list(download(url)[self._ENDPOINT]))
+        data = download(url)[self._ENDPOINT]
+        if not data:
+            data = []
+            logger.warning("No data found for %s", url)
+        return Response(get_return_list(data))
