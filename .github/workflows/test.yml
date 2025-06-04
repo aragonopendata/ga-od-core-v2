@@ -122,6 +122,7 @@ jobs:
     
     - name: Run Django migrations
       run: |
+        cd src
         python manage.py migrate --verbosity=2
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
@@ -133,6 +134,7 @@ jobs:
     
     - name: Collect static files
       run: |
+        cd src
         python manage.py collectstatic --noinput --verbosity=2
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
