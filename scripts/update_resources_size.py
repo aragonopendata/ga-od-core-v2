@@ -6,6 +6,7 @@ import requests
 from dotenv import load_dotenv
 
 import logging
+
 logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
@@ -39,7 +40,6 @@ def update_resources(connection: psycopg2.connect, interval: str = None) -> None
         query += f" WHERE updated_at < NOW() - INTERVAL '{interval}'"
 
     with connection.cursor() as cursor:
-
         cursor.execute(query)
         for row in cursor:
             resource_id = row[0]

@@ -10,7 +10,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgres:13
@@ -25,7 +25,7 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-      
+
       mysql:
         image: mysql:8.0
         env:
@@ -45,7 +45,7 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Install system dependencies
       run: |
         sudo apt-get update
@@ -57,7 +57,7 @@ jobs:
           default-libmysqlclient-dev \
           netcat-openbsd \
           mysql-client
-    
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -66,12 +66,12 @@ jobs:
         cache-dependency-path: |
           requirements.txt
           requirements-dev.txt
-    
+
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements-dev.txt
-    
+
     - name: Wait for database services
       run: |
         echo "Waiting for PostgreSQL..."
@@ -79,35 +79,35 @@ jobs:
           echo "Waiting for PostgreSQL to be ready..."
           sleep 2
         done'
-        
+
         echo "Waiting for MySQL..."
         echo "Checking MySQL service status..."
-        
+
         # Wait for MySQL port to be open
         timeout 60 bash -c 'until nc -z localhost 3306; do
           echo "Waiting for MySQL port 3306 to be open..."
           sleep 2
         done'
-        
+
         # Wait for MySQL to accept connections
         timeout 60 bash -c 'until mysqladmin ping -h 127.0.0.1 -P 3306 -u root -proot --silent; do
           echo "Waiting for MySQL to accept connections..."
           sleep 3
         done'
-        
+
         # Test actual database connection
         echo "Testing MySQL database connection..."
         mysql -h 127.0.0.1 -P 3306 -u root -proot -e "SHOW DATABASES;" || echo "MySQL connection test failed, but continuing..."
-        
+
         echo "Databases are ready!"
-    
+
     - name: Set up test environment
       run: |
         # Copy config template if it exists
         if [ -f "config.template.yaml" ]; then
           cp config.template.yaml config-test.yaml
         fi
-        
+
         # Create .env file for testing if needed
         if [ -f ".env-template" ]; then
           cp .env-template .env
@@ -120,7 +120,7 @@ jobs:
         SECRET_KEY: test-secret-key-for-github-actions
         DEBUG: false
         TESTING: true
-    
+
     - name: Run Django migrations
       run: |
         cd src
@@ -133,7 +133,7 @@ jobs:
         SECRET_KEY: test-secret-key-for-github-actions
         DEBUG: false
         TESTING: true
-    
+
     - name: Collect static files
       run: |
         cd src
@@ -146,22 +146,22 @@ jobs:
         SECRET_KEY: test-secret-key-for-github-actions
         DEBUG: false
         TESTING: true
-    
+
     - name: Run tests
       run: |
         pytest src --cov=. --cov-report=xml --cov-report=term --cov-report=html -v
       env:
         # Config path for Django settings
         CONFIG_PATH: /home/runner/work/ga-od-core-v2/ga-od-core-v2/config-tst.yaml
-        
+
         # Database URLs for testing
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ga_od_core_test
         MYSQL_DATABASE_URL: mysql://test_user:test_password@localhost:3306/test_db
-        
+
         # Django settings
         DJANGO_SETTINGS_MODULE: gaodcore_project.settings
         SECRET_KEY: test-secret-key-for-github-actions
         DEBUG: false
-        
+
         # Disable external API calls during testing
         TESTING: true

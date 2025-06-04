@@ -5,15 +5,20 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('gaodcore_manager', '0002_auto_20240704_0851'),
+        ("gaodcore_manager", "0002_auto_20240704_0851"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='resourcesizeconfig',
-            name='resource_id',
-            field=models.OneToOneField(help_text='Foreign key of ResourceConfig.', on_delete=django.db.models.deletion.CASCADE, primary_key=True, serialize=False, to='gaodcore_manager.resourceconfig'),
+            model_name="resourcesizeconfig",
+            name="resource_id",
+            field=models.OneToOneField(
+                help_text="Foreign key of ResourceConfig.",
+                on_delete=django.db.models.deletion.CASCADE,
+                primary_key=True,
+                serialize=False,
+                to="gaodcore_manager.resourceconfig",
+            ),
         ),
     ]

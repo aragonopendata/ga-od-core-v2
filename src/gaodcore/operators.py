@@ -7,12 +7,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def is_datetime(value):
     try:
         datetime.fromisoformat(value)
         return True
     except ValueError:
         return False
+
 
 # def process_filters_args(filters: list[dict]) -> list:
 #     """Process filters and return a list of SQLAlchemy clauses."""
@@ -48,7 +50,7 @@ def is_datetime(value):
 #     return result
 
 
-def process_filters_args(filters: list[dict], scheme: str ="") -> list:
+def process_filters_args(filters: list[dict], scheme: str = "") -> list:
     """Process filters and return a list of SQLAlchemy clauses."""
     result = []
     logger.info("Processing filters: %s", filters)
@@ -97,7 +99,7 @@ def process_simple_filter(key: str, value: Any) -> text:
 
 
 def get_function_for_operator(operator: str) -> Callable:
-    """ Return the operator function based on the filter type. """
+    """Return the operator function based on the filter type."""
     filter_operators = {
         "$gt": filter_gt,
         "$lt": filter_lt,
@@ -128,11 +130,12 @@ def format_type(value, schema: str = "") -> str:
             value = f"'{value.isoformat()}'"
     return value
 
+
 def filter_gt(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
-        @param field: Field name
-        @param filter: Filter dictionary
-        @return: SQL clause
+    @param field: Field name
+    @param filter: Filter dictionary
+    @return: SQL clause
     """
     value = filter["$gt"]
 
@@ -143,9 +146,9 @@ def filter_gt(field: str, filter: dict, schema: str) -> text:
 
 def filter_lt(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
-        @param field: Field name
-        @param filter: Filter dictionary
-        @return: SQL clause
+    @param field: Field name
+    @param filter: Filter dictionary
+    @return: SQL clause
     """
     value = filter["$lt"]
     value = format_type(value, schema)
@@ -155,9 +158,9 @@ def filter_lt(field: str, filter: dict, schema: str) -> text:
 
 def filter_eq(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
-        @param field: Field name
-        @param filter: Filter dictionary
-        @return: SQL clause
+    @param field: Field name
+    @param filter: Filter dictionary
+    @return: SQL clause
     """
     value = filter["$eq"]
     value = format_type(value, schema)
@@ -167,9 +170,9 @@ def filter_eq(field: str, filter: dict, schema: str) -> text:
 
 def filter_ne(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
-        @param field: Field name
-        @param filter: Filter dictionary
-        @return: SQL clause
+    @param field: Field name
+    @param filter: Filter dictionary
+    @return: SQL clause
     """
     value = filter["$ne"]
     value = format_type(value, schema)
@@ -179,9 +182,9 @@ def filter_ne(field: str, filter: dict, schema: str) -> text:
 
 def filter_gte(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
-        @param field: Field name
-        @param filter: Filter dictionary
-        @return: SQL clause
+    @param field: Field name
+    @param filter: Filter dictionary
+    @return: SQL clause
     """
     value = filter["$gte"]
     value = format_type(value, schema)
@@ -191,9 +194,9 @@ def filter_gte(field: str, filter: dict, schema: str) -> text:
 
 def filter_lte(field: str, filter: dict, schema: str) -> text:
     """Translate a filter string to a SQL clause.
-        @param field: Field name
-        @param filter: Filter dictionary
-        @return: SQL clause
+    @param field: Field name
+    @param filter: Filter dictionary
+    @return: SQL clause
     """
     value = filter["$lte"]
     value = format_type(value, schema)
@@ -203,9 +206,9 @@ def filter_lte(field: str, filter: dict, schema: str) -> text:
 
 def filter_not(filter: dict) -> text:
     """Translate a filter string to a SQL clause.
-        @param field: Field name
-        @param filter: Filter dictionary
-        @return: SQL clause
+    @param field: Field name
+    @param filter: Filter dictionary
+    @return: SQL clause
     """
 
     clauses = process_filters_args([filter])

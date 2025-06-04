@@ -4,8 +4,7 @@ import json
 import os
 from csv import DictReader
 from dataclasses import dataclass, field
-from select import select
-from typing import Optional, Tuple
+from typing import Optional
 from urllib.parse import urlparse
 
 from lxml import etree
@@ -14,39 +13,53 @@ import pytest as pytest
 import yaml
 from _pytest.fixtures import FixtureRequest
 from pytest_httpserver import HTTPServer
-from sqlalchemy import create_engine, Column, Integer, String, BigInteger, Float, Boolean, Date, DateTime
+from sqlalchemy import (
+    create_engine,
+    Column,
+    Integer,
+    String,
+    BigInteger,
+    Float,
+    Boolean,
+    Date,
+    DateTime,
+)
 from sqlalchemy.exc import IntegrityError, ProgrammingError, OperationalError
 from sqlalchemy.orm import declarative_base, sessionmaker
 from pytest_docker_fixtures import images
 
-DB_USERNAME = 'username'
-DB_PASSWORD = 'password'
-DB_NAME = 'gaodcore'
+DB_USERNAME = "username"
+DB_PASSWORD = "password"
+DB_NAME = "gaodcore"
 
-images.configure('mysql',
-                 'mysql',
-                 '8',
-                 env={
-                     'MYSQL_USER': DB_USERNAME,
-                     'MYSQL_PASSWORD': DB_PASSWORD,
-                     'MYSQL_DATABASE': DB_NAME
-                 })
+images.configure(
+    "mysql",
+    "mysql",
+    "8",
+    env={
+        "MYSQL_USER": DB_USERNAME,
+        "MYSQL_PASSWORD": DB_PASSWORD,
+        "MYSQL_DATABASE": DB_NAME,
+    },
+)
 
-images.configure('postgresql',
-                 'postgres',
-                 '13',
-                 env={
-                     'POSTGRES_USER': DB_USERNAME,
-                     'POSTGRES_PASSWORD': DB_PASSWORD,
-                     'POSTGRES_DB': DB_NAME
-                 })
+images.configure(
+    "postgresql",
+    "postgres",
+    "13",
+    env={
+        "POSTGRES_USER": DB_USERNAME,
+        "POSTGRES_PASSWORD": DB_PASSWORD,
+        "POSTGRES_DB": DB_NAME,
+    },
+)
 
-pytest_plugins = ['pytest_docker_fixtures']
+pytest_plugins = ["pytest_docker_fixtures"]
 
 USERNAME = "user"
 PASSWORD = "password"
 
-PROJECT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
+PROJECT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
 
 
 @dataclass
@@ -87,10 +100,6 @@ def auth_client(client, django_user_model):
     user = django_user_model.objects.create_user(username=USERNAME, password=PASSWORD)
     client.force_login(user)
     return client
-
-
-def get_uri(host: str, port: str) -> str:
-    return f"postgresql://postgres:@{host}:{port}/guillotina"
 
 
 def create_connector_ga_od_core(client, test_name: str, uri: str) -> ConnectorData:
@@ -231,28 +240,37 @@ def compare_files(directory: str, file_without_extension, mimetype: str, content
                     assert test_data == response_data
                 elif mimetype == 'application/xml':
                     parser = etree.XMLParser(remove_blank_text=True)
-                    assert etree.tostring(etree.XML(f.read(),
-                                                    parser=parser)) == etree.tostring(etree.XML(content, parser=parser))
+                    assert etree.tostring(
+                        etree.XML(f.read(), parser=parser)
+                    ) == etree.tostring(etree.XML(content, parser=parser))
                 else:
                     raise NotImplementedError
         else:
-            with open(url, 'r') as f:
-                if mimetype == 'application/json':
+            with open(url, "r") as f:
+                if mimetype == "application/json":
                     assert json.loads(f.read()) == json.loads(content)
-                elif mimetype == 'text/csv':
-                    assert [row for row in DictReader(f)] == [row for row in DictReader(io.StringIO(content.decode()))]
-                elif mimetype == 'application/yaml':
-                    assert yaml.load(f.read(), Loader=yaml.SafeLoader) == yaml.load(content, Loader=yaml.SafeLoader)
+                elif mimetype == "text/csv":
+                    assert [row for row in DictReader(f)] == [
+                        row for row in DictReader(io.StringIO(content.decode()))
+                    ]
+                elif mimetype == "application/yaml":
+                    assert yaml.load(f.read(), Loader=yaml.SafeLoader) == yaml.load(
+                        content, Loader=yaml.SafeLoader
+                    )
                 else:
                     raise NotImplementedError
     else:
         raise NotImplementedError
 
 
-def connector_uri_api_get_url(httpserver: HTTPServer, request: FixtureRequest, filepath: str, content_type: str) -> str:
-    url = '/' + request.node.originalname
-    with open(filepath, 'rb') as f:
-        httpserver.expect_request(url).respond_with_data(f.read(), content_type=content_type)
+def connector_uri_api_get_url(
+    httpserver: HTTPServer, request: FixtureRequest, filepath: str, content_type: str
+) -> str:
+    url = "/" + request.node.originalname
+    with open(filepath, "rb") as f:
+        httpserver.expect_request(url).respond_with_data(
+            f.read(), content_type=content_type
+        )
     return httpserver.url_for(url)
 
 
@@ -260,31 +278,45 @@ def get_uri(schema: str, _: str, port: int):
     return f"{schema}://{DB_USERNAME}:{DB_PASSWORD}@127.0.0.1:{port}/{DB_NAME}"
 
 
-@pytest.fixture(params=['postgresql', 'mysql', 'api-json'])
+@pytest.fixture(params=["postgresql", "mysql", "api-json"])
 def connector_uri(request, pg, mysql, httpserver: HTTPServer):
-    if request.param in ['postgresql', 'mysql']:
-        conf = mysql if request.param == 'mysql' else pg
+    if request.param in ["postgresql", "mysql"]:
+        conf = mysql if request.param == "mysql" else pg
         return get_uri(request.param, *conf)
-    elif request.param == 'mysql':
+    elif request.param == "mysql":
         return f"mysql://{DB_USERNAME}:{DB_PASSWORD}@127.0.0.1:{mysql[1]}/{DB_NAME}"
-    elif request.param == 'api-json':
-        path = os.path.join(PROJECT_DIR, 'gaodcore', 'tests', 'download_postgresql.json')
-        return connector_uri_api_get_url(httpserver, request, path, 'application/json; charset=utf-8')
+    elif request.param == "api-json":
+        path = os.path.join(
+            PROJECT_DIR, "gaodcore", "tests", "download_postgresql.json"
+        )
+        return connector_uri_api_get_url(
+            httpserver, request, path, "application/json; charset=utf-8"
+        )
     else:
         raise NotImplementedError
 
 
-@pytest.fixture(params=[
-    'text/html',
-    'application/json',
-    'text/csv',
-    'application/xml',
-])
+@pytest.fixture(
+    params=[
+        "text/html",
+        "application/json",
+        "text/csv",
+        "application/xml",
+    ]
+)
 def accept_error(request):
     return request.param
 
 
 @pytest.fixture(
-    params=['text/html', 'application/json', 'text/csv', 'application/xml', 'application/yaml', 'application/xlsx'])
+    params=[
+        "text/html",
+        "application/json",
+        "text/csv",
+        "application/xml",
+        "application/yaml",
+        "application/xlsx",
+    ]
+)
 def accept_download(request):
     return request.param
