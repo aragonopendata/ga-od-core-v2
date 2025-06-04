@@ -11,7 +11,7 @@ class APIViewMixin(APIView):
         """Function that provides a custom serializer to serialize external resources. Django ModelViewSet implements
         get_serializer but all external resources use SQLAlchemy ORM instead of Django ORM."""
         # This check prevents this issue https://github.com/axnsan12/drf-yasg/issues/333
-        if getattr(self, 'swagger_fake_view', False):
+        if getattr(self, "swagger_fake_view", False):
             return None  # Short-circuit schema generation
         ser = DictSerializer(*args, **kwargs, data=self.response.data)
         return ser

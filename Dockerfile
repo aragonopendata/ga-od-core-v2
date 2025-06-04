@@ -22,7 +22,7 @@ RUN rm $ORACLE_INSTANT_CLIENT_TMP
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/opt/oracle/instantclient_$ORACLE_INSTANT_CLIENT_VERSION"
 
 
-#install MSSQL Instant 
+#install MSSQL Instant
 RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
 RUN curl https://packages.microsoft.com/config/debian/10/prod.list > /etc/apt/sources.list.d/mssql-release.list
 
@@ -39,7 +39,7 @@ RUN apt install -y wget
 RUN apt-get update
 RUN apt install postgresql-client -y
 
-RUN echo "[FreeTDS]\n\ 
+RUN echo "[FreeTDS]\n\
     Description = FreeTDS unixODBC Driver\n\
     Driver = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so" >> /etc/odbcinst.ini
 RUN apt clean -y
@@ -57,7 +57,7 @@ RUN pip install -r requirements.txt
 
 COPY ./src .
 COPY ./scripts ./scripts
-RUN chmod +x scripts/create_requests_view.sh 
+RUN chmod +x scripts/create_requests_view.sh
 
 CMD bash -c "python manage.py migrate --noinput \
     && python manage.py collectstatic --noinput \

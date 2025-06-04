@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 
 from django.test import Client
 
+
 @pytest.mark.skip(reason="Slow tests. They fail because view responses have changed.")
 @pytest.mark.parametrize("url, fields", [
     [
@@ -270,7 +271,7 @@ def test_transport_views(client: Client, accept: str, url: str, fields: Dict[str
         assert set(fields.keys()) == set(data.keys())
 
         for field, field_type in fields.items():
-            assert type(data[field]) == field_type
+            assert isinstance(data[field], field_type)
     elif accept == 'application/xlsx':
         df = pandas.read_excel(io.BytesIO(response.content))
         assert set(df.columns.values) == fields.keys()

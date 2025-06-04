@@ -13,34 +13,33 @@ from gaodcore.operators import process_filters_args
 @pytest.fixture
 def car_table():
     Car.create_table()
-    Car.add_car("Model S", "Tesla", 2020, 34000,
-                date(2020, 7, 13))
-    Car.add_car("Model 3", "Tesla", 2021, 40000,
-                date(2021, 4, 28))
-    Car.add_car("Corsa", "Opel", 2019, 20000,
-                date(2019, 2, 21))
-    Car.add_car("Astra", "Opel", 2018, 25000,
-                date(2018, 11, 15))
-    Car.add_car("Clio", "Renault", 2017, 15000,
-                date(2017, 8, 10))
+    Car.add_car("Model S", "Tesla", 2020, 34000, date(2020, 7, 13))
+    Car.add_car("Model 3", "Tesla", 2021, 40000, date(2021, 4, 28))
+    Car.add_car("Corsa", "Opel", 2019, 20000, date(2019, 2, 21))
+    Car.add_car("Astra", "Opel", 2018, 25000, date(2018, 11, 15))
+    Car.add_car("Clio", "Renault", 2017, 15000, date(2017, 8, 10))
     yield
     Car.delete_all()
 
 
 def get_resource_with_filters(configs, filters):
-    return list(get_resource_data(
-        uri=configs["uri"],
-        object_location=configs["location"],
-        object_location_schema=configs["schema"],
-        filters=filters,
-        like='',
-        fields=[],
-        sort=[],
-        limit=None,
-    ))
+    return list(
+        get_resource_data(
+            uri=configs["uri"],
+            object_location=configs["location"],
+            object_location_schema=configs["schema"],
+            filters=filters,
+            like="",
+            fields=[],
+            sort=[],
+            limit=None,
+        )
+    )
 
 
-def try_filters(configs: dict, filters: dict, expected_number: int, expected_names: Iterable[str]):
+def try_filters(
+    configs: dict, filters: dict, expected_number: int, expected_names: Iterable[str]
+):
     result = get_resource_with_filters(configs, filters)
     assert len(result) == expected_number
     for r in result:
@@ -57,7 +56,7 @@ def test_create_table(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_invalid_filter_fails(configs, car_table):
-    test_filters = {'year': {"$invalid": 2020}}
+    test_filters = {"year": {"$invalid": 2020}}
 
     with pytest.raises(ValidationError):
         get_resource_with_filters(configs, test_filters)
@@ -65,7 +64,7 @@ def test_get_resource_invalid_filter_fails(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_str_filter(configs, car_table):
-    test_filters = {'name': "Model S"}
+    test_filters = {"name": "Model S"}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 1
@@ -74,7 +73,7 @@ def test_get_resource_str_filter(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_gt_int(configs, car_table):
-    test_filters = {'year': {"$gt": 2020}}
+    test_filters = {"year": {"$gt": 2020}}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 1
@@ -83,7 +82,7 @@ def test_get_resource_gt_int(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_gte_int(configs, car_table):
-    test_filters = {'year': {"$gte": 2020}}
+    test_filters = {"year": {"$gte": 2020}}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 2
@@ -93,7 +92,7 @@ def test_get_resource_gte_int(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_lt_int(configs, car_table):
-    test_filters = {'year': {"$lt": 2018}}
+    test_filters = {"year": {"$lt": 2018}}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 1
@@ -102,7 +101,7 @@ def test_get_resource_lt_int(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_lte_int(configs, car_table):
-    test_filters = {'year': {"$lte": 2018}}
+    test_filters = {"year": {"$lte": 2018}}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 2
@@ -112,7 +111,7 @@ def test_get_resource_lte_int(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_gt_date(configs, car_table):
-    test_filters = {'purchase_date': {"$gt": date(2020, 12, 1)}}
+    test_filters = {"purchase_date": {"$gt": date(2020, 12, 1)}}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 1
@@ -121,7 +120,7 @@ def test_get_resource_gt_date(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_ne_int(configs, car_table):
-    test_filters = {'year': {"$ne": 2019}}
+    test_filters = {"year": {"$ne": 2019}}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 4
@@ -132,7 +131,7 @@ def test_get_resource_ne_int(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_eq_int(configs, car_table):
-    test_filters = {'year': {"$eq": 2019}}
+    test_filters = {"year": {"$eq": 2019}}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 1
@@ -141,7 +140,7 @@ def test_get_resource_eq_int(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_eq_str(configs, car_table):
-    test_filters = {'name': {"$eq": "Model S"}}
+    test_filters = {"name": {"$eq": "Model S"}}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 1
@@ -150,7 +149,7 @@ def test_get_resource_eq_str(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_eq_date(configs, car_table):
-    test_filters = {'purchase_date': {"$eq": date(2020, 7, 13)}}
+    test_filters = {"purchase_date": {"$eq": date(2020, 7, 13)}}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 1
@@ -159,7 +158,7 @@ def test_get_resource_eq_date(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_gt_lt_int(configs, car_table):
-    test_filters = {'year': {"$gt": 2018}, 'price': {"$lt": 30000}}
+    test_filters = {"year": {"$gt": 2018}, "price": {"$lt": 30000}}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 1
@@ -168,7 +167,7 @@ def test_get_resource_gt_lt_int(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_gt_and_lt_int(configs, car_table):
-    test_filters = {'$and': [{'year': {"$gt": 2018}}, {'price': {"$lt": 30000}}]}
+    test_filters = {"$and": [{"year": {"$gt": 2018}}, {"price": {"$lt": 30000}}]}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 1
@@ -177,7 +176,7 @@ def test_get_resource_gt_and_lt_int(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_or(configs, car_table):
-    test_filters = {"$or": [{'name': {"$eq": "Model 3"}}, {'name': {"$eq": "Model S"}}]}
+    test_filters = {"$or": [{"name": {"$eq": "Model 3"}}, {"name": {"$eq": "Model S"}}]}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 2
@@ -185,15 +184,21 @@ def test_get_resource_or(configs, car_table):
         assert r["name"] in ["Model 3", "Model S"]
 
 
-@pytest.mark.parametrize("filters, expected", [
-    ({'year': {"$lt": 2018}}, ({}, [{'year': {"$lt": 2018}}])),
-    ({'year': {"$lte": 2018}}, ({}, [{'year': {"$lte": 2018}}])),
-    ({'year': {"$gt": 2018}}, ({}, [{'year': {"$gt": 2018}}])),
-    ({'year': {"$gte": 2018}}, ({}, [{'year': {"$gte": 2018}}])),
-    ({'year': {"$eq": 2018}}, ({}, [{'year': {"$eq": 2018}}])),
-    ({'year': {"$ne": 2018}}, ({}, [{'year': {"$ne": 2018}}])),
-    ({'year': {"$gt": 2018, "$lt": 2020}}, ({}, [{'year': {"$gt": 2018, "$lt": 2020}}])),
-])
+@pytest.mark.parametrize(
+    "filters, expected",
+    [
+        ({"year": {"$lt": 2018}}, ({}, [{"year": {"$lt": 2018}}])),
+        ({"year": {"$lte": 2018}}, ({}, [{"year": {"$lte": 2018}}])),
+        ({"year": {"$gt": 2018}}, ({}, [{"year": {"$gt": 2018}}])),
+        ({"year": {"$gte": 2018}}, ({}, [{"year": {"$gte": 2018}}])),
+        ({"year": {"$eq": 2018}}, ({}, [{"year": {"$eq": 2018}}])),
+        ({"year": {"$ne": 2018}}, ({}, [{"year": {"$ne": 2018}}])),
+        (
+            {"year": {"$gt": 2018, "$lt": 2020}},
+            ({}, [{"year": {"$gt": 2018, "$lt": 2020}}]),
+        ),
+    ],
+)
 def test_get_filter_operators(filters, expected):
     filters_args = []
     result_filters, result_filters_args = _get_filter_operators(filters, filters_args)
@@ -203,26 +208,45 @@ def test_get_filter_operators(filters, expected):
         assert fargs in expected[1]
 
 
-@pytest.mark.parametrize("filters, filters_args, expected", [
-    ({"id": {"$gt": 1}}, [], ({}, [{"id": {"$gt": 1}}])),
-    ({"id": {"$gt": 1}, "name": 3}, [], ({"name": 3}, [{"id": {"$gt": 1}}])),
-    ({"id": {"$gt": 1}, "name": 3}, [{"age": {"$lt": "20"}}],
-     ({"name": 3}, [{"age": {"$lt": "20"}}, {"id": {"$gt": 1}}])),
-    ({"$and": [{"age": 1}, {"name": "john"}]}, [], ({}, [{"$and": [{"age": 1}, {"name": "john"}]}])),
-])
+@pytest.mark.parametrize(
+    "filters, filters_args, expected",
+    [
+        ({"id": {"$gt": 1}}, [], ({}, [{"id": {"$gt": 1}}])),
+        ({"id": {"$gt": 1}, "name": 3}, [], ({"name": 3}, [{"id": {"$gt": 1}}])),
+        (
+            {"id": {"$gt": 1}, "name": 3},
+            [{"age": {"$lt": "20"}}],
+            ({"name": 3}, [{"age": {"$lt": "20"}}, {"id": {"$gt": 1}}]),
+        ),
+        (
+            {"$and": [{"age": 1}, {"name": "john"}]},
+            [],
+            ({}, [{"$and": [{"age": 1}, {"name": "john"}]}]),
+        ),
+    ],
+)
 def test_get_filter_operators2(filters, filters_args, expected):
     result_filters, result_filters_args = _get_filter_operators(filters, filters_args)
     assert result_filters == expected[0]
     assert result_filters_args == expected[1]
 
 
-@pytest.mark.parametrize("filters_args, expected", [
-    ([], []),
-    ([{"id": {"$gt": 1}}], ["id > 1"]),
-    ([{"id": {"$gt": 1}, "name": {"$gt": "john"}}], ["id > 1", "name > 'john'"]),
-    ([{"$and": [{"id": {"$gt": 1}}, {"name": {"$gt": "john"}}]}], ["id > 1 AND name > 'john'"]),
-    ([{"$or": [{"id": {"$gt": 1}}, {"name": {"$gt": "john"}}]}], ["id > 1 OR name > 'john'"]),
-])
+@pytest.mark.parametrize(
+    "filters_args, expected",
+    [
+        ([], []),
+        ([{"id": {"$gt": 1}}], ["id > 1"]),
+        ([{"id": {"$gt": 1}, "name": {"$gt": "john"}}], ["id > 1", "name > 'john'"]),
+        (
+            [{"$and": [{"id": {"$gt": 1}}, {"name": {"$gt": "john"}}]}],
+            ["id > 1 AND name > 'john'"],
+        ),
+        (
+            [{"$or": [{"id": {"$gt": 1}}, {"name": {"$gt": "john"}}]}],
+            ["id > 1 OR name > 'john'"],
+        ),
+    ],
+)
 def test_process_filters_args(filters_args, expected):
     result = process_filters_args(filters_args)
     result = [str(r) for r in result]
@@ -231,7 +255,7 @@ def test_process_filters_args(filters_args, expected):
 
 @pytest.mark.django_db
 def test_get_resource_and_simple_conditions(configs, car_table):
-    test_filters = {"$and": [{'brand': {"$eq": "Tesla"}}, {'year': {"$eq": 2020}}]}
+    test_filters = {"$and": [{"brand": {"$eq": "Tesla"}}, {"year": {"$eq": 2020}}]}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 1
@@ -241,7 +265,7 @@ def test_get_resource_and_simple_conditions(configs, car_table):
 
 @pytest.mark.django_db
 def test_get_resource_not_simple(configs, car_table):
-    test_filters = {"$not": {'brand': {"$eq": "Tesla"}}}
+    test_filters = {"$not": {"brand": {"$eq": "Tesla"}}}
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 3
@@ -252,8 +276,12 @@ def test_get_resource_not_simple(configs, car_table):
 # test nested and and or. (Brand tesla or opel) and (year 2020 or 2019)
 @pytest.mark.django_db
 def test_get_nested_and_or(configs, car_table):
-    test_filters = {"$and": [{"$or": [{'brand': {"$eq": "Tesla"}}, {'brand': {"$eq": "Opel"}}]},
-                             {"$or": [{'year': {"$eq": 2020}}, {'year': {"$eq": 2019}}]}]}
+    test_filters = {
+        "$and": [
+            {"$or": [{"brand": {"$eq": "Tesla"}}, {"brand": {"$eq": "Opel"}}]},
+            {"$or": [{"year": {"$eq": 2020}}, {"year": {"$eq": 2019}}]},
+        ]
+    }
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 2
@@ -264,7 +292,9 @@ def test_get_nested_and_or(configs, car_table):
 # test not and and. not (brand tesla and year 2020)
 @pytest.mark.django_db
 def test_get_not_and(configs, car_table):
-    test_filters = {"$not": {"$and": [{'brand': {"$eq": "Tesla"}}, {'year': {"$eq": 2020}}]}}
+    test_filters = {
+        "$not": {"$and": [{"brand": {"$eq": "Tesla"}}, {"year": {"$eq": 2020}}]}
+    }
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 4
@@ -275,7 +305,9 @@ def test_get_not_and(configs, car_table):
 # test not and or. not (brand tesla or year 2018)
 @pytest.mark.django_db
 def test_get_not_or(configs, car_table):
-    test_filters = {"$not": {"$or": [{'brand': {"$eq": "Tesla"}, 'year': {"$eq": 2018}}]}}
+    test_filters = {
+        "$not": {"$or": [{"brand": {"$eq": "Tesla"}, "year": {"$eq": 2018}}]}
+    }
     result = get_resource_with_filters(configs, test_filters)
 
     assert len(result) == 2
