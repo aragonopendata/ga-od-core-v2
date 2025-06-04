@@ -33,11 +33,12 @@ jobs:
           MYSQL_DATABASE: test_db
           MYSQL_USER: test_user
           MYSQL_PASSWORD: test_password
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'no'
         options: >-
-          --health-cmd="mysqladmin ping -h localhost -u root -proot --silent"
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -proot"
           --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
+          --health-timeout=10s
+          --health-retries=10
         ports:
           - 3306:3306
 
@@ -53,7 +54,9 @@ jobs:
           postgresql-client \
           build-essential \
           pkg-config \
-          default-libmysqlclient-dev
+          default-libmysqlclient-dev \
+          netcat-openbsd \
+          mysql-client
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -78,10 +81,23 @@ jobs:
         done'
         
         echo "Waiting for MySQL..."
-        timeout 60 bash -c 'until mysql -h localhost -P 3306 -u root -proot -e "SELECT 1" >/dev/null 2>&1; do
-          echo "Waiting for MySQL to be ready..."
+        echo "Checking MySQL service status..."
+        
+        # Wait for MySQL port to be open
+        timeout 60 bash -c 'until nc -z localhost 3306; do
+          echo "Waiting for MySQL port 3306 to be open..."
           sleep 2
         done'
+        
+        # Wait for MySQL to accept connections
+        timeout 60 bash -c 'until mysqladmin ping -h 127.0.0.1 -P 3306 -u root -proot --silent; do
+          echo "Waiting for MySQL to accept connections..."
+          sleep 3
+        done'
+        
+        # Test actual database connection
+        echo "Testing MySQL database connection..."
+        mysql -h 127.0.0.1 -P 3306 -u root -proot -e "SHOW DATABASES;" || echo "MySQL connection test failed, but continuing..."
         
         echo "Databases are ready!"
     
