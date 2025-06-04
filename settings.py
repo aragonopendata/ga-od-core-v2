@@ -166,18 +166,12 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
- 	    'file': {
-            'class': 'logging.FileHandler',
-            'filename': '/var/log/django/django.log',
-            'formatter': 'verbose',
-        }
     },
     'root': {
-        'handlers': ['console','file'],
+        'handlers': ['console'],
         'level': 'WARNING',
     },
     'loggers': {
-
         'django': {
             'handlers': ['console'],
             'level':  os.getenv('DJANGO_LOG_LEVEL', 'WARNING'),

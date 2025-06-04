@@ -8,14 +8,11 @@ from select import select
 from typing import Optional, Tuple
 from urllib.parse import urlparse
 
-from django.views.generic import CreateView
 from lxml import etree
 import pandas
 import pytest as pytest
 import yaml
 from _pytest.fixtures import FixtureRequest
-from django.db.models import Model
-from django.test import Client
 from pytest_httpserver import HTTPServer
 from sqlalchemy import create_engine, Column, Integer, String, BigInteger, Float, Boolean, Date, DateTime
 from sqlalchemy.exc import IntegrityError, ProgrammingError, OperationalError
@@ -86,7 +83,7 @@ class ConnectorData:
 
 
 @pytest.fixture
-def auth_client(client: Client, django_user_model: Model) -> Client:
+def auth_client(client, django_user_model):
     user = django_user_model.objects.create_user(username=USERNAME, password=PASSWORD)
     client.force_login(user)
     return client
@@ -96,7 +93,7 @@ def get_uri(host: str, port: str) -> str:
     return f"postgresql://postgres:@{host}:{port}/guillotina"
 
 
-def create_connector_ga_od_core(client: Client, test_name: str, uri: str) -> ConnectorData:
+def create_connector_ga_od_core(client, test_name: str, uri: str) -> ConnectorData:
     data = client.post('/GA_OD_Core_admin/manager/connector-config/', {
         "name": test_name,
         "enabled": True,
@@ -173,7 +170,7 @@ def create_resource_table_view(client, test_name: str, table_name: Optional[str]
 
 
 @pytest.fixture
-def full_example(auth_client: Client, connector_uri: str, request) -> ConnectorData:
+def full_example(auth_client, connector_uri: str, request) -> ConnectorData:
     connector_data = create_connector_ga_od_core(auth_client, request.node.originalname, connector_uri)
     parsed_url = urlparse(connector_uri)
     if parsed_url.scheme in ['postgresql', 'mysql']:
