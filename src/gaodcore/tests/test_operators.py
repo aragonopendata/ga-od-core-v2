@@ -25,21 +25,21 @@ class TestTranslateFilter:
     def test_translate_filter_gt(self):
         filter_field = {"key1": {"$gt": 10}}
         filter = filter_field["key1"]
-        result = get_function_for_operator('$gt')("key1", filter)
+        result = get_function_for_operator('$gt')("key1", filter, "mysql")
         assert isinstance(result, TextClause)
         assert result.text == 'key1 > 10'
 
     def test_translate_filter_lt(self):
         filter_field = {"key1": {"$lt": 10}}
         filter = filter_field["key1"]
-        result = get_function_for_operator('$lt')("key1", filter)
+        result = get_function_for_operator('$lt')("key1", filter, "mysql")
         assert isinstance(result, TextClause)
         assert result.text == 'key1 < 10'
 
     def test_translate_filter_eq(self):
         filter_field = {"key1": {"$eq": 10}}
         filter = filter_field["key1"]
-        result = get_function_for_operator('$eq')("key1", filter)
+        result = get_function_for_operator('$eq')("key1", filter, "mysql")
         assert isinstance(result, TextClause)
         assert result.text == 'key1 = 10'
 
