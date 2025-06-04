@@ -1,0 +1,46 @@
+common_config:
+  secret_key: 'test-secret-key-for-testing-only'
+  allowed_hosts:
+    - '*'
+  debug: true
+  databases:
+    default:
+      ENGINE: 'django.db.backends.postgresql_psycopg2'
+      NAME: 'ga_od_core_test'
+      USER: 'postgres'
+      PASSWORD: 'postgres'
+      HOST: '127.0.0.1'
+      PORT: 5432
+  cache_ttl: 600
+
+projects:
+  transport:
+    aragon:
+      user: test_user
+      password: test_password
+      customer_id: 12345
+      base_url: https://api.example.com/
+      endpoints:
+        vehicles: vehicle
+        drivers: driver
+        live_position_latest: tracking/live/latest
+        vehicle_journey_history_latest: tracking/history/vehicle/latest?fromDateTime={from_date_time}&vehicleId={vehicle_id}
+        distance_travelled: tracking/journey/summary?startDate={start_date}&endDate={end_date}&vehicleIds={vehicle_ids}
+    zaragoza:
+      base_url: http://api.consorciozaragoza.es/api/1/
+      max_concurrency: 5
+      endpoints:
+        lines: lines
+        stops: stops
+        routes: routes/{id}
+        stops_route: stops_route/{line_id}/{route_id}/{isreturn}
+        arrival_time: arrival_time/{stop_id}
+        notices: notices
+        origins: origins
+        destinations: destinations/{id}
+        lines_ori_des: lines_ori_des/{origin}/{destination}
+        times_route: times_route/{id_linea}/{bus}/{departure_time}/{direction}
+        exp_ori_des: exp_ori_des/{origin}/{destination}
+        stops_ori_des: stops_ori_des/{origin}/{destination}
+        arrival_ori_des: arrival_ori_des/{origin}/{destination}
+        sae: sae 
