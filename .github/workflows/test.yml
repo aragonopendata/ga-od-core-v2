@@ -16,7 +16,7 @@ jobs:
         image: postgres:13
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
+          POSTGRES_DB: ga_od_core_test
           POSTGRES_USER: postgres
         options: >-
           --health-cmd pg_isready
@@ -114,7 +114,7 @@ jobs:
         fi
       env:
         CONFIG_PATH: /home/runner/work/ga-od-core-v2/ga-od-core-v2/config-tst.yaml
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ga_od_core_test
         MYSQL_DATABASE_URL: mysql://test_user:test_password@localhost:3306/test_db
         DJANGO_SETTINGS_MODULE: gaodcore_project.settings
         SECRET_KEY: test-secret-key-for-github-actions
@@ -127,7 +127,7 @@ jobs:
         python manage.py migrate --verbosity=2
       env:
         CONFIG_PATH: /home/runner/work/ga-od-core-v2/ga-od-core-v2/config-tst.yaml
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ga_od_core_test
         MYSQL_DATABASE_URL: mysql://test_user:test_password@localhost:3306/test_db
         DJANGO_SETTINGS_MODULE: gaodcore_project.settings
         SECRET_KEY: test-secret-key-for-github-actions
@@ -140,7 +140,7 @@ jobs:
         python manage.py collectstatic --noinput --verbosity=2
       env:
         CONFIG_PATH: /home/runner/work/ga-od-core-v2/ga-od-core-v2/config-tst.yaml
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ga_od_core_test
         MYSQL_DATABASE_URL: mysql://test_user:test_password@localhost:3306/test_db
         DJANGO_SETTINGS_MODULE: gaodcore_project.settings
         SECRET_KEY: test-secret-key-for-github-actions
@@ -155,7 +155,7 @@ jobs:
         CONFIG_PATH: /home/runner/work/ga-od-core-v2/ga-od-core-v2/config-tst.yaml
         
         # Database URLs for testing
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ga_od_core_test
         MYSQL_DATABASE_URL: mysql://test_user:test_password@localhost:3306/test_db
         
         # Django settings
