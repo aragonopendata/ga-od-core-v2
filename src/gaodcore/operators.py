@@ -212,4 +212,15 @@ def filter_not(filter: dict) -> text:
     """
 
     clauses = process_filters_args([filter])
-    return not_(*clauses)
+    # In SQLAlchemy 2.0, we need to wrap TextClause objects properly for NOT operations
+    if len(clauses) == 1:
+        clause = clauses[0]
+        # If it's a TextClause, wrap it in NOT() manually
+        if hasattr(clause, 'text'):
+            return text(f"NOT ({clause.text})")
+        else:
+            return not_(clause)
+    else:
+        # For multiple clauses, combine them with AND first, then negate
+        combined = and_(*clauses)
+        return not_(combined)

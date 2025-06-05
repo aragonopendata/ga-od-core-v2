@@ -137,12 +137,11 @@ def _get_model(
     """
 
     object_location = object_location or _TEMPORAL_TABLE_NAME
-    meta_data = MetaData(bind=engine)
+    meta_data = MetaData()
     try:
         return Table(
             object_location,
             meta_data,
-            autoload=True,
             autoload_with=engine,
             schema=object_location_schema,
         )

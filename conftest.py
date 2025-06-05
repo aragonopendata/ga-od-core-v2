@@ -18,6 +18,7 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
+    text,
     BigInteger,
     Float,
     Boolean,
@@ -35,11 +36,13 @@ DB_NAME = "gaodcore"
 images.configure(
     "mysql",
     "mysql",
-    "8",
+    "5.7",
     env={
         "MYSQL_USER": DB_USERNAME,
         "MYSQL_PASSWORD": DB_PASSWORD,
         "MYSQL_DATABASE": DB_NAME,
+        "MYSQL_ROOT_PASSWORD": "",
+        "MYSQL_ALLOW_EMPTY_PASSWORD": "yes",
     },
 )
 
@@ -134,7 +137,8 @@ def create_table_view(uri: str, test_name: str):
 
     try:
         with engine.connect() as conn:
-            conn.execute(f"CREATE VIEW {test_name}_view AS SELECT * FROM {test_name};")
+            conn.execute(text(f"CREATE VIEW {test_name}_view AS SELECT * FROM {test_name};"))
+            conn.commit()
     except (OperationalError, ProgrammingError):
         # In cases that is using parametrize in pytest, it try to duplicate views
         pass
