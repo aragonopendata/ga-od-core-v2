@@ -80,7 +80,8 @@ def get_response_xlsx(data: ReturnList) -> HttpResponse:
     """worksheets and it supports features such as formatting and many more, includin """
 
     output = io.BytesIO()
-    workbook = xlsxwriter.Workbook(output)
+    # Enable nan_inf_to_errors to handle NaN and infinity values properly
+    workbook = xlsxwriter.Workbook(output, {'nan_inf_to_errors': True})
     worksheet = workbook.add_worksheet()
 
     # column header names, you can use your own headers here
@@ -329,13 +330,13 @@ class DownloadView(APIViewMixin):
             )
 
         if format == "xlsx":
-            data = get_return_list(data)
+            data = get_return_list(data, format_is_xlsx=True)
             update_resource_size(
                 resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
             )
-            response = get_response_xlsx(modify_header(data, columns))
+            response = get_response_xlsx(modify_header(data, columns, format_is_xlsx=True))
         elif format == "csv":
-            data = get_return_list(data)
+            data = get_return_list(data, format_is_xlsx=False)
             update_resource_size(
                 resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
             )
@@ -344,7 +345,7 @@ class DownloadView(APIViewMixin):
         elif featureCollection:
             response = Response(data)
         else:
-            data = get_return_list(data)
+            data = get_return_list(data, format_is_xlsx=False)
             update_resource_size(
                 resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
             )
@@ -644,7 +645,7 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
             object_location_schema=resource_config.object_location_schema,
         )
 
-        return Response(get_return_list(data))
+        return Response(get_return_list(data, format_is_xlsx=False))
 
 
 class ResourcesView(XLSXFileMixin, APIViewMixin):  # pylint: disable=too-few-public-methods
@@ -668,4 +669,4 @@ class ResourcesView(XLSXFileMixin, APIViewMixin):  # pylint: disable=too-few-pub
             .prefetch_related("connector_config")
             .all()
         )
-        return Response(get_return_list(resources))
+        return Response(get_return_list(resources, format_is_xlsx=False))
