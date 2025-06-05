@@ -111,6 +111,12 @@ jobs:
           sleep 2
         done'
 
+        # Configure MySQL to use mysql_native_password for compatibility
+        echo "Configuring MySQL authentication..."
+        mysql -h 127.0.0.1 -P 3306 -u root -proot -e "ALTER USER 'root'@'%' IDENTIFIED WITH mysql_native_password BY 'root';"
+        mysql -h 127.0.0.1 -P 3306 -u root -proot -e "ALTER USER 'test_user'@'%' IDENTIFIED WITH mysql_native_password BY 'test_password';"
+        mysql -h 127.0.0.1 -P 3306 -u root -proot -e "FLUSH PRIVILEGES;"
+
         # Wait for MySQL to accept connections
         timeout 60 bash -c 'until mysqladmin ping -h 127.0.0.1 -P 3306 -u root -proot --silent; do
           echo "Waiting for MySQL to accept connections..."
