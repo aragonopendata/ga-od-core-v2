@@ -84,4 +84,9 @@ class ValidatorView(APIViewMixin):
             object_location=object_location,
             object_location_schema=object_location_schema,
         )
-        return Response(get_return_list(data))
+
+        # Check if the request is for XLSX format
+        accept_header = request.META.get('HTTP_ACCEPT', '')
+        format_is_xlsx = 'application/xlsx' in accept_header or 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' in accept_header
+
+        return Response(get_return_list(data, format_is_xlsx=format_is_xlsx))

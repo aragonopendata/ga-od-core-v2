@@ -237,7 +237,31 @@ def compare_files(directory: str, file_without_extension, mimetype: str, content
                     test_data = test.where(pandas.notnull(test), None).to_dict(orient='records')
                     response = pandas.read_excel(io.BytesIO(content))
                     response_data = response.where(pandas.notnull(response), None).to_dict(orient='records')
-                    assert test_data == response_data
+
+                    # Custom comparison to handle NaN values properly
+                    import math
+                    def compare_xlsx_records(expected, actual):
+                        if len(expected) != len(actual):
+                            return False
+                        for exp_record, act_record in zip(expected, actual):
+                            if set(exp_record.keys()) != set(act_record.keys()):
+                                return False
+                            for key in exp_record.keys():
+                                exp_val = exp_record[key]
+                                act_val = act_record[key]
+                                # Handle NaN comparison
+                                if exp_val is None and act_val is None:
+                                    continue
+                                elif isinstance(exp_val, float) and isinstance(act_val, float):
+                                    if math.isnan(exp_val) and math.isnan(act_val):
+                                        continue
+                                    elif exp_val != act_val:
+                                        return False
+                                elif exp_val != act_val:
+                                    return False
+                        return True
+
+                    assert compare_xlsx_records(test_data, response_data), f"XLSX data mismatch:\nExpected: {test_data}\nActual: {response_data}"
                 elif mimetype == 'application/xml':
                     parser = etree.XMLParser(remove_blank_text=True)
                     assert etree.tostring(
