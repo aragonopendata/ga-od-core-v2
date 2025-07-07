@@ -1,6 +1,7 @@
 """
 Custom schema views for separating public and admin API documentation.
 """
+from django.urls import reverse
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 
@@ -36,11 +37,13 @@ class PublicSwaggerView(SpectacularSwaggerView):
     """
     Swagger UI view for public API.
     """
-    pass
+    def get_schema_url(self):
+        return self.request.build_absolute_uri(reverse('schema'))
 
 
 class AdminSwaggerView(SpectacularSwaggerView):
     """
     Swagger UI view for admin API.
     """
-    pass
+    def get_schema_url(self):
+        return self.request.build_absolute_uri(reverse('admin-schema'))
