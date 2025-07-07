@@ -179,6 +179,23 @@ SPECTACULAR_SETTINGS = {
     ],
 }
 
+# Dynamic server configuration for OpenAPI schema
+# Uses environment variables to avoid hardcoded URLs
+_API_BASE_URL = os.getenv('API_BASE_URL')
+if _API_BASE_URL:
+    # Extract base URL without the /GA_OD_Core path
+    if _API_BASE_URL.endswith('/GA_OD_Core'):
+        _BASE_SERVER_URL = _API_BASE_URL[:-len('/GA_OD_Core')]
+    else:
+        _BASE_SERVER_URL = _API_BASE_URL
+
+    SPECTACULAR_SETTINGS['SERVERS'] = [
+        {
+            'url': _BASE_SERVER_URL,
+            'description': 'Current environment server',
+        }
+    ]
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
