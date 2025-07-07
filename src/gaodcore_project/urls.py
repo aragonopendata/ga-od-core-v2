@@ -16,22 +16,7 @@ Including another URLconf
 from django.urls import path, re_path, include
 from django.contrib import admin
 
-from drf_yasg import openapi
-from drf_yasg.views import get_schema_view
-from .configswagger import HttpsSchemaGenerator
-
-SchemaView = get_schema_view(
-    openapi.Info(
-        title='GA OD Core API',
-        default_version='v2',
-        description='GA OD Core API Swagger',
-        terms_of_service='https://opendata.aragon.es/informacion/terminos-de-uso-licencias',
-        contact=openapi.Contact(email='opendata@aragon.es'),
-        license=openapi.License(name='EUPL License'),
-    ),
-    public=False,
-    generator_class=HttpsSchemaGenerator,
-)
+from .schema_views import PublicSchemaView, AdminSchemaView, PublicSwaggerView, AdminSwaggerView
 
 urlpatterns = [
     re_path(
@@ -39,15 +24,15 @@ urlpatterns = [
         include([
             path('', include('gaodcore.urls')),
             path('gaodcore-transports/', include('gaodcore_transports.urls')),
-            re_path(r'^ui(?P<format>\.json|\.yaml)$', SchemaView.without_ui(cache_timeout=0), name='schema-json'),
-            re_path(r'^ui/$', SchemaView.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+            path('ui/schema/', PublicSchemaView.as_view(), name='schema'),
+            path('ui/', PublicSwaggerView.as_view(url_name='schema'), name='schema-swagger-ui'),
         ])),
     re_path(
         r'^GA_OD_Core_admin/',
         include([
             path('admin/', admin.site.urls),
             path('manager/', include('gaodcore_manager.urls')),
-            re_path(r'^ui(?P<format>\.json|\.yaml)$', SchemaView.without_ui(cache_timeout=0), name='schema-json'),
-            re_path(r'^ui/$', SchemaView.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+            path('ui/schema/', AdminSchemaView.as_view(), name='admin-schema'),
+            path('ui/', AdminSwaggerView.as_view(url_name='admin-schema'), name='admin-schema-swagger-ui'),
         ]))
 ]

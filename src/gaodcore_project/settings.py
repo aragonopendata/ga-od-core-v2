@@ -40,7 +40,7 @@ ALLOWED_HOSTS = CONFIG.common_config.allowed_hosts
 
 INSTALLED_APPS = [
     'django.contrib.admin', 'django.contrib.auth', 'django.contrib.contenttypes', 'django.contrib.sessions',
-    'django.contrib.messages', 'django.contrib.staticfiles', 'gaodcore', 'gaodcore_manager', 'drf_yasg',
+    'django.contrib.messages', 'django.contrib.staticfiles', 'gaodcore', 'gaodcore_manager', 'drf_spectacular',
     'rest_framework', 'axes', 'easyaudit',
 ]
 
@@ -148,10 +148,35 @@ REST_FRAMEWORK = {
         'drf_renderer_xlsx.renderers.XLSXRenderer',
         'rest_framework_csv.renderers.CSVRenderer',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-SWAGGER_SETTINGS = {
-     'VALIDATOR_URL': None
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'GA OD Core API',
+    'DESCRIPTION': 'GA OD Core API Swagger',
+    'VERSION': 'v2',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SORT_OPERATIONS': False,
+    'AUTHENTICATION_WHITELIST': [
+        'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'CONTACT': {
+        'email': 'opendata@aragon.es',
+    },
+    'LICENSE': {
+        'name': 'EUPL License',
+    },
+    'TERMS_OF_SERVICE': 'https://opendata.aragon.es/informacion/terminos-de-uso-licencias',
+    'SCHEMA_PATH_PREFIX': r'/GA_OD_Core/',
+    'SCHEMA_PATH_PREFIX_TRIM': True,
+    'PREPROCESSING_HOOKS': [
+        'gaodcore_project.spectacular_hooks.custom_preprocessing_hook',
+    ],
+    'POSTPROCESSING_HOOKS': [
+        'gaodcore_project.spectacular_hooks.parameter_order_hook',
+    ],
 }
 
 LOGGING = {
