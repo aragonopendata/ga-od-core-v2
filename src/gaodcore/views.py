@@ -9,8 +9,8 @@ from typing import Optional, Dict, Any, List, Callable
 import xlsxwriter
 from django.http import HttpResponse
 from drf_renderer_xlsx.mixins import XLSXFileMixin
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.types import OpenApiTypes
 from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -131,100 +131,124 @@ class DownloadView(APIViewMixin):
 
     content_negotiation_class = LegacyContentNegotiation
 
-    @swagger_auto_schema(
+    @extend_schema(
         tags=["default"],
-        manual_parameters=[
-            openapi.Parameter(
+        parameters=[
+            OpenApiParameter(
                 "resource_id",
-                openapi.IN_QUERY,
                 description="Id of resource to be searched against.",
-                type=openapi.TYPE_NUMBER,
+                type=OpenApiTypes.NUMBER,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "view_id",
-                openapi.IN_QUERY,
                 description="Alias of resource_id. Backward compatibility.",
-                type=openapi.TYPE_NUMBER,
+                type=OpenApiTypes.NUMBER,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "filters",
-                openapi.IN_QUERY,
-                description="Matching conditions to select, e.g "
-                "{“key1”: “a”, “key2”: “b”}.",
-                type=openapi.TYPE_OBJECT,
+                description="Matching conditions to select, e.g {'key1': 'a', 'key2': 'b'}.",
+                type=OpenApiTypes.OBJECT,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "offset",
-                openapi.IN_QUERY,
                 description="Offset this number of rows.",
-                type=openapi.TYPE_INTEGER,
+                type=OpenApiTypes.INT,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "limit",
-                openapi.IN_QUERY,
                 description="Limit this number of rows.",
-                type=openapi.TYPE_INTEGER,
+                type=OpenApiTypes.INT,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "fields",
-                openapi.IN_QUERY,
                 description="Fields to return. Default: all fields in original order.",
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Items(type=openapi.TYPE_STRING),
+                type={'type': 'array', 'items': {'type': 'string'}},
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "like",
-                openapi.IN_QUERY,
-                description="Matching conditions to select, e.g "
-                "{“key1”: “a”, “key2”: “b”}.",
-                type=openapi.TYPE_OBJECT,
+                description="Matching conditions to select, e.g {'key1': 'a', 'key2': 'b'}.",
+                type=OpenApiTypes.OBJECT,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "columns",
-                openapi.IN_QUERY,
                 description="Alias of fields.",
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Items(type=openapi.TYPE_STRING),
+                type={'type': 'array', 'items': {'type': 'string'}},
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "sort",
-                openapi.IN_QUERY,
-                description="Comma separated field names with ordering e.g: "
-                "“fieldname1, fieldname2 desc”.",
-                type=openapi.TYPE_ARRAY,
-                items=openapi.Items(type=openapi.TYPE_STRING),
+                description="Comma separated field names with ordering e.g: 'fieldname1, fieldname2 desc'.",
+                type={'type': 'array', 'items': {'type': 'string'}},
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "formato",
-                openapi.IN_QUERY,
                 description='Backward compatibility of "Accept" header or extension.',
-                type=openapi.TYPE_STRING,
+                type=OpenApiTypes.STR,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "nameRes",
-                openapi.IN_QUERY,
                 description="Force name of file to download.",
-                type=openapi.TYPE_STRING,
+                type=OpenApiTypes.STR,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "name",
-                openapi.IN_QUERY,
                 description="Force name of file to download.",
-                type=openapi.TYPE_STRING,
+                type=OpenApiTypes.STR,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "_page",
-                openapi.IN_QUERY,
                 description="Deprecated. Number of the page.",
-                type=openapi.TYPE_INTEGER,
+                type=OpenApiTypes.INT,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "_pageSize",
-                openapi.IN_QUERY,
                 description="Deprecated. Number of results in each page.",
-                type=openapi.TYPE_INTEGER,
+                type=OpenApiTypes.INT,
             ),
         ],
+        responses={
+            200: {
+                'description': 'Successful response with data in the requested format',
+                'content': {
+                    'application/json': {
+                        'schema': {
+                            'type': 'array',
+                            'items': {
+                                'type': 'object',
+                                'additionalProperties': True
+                            }
+                        },
+                        'example': [
+                            {"id": 1, "name": "Example", "value": 100},
+                            {"id": 2, "name": "Sample", "value": 200}
+                        ]
+                    },
+                    'application/xml': {
+                        'schema': {
+                            'type': 'string'
+                        },
+                        'example': '<?xml version="1.0" encoding="utf-8"?>\n<root><list-item><id>1</id><name>Example</name></list-item></root>'
+                    },
+                    'text/csv': {
+                        'schema': {
+                            'type': 'string'
+                        },
+                        'example': 'id,name,value\n1,Example,100\n2,Sample,200'
+                    },
+                    'application/yaml': {
+                        'schema': {
+                            'type': 'string'
+                        },
+                        'example': '- id: 1\n  name: Example\n  value: 100\n- id: 2\n  name: Sample\n  value: 200'
+                    },
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
+                        'schema': {
+                            'type': 'string',
+                            'format': 'binary'
+                        }
+                    }
+                }
+            }
+        }
     )
     def get(self, request: Request, **_kwargs) -> Response:
         """Este metodo permite acceder a los datos publicos de las bases de datos o APIs del Gobierno de Aragón.
@@ -610,20 +634,18 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
     preview endpoints' response will be in geojson format if JSON response type is selected-"""
 
     @staticmethod
-    @swagger_auto_schema(
+    @extend_schema(
         tags=["default"],
-        manual_parameters=[
-            openapi.Parameter(
+        parameters=[
+            OpenApiParameter(
                 "resource_id",
-                openapi.IN_QUERY,
                 description="",
-                type=openapi.TYPE_NUMBER,
+                type=OpenApiTypes.NUMBER,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "view_id",
-                openapi.IN_QUERY,
                 description="Alias of resource_id. Backward compatibility.",
-                type=openapi.TYPE_NUMBER,
+                type=OpenApiTypes.NUMBER,
             ),
         ],
     )
@@ -654,7 +676,7 @@ class ResourcesView(XLSXFileMixin, APIViewMixin):  # pylint: disable=too-few-pub
     This view allow to get a list of public resources."""
 
     @staticmethod
-    @swagger_auto_schema(tags=["default"])
+    @extend_schema(tags=["default"])
     def get(_: Request, **_kwargs) -> Response:
         """
         Devuelve el listado de todas las vistas que se pueden consultar.

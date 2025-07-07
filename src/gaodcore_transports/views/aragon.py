@@ -8,7 +8,7 @@ import requests
 import requests.auth
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import extend_schema
 from rest_framework.request import Request
 from rest_framework.response import Response
 
@@ -58,7 +58,7 @@ class APIViewGetDataMixin(APIViewMixin, metaclass=ABCMeta):  # pylint: disable=t
         return Response(get_return_list(self._get_data()))
 
 
-@method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
+@method_decorator(name='get', decorator=extend_schema(tags=['transports']))
 class ListVehicleView(APIViewGetDataMixin):  # pylint: disable=too-few-public-methods
     """Returns the registration, group and current odometer reading for a vehicle. The odometer reading is in
     kilometres."""
@@ -81,14 +81,14 @@ class ListVehicleView(APIViewGetDataMixin):  # pylint: disable=too-few-public-me
                 yield row
 
 
-@method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
+@method_decorator(name='get', decorator=extend_schema(tags=['transports']))
 class ListDriverView(APIViewGetDataMixin):  # pylint: disable=too-few-public-methods
     """Returns details for all drivers and the group they have been assigned to."""
     _ENDPOINT = 'drivers'
     _FLATTEN = True
 
 
-@method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
+@method_decorator(name='get', decorator=extend_schema(tags=['transports']))
 class LivePositionLatestView(APIViewGetDataMixin):  # pylint: disable=too-few-public-methods
     """Returns the live position and status for a resource (driver or vehicle). The live position for a vehicle on a
     private journey is not returned."""
@@ -107,7 +107,7 @@ class LivePositionLatestView(APIViewGetDataMixin):  # pylint: disable=too-few-pu
             yield flatten_dict(row)
 
 
-@method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
+@method_decorator(name='get', decorator=extend_schema(tags=['transports']))
 class VehicleJourneyHistoryLatestView(APIViewGetDataMixin):  # pylint: disable=too-few-public-methods
     """Returns the latest tracking events that have been processed by Connect for a vehicle since the specified date.
     No details are returned for a private journey."""
@@ -133,7 +133,7 @@ class VehicleJourneyHistoryLatestView(APIViewGetDataMixin):  # pylint: disable=t
         return (journey for journey_history in data for journey in journey_history['items'])
 
 
-@method_decorator(name='get', decorator=swagger_auto_schema(tags=['transports']))
+@method_decorator(name='get', decorator=extend_schema(tags=['transports']))
 class DistanceTravelledView(APIViewGetDataMixin):  # pylint: disable=too-few-public-methods
     """Returns the distance traveled (in kilometers) by a vehicle for the last day made."""
     _ENDPOINT = 'vehicles'

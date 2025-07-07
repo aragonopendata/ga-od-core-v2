@@ -1,7 +1,7 @@
 from django.utils.decorators import method_decorator
 from drf_renderer_xlsx.mixins import XLSXFileMixin
-from drf_yasg import openapi
-from drf_yasg.utils import swagger_auto_schema
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.types import OpenApiTypes
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -16,28 +16,28 @@ from utils import get_return_list
 from views import APIViewMixin
 
 
-@method_decorator(name="create", decorator=swagger_auto_schema(tags=["manager"]))
-@method_decorator(name="update", decorator=swagger_auto_schema(tags=["manager"]))
+@method_decorator(name="create", decorator=extend_schema(tags=["manager"]))
+@method_decorator(name="update", decorator=extend_schema(tags=["manager"]))
 @method_decorator(
-    name="partial_update", decorator=swagger_auto_schema(tags=["manager"])
+    name="partial_update", decorator=extend_schema(tags=["manager"])
 )
-@method_decorator(name="destroy", decorator=swagger_auto_schema(tags=["manager"]))
-@method_decorator(name="list", decorator=swagger_auto_schema(tags=["manager"]))
-@method_decorator(name="retrieve", decorator=swagger_auto_schema(tags=["manager"]))
+@method_decorator(name="destroy", decorator=extend_schema(tags=["manager"]))
+@method_decorator(name="list", decorator=extend_schema(tags=["manager"]))
+@method_decorator(name="retrieve", decorator=extend_schema(tags=["manager"]))
 class ConnectorConfigView(XLSXFileMixin, viewsets.ModelViewSet):
     serializer_class = ConnectorConfigSerializer
     queryset = ConnectorConfig.objects.all()
     permission_classes = (IsAuthenticated,)
 
 
-@method_decorator(name="create", decorator=swagger_auto_schema(tags=["manager"]))
-@method_decorator(name="update", decorator=swagger_auto_schema(tags=["manager"]))
+@method_decorator(name="create", decorator=extend_schema(tags=["manager"]))
+@method_decorator(name="update", decorator=extend_schema(tags=["manager"]))
 @method_decorator(
-    name="partial_update", decorator=swagger_auto_schema(tags=["manager"])
+    name="partial_update", decorator=extend_schema(tags=["manager"])
 )
-@method_decorator(name="destroy", decorator=swagger_auto_schema(tags=["manager"]))
-@method_decorator(name="list", decorator=swagger_auto_schema(tags=["manager"]))
-@method_decorator(name="retrieve", decorator=swagger_auto_schema(tags=["manager"]))
+@method_decorator(name="destroy", decorator=extend_schema(tags=["manager"]))
+@method_decorator(name="list", decorator=extend_schema(tags=["manager"]))
+@method_decorator(name="retrieve", decorator=extend_schema(tags=["manager"]))
 class ResourceConfigView(XLSXFileMixin, viewsets.ModelViewSet):
     serializer_class = ResourceConfigSerializer
     queryset = ResourceConfig.objects.all()
@@ -48,30 +48,27 @@ class ValidatorView(APIViewMixin):
     permission_classes = (IsAuthenticated,)
 
     @staticmethod
-    @swagger_auto_schema(
+    @extend_schema(
         tags=["manager"],
-        manual_parameters=[
-            openapi.Parameter(
+        parameters=[
+            OpenApiParameter(
                 "uri",
-                openapi.IN_QUERY,
                 required=True,
                 description="URI of resource. Not allowed driver in schema.",
-                type=openapi.TYPE_STRING,
+                type=OpenApiTypes.STR,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "object_location",
-                openapi.IN_QUERY,
                 required=False,
                 description="This field in databases origins can be a table, view or function. "
                 "This field in APIs origins is not required.",
-                type=openapi.TYPE_STRING,
+                type=OpenApiTypes.STR,
             ),
-            openapi.Parameter(
+            OpenApiParameter(
                 "object_location_schema",
-                openapi.IN_QUERY,
                 required=False,
                 description="Schema of object_location. Normally used in databases",
-                type=openapi.TYPE_STRING,
+                type=OpenApiTypes.STR,
             ),
         ],
     )
