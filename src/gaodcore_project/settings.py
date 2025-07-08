@@ -145,7 +145,7 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.BrowsableAPIRenderer',
         'rest_framework_yaml.renderers.YAMLRenderer',
         'rest_framework_xml.renderers.XMLRenderer',
-        'drf_renderer_xlsx.renderers.XLSXRenderer',
+        'custom_renderers.BackwardCompatibleXLSXRenderer',
         'rest_framework_csv.renderers.CSVRenderer',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',

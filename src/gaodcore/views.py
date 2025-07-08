@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, List, Callable
 
 import xlsxwriter
 from django.http import HttpResponse
-from drf_renderer_xlsx.mixins import XLSXFileMixin
+from drf_excel.mixins import XLSXFileMixin
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 from rest_framework.exceptions import ValidationError
