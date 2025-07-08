@@ -237,9 +237,9 @@ def compare_files(directory: str, file_without_extension, mimetype: str, content
         if mimetype in ['application/xlsx', 'application/xml']:
             with open(url, 'rb') as f:
                 if mimetype == 'application/xlsx':
-                    test = pandas.read_excel(f)
+                    test = pandas.read_excel(f, engine='openpyxl')
                     test_data = test.where(pandas.notnull(test), None).to_dict(orient='records')
-                    response = pandas.read_excel(io.BytesIO(content))
+                    response = pandas.read_excel(io.BytesIO(content), engine='openpyxl')
                     response_data = response.where(pandas.notnull(response), None).to_dict(orient='records')
 
                     # Custom comparison to handle NaN values properly

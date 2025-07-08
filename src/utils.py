@@ -171,7 +171,7 @@ def modify_header(return_list, columns_name, format_is_xlsx=False):
     if len(columns_name) > 0 and len(columns_name) == len(list(return_list[0].keys())):
         df = pd.DataFrame(return_list)
         columns_modification_dict = dict(zip(list(return_list[0].keys()), columns_name))
-        df = df.rename(index=str, columns=columns_modification_dict)
+        df = df.rename(columns=columns_modification_dict)
         modified_data = df.to_dict("records")
         # Re-apply XLSX formatting after pandas processing if needed
         if format_is_xlsx:

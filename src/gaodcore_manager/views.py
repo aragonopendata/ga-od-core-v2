@@ -1,5 +1,5 @@
 from django.utils.decorators import method_decorator
-from drf_renderer_xlsx.mixins import XLSXFileMixin
+from drf_excel.mixins import XLSXFileMixin
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 from rest_framework import viewsets

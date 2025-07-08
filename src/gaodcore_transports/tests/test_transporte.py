@@ -273,7 +273,7 @@ def test_transport_views(client: Client, accept: str, url: str, fields: Dict[str
         for field, field_type in fields.items():
             assert isinstance(data[field], field_type)
     elif accept == 'application/xlsx':
-        df = pandas.read_excel(io.BytesIO(response.content))
+        df = pandas.read_excel(io.BytesIO(response.content), engine='openpyxl')
         assert set(df.columns.values) == fields.keys()
     elif accept == 'application/xml':
         root = ET.fromstring(response.content)
