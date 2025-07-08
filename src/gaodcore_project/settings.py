@@ -89,7 +89,7 @@ WSGI_APPLICATION = 'gaodcore_project.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {key: database.dict() for key, database in CONFIG.common_config.databases.items()}
+DATABASES = {key: database.model_dump() for key, database in CONFIG.common_config.databases.items()}
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators

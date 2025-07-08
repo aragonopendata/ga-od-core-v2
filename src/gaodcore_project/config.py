@@ -2,7 +2,7 @@
 
 import os
 from abc import ABCMeta
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
 from urllib.parse import urljoin
 from sys import platform
 import yaml
@@ -86,7 +86,7 @@ class Database(BaseModel):
     USER: Optional[str] = None
     PASSWORD: Optional[str] = None
     HOST: Optional[str] = None
-    PORT: Optional[str] = None
+    PORT: Optional[Union[str, int]] = None
 
 
 class CommonConfig(BaseModel):
@@ -105,4 +105,4 @@ class Config(BaseModel):
     def get_config(cls) -> 'Config':
         with open(_CONFIG_PATH, 'r') as file:
             data = yaml.load(file, Loader=yaml.FullLoader)
-        return Config.parse_obj(data)
+        return Config.model_validate(data)
