@@ -13,8 +13,9 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-gaodcore}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-gaodcore}
       - POSTGRES_DB=${POSTGRES_DB:-ga_od_core}
-      - "API_BASE_URL=https://desopendata.aragon.es/GA_OD_Core"
       - "DJANGO_LOG_LEVEL=${DJANGO_LOG_LEVEL:-INFO}"
+      # Note: API_BASE_URL removed to eliminate server selector in Swagger UI
+      # The /GA_OD_Core path is configured in Django URLs, not via environment variables
     configs:
       - source: gaodcore-config
         target: /etc/gaodcore/config.yaml
