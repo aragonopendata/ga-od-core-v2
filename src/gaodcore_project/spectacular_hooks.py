@@ -55,7 +55,9 @@ def admin_preprocessing_hook(endpoints):
     """
     Custom preprocessing hook for admin API that:
     1. Filters out paths ending with '{format}' (Django format_suffix_patterns duplicates)
-    2. Only includes admin endpoints (paths starting with '/GA_OD_Core_admin/')
+    2. Includes admin endpoints (paths starting with '/GA_OD_Core_admin/')
+    3. Includes default endpoints (paths starting with '/GA_OD_Core/')
+    4. Includes transport endpoints (paths starting with '/GA_OD_Core/gaodcore-transports/')
 
     Args:
         endpoints: List of endpoint tuples (path, method, callback)
@@ -63,13 +65,13 @@ def admin_preprocessing_hook(endpoints):
     Returns:
         List of filtered endpoint tuples
     """
-    # Filter out format-suffixed paths and only include admin endpoints
+    # Filter out format-suffixed paths and include admin, default, and transport endpoints
     filtered_endpoints = []
     for endpoint in endpoints:
         path = endpoint[0]
 
-        # Only include admin endpoints
-        if not path.startswith('/GA_OD_Core_admin/'):
+        # Include admin endpoints, default endpoints, and transport endpoints
+        if not (path.startswith('/GA_OD_Core_admin/') or path.startswith('/GA_OD_Core/')):
             continue
 
         # Skip format-suffixed endpoints created by Django's format_suffix_patterns

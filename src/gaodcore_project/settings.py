@@ -191,7 +191,7 @@ if _API_BASE_URL:
 
     SPECTACULAR_SETTINGS['SERVERS'] = [
         {
-            'url': _BASE_SERVER_URL,
+            'url': _BASE_SERVER_URL + '/GA_OD_Core/',
             'description': 'Current environment server',
         }
     ]
