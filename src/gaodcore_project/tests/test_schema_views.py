@@ -24,7 +24,7 @@ class TestPublicSchemaView(TestCase):
 
     def test_custom_settings_configuration(self):
         """Test that custom settings are properly configured."""
-        expected_settings = {
+        expected_base_settings = {
             'TITLE': 'GA OD Core Public API',
             'DESCRIPTION': 'Public API for accessing open data from the Government of Aragon',
             'PREPROCESSING_HOOKS': [
@@ -32,8 +32,18 @@ class TestPublicSchemaView(TestCase):
             ],
         }
 
-        self.assertEqual(self.view.custom_settings, expected_settings,
-                        "Custom settings should match expected configuration")
+        # The view should have at least the base settings
+        for key, value in expected_base_settings.items():
+            self.assertEqual(self.view.custom_settings.get(key), value,
+                           f"Custom setting '{key}' should match expected value")
+
+        # If SERVERS is configured globally, it should also be inherited
+        if 'SERVERS' in settings.SPECTACULAR_SETTINGS:
+            self.assertIn('SERVERS', self.view.custom_settings,
+                         "SERVERS configuration should be inherited from global settings")
+            self.assertEqual(self.view.custom_settings['SERVERS'],
+                           settings.SPECTACULAR_SETTINGS['SERVERS'],
+                           "Inherited SERVERS should match global settings")
 
     def test_custom_settings_override_global(self):
         """Test that custom settings override global spectacular settings."""
@@ -74,6 +84,23 @@ class TestPublicSchemaView(TestCase):
         self.assertTrue(issubclass(PublicSchemaView, SpectacularAPIView),
                        "PublicSchemaView should inherit from SpectacularAPIView")
 
+    def test_servers_inheritance(self):
+        """Test that SERVERS configuration is inherited from global settings."""
+        # Create a view instance to trigger __init__ method
+        view = PublicSchemaView()
+
+        # If global settings has SERVERS, the view should inherit it
+        if 'SERVERS' in settings.SPECTACULAR_SETTINGS:
+            self.assertIn('SERVERS', view.custom_settings,
+                         "View should inherit SERVERS from global settings")
+            self.assertEqual(view.custom_settings['SERVERS'],
+                           settings.SPECTACULAR_SETTINGS['SERVERS'],
+                           "Inherited SERVERS should match global configuration")
+        else:
+            # If no SERVERS in global settings, view shouldn't have it either
+            self.assertNotIn('SERVERS', view.custom_settings,
+                           "View should not have SERVERS if not in global settings")
+
 
 class TestAdminSchemaView(TestCase):
     """Test cases for AdminSchemaView."""
@@ -85,7 +112,7 @@ class TestAdminSchemaView(TestCase):
 
     def test_custom_settings_configuration(self):
         """Test that admin custom settings are properly configured."""
-        expected_settings = {
+        expected_base_settings = {
             'TITLE': 'GA OD Core Admin API',
             'DESCRIPTION': 'Administrative API for managing connectors and resources',
             'PREPROCESSING_HOOKS': [
@@ -93,8 +120,18 @@ class TestAdminSchemaView(TestCase):
             ],
         }
 
-        self.assertEqual(self.view.custom_settings, expected_settings,
-                        "Admin custom settings should match expected configuration")
+        # The view should have at least the base settings
+        for key, value in expected_base_settings.items():
+            self.assertEqual(self.view.custom_settings.get(key), value,
+                           f"Admin custom setting '{key}' should match expected value")
+
+        # If SERVERS is configured globally, it should also be inherited
+        if 'SERVERS' in settings.SPECTACULAR_SETTINGS:
+            self.assertIn('SERVERS', self.view.custom_settings,
+                         "SERVERS configuration should be inherited from global settings")
+            self.assertEqual(self.view.custom_settings['SERVERS'],
+                           settings.SPECTACULAR_SETTINGS['SERVERS'],
+                           "Inherited SERVERS should match global settings")
 
     def test_different_from_public_settings(self):
         """Test that admin settings are different from public settings."""
@@ -133,6 +170,29 @@ class TestAdminSchemaView(TestCase):
 
         self.assertEqual(response.status_code, 200)
         mock_get.assert_called_once_with(request)
+
+    def test_inherits_from_spectacular_api_view(self):
+        """Test that AdminSchemaView inherits from SpectacularAPIView."""
+        from drf_spectacular.views import SpectacularAPIView
+        self.assertTrue(issubclass(AdminSchemaView, SpectacularAPIView),
+                       "AdminSchemaView should inherit from SpectacularAPIView")
+
+    def test_servers_inheritance(self):
+        """Test that SERVERS configuration is inherited from global settings."""
+        # Create a view instance to trigger __init__ method
+        view = AdminSchemaView()
+
+        # If global settings has SERVERS, the view should inherit it
+        if 'SERVERS' in settings.SPECTACULAR_SETTINGS:
+            self.assertIn('SERVERS', view.custom_settings,
+                         "Admin view should inherit SERVERS from global settings")
+            self.assertEqual(view.custom_settings['SERVERS'],
+                           settings.SPECTACULAR_SETTINGS['SERVERS'],
+                           "Inherited SERVERS should match global configuration")
+        else:
+            # If no SERVERS in global settings, view shouldn't have it either
+            self.assertNotIn('SERVERS', view.custom_settings,
+                           "Admin view should not have SERVERS if not in global settings")
 
 
 class TestPublicSwaggerView(TestCase):

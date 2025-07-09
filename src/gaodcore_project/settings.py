@@ -89,7 +89,7 @@ WSGI_APPLICATION = 'gaodcore_project.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {key: database.model_dump() for key, database in CONFIG.common_config.databases.items()}
+DATABASES = {key: database.dict() for key, database in CONFIG.common_config.databases.items()}
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -169,32 +169,13 @@ SPECTACULAR_SETTINGS = {
         'name': 'EUPL License',
     },
     'TERMS_OF_SERVICE': 'https://opendata.aragon.es/informacion/terminos-de-uso-licencias',
-    'SCHEMA_PATH_PREFIX': r'/GA_OD_Core/',
-    'SCHEMA_PATH_PREFIX_TRIM': True,
-    'PREPROCESSING_HOOKS': [
-        'gaodcore_project.spectacular_hooks.custom_preprocessing_hook',
-    ],
     'POSTPROCESSING_HOOKS': [
         'gaodcore_project.spectacular_hooks.parameter_order_hook',
     ],
 }
 
-# Dynamic server configuration for OpenAPI schema
-# Uses environment variables to avoid hardcoded URLs
-_API_BASE_URL = os.getenv('API_BASE_URL')
-if _API_BASE_URL:
-    # Extract base URL without the /GA_OD_Core path
-    if _API_BASE_URL.endswith('/GA_OD_Core'):
-        _BASE_SERVER_URL = _API_BASE_URL[:-len('/GA_OD_Core')]
-    else:
-        _BASE_SERVER_URL = _API_BASE_URL
-
-    SPECTACULAR_SETTINGS['SERVERS'] = [
-        {
-            'url': _BASE_SERVER_URL + '/GA_OD_Core/',
-            'description': 'Current environment server',
-        }
-    ]
+# SERVERS configuration removed to use Swagger UI's automatic server detection
+# The /GA_OD_Core path is handled by Django URL patterns
 
 LOGGING = {
     'version': 1,

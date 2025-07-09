@@ -105,4 +105,4 @@ class Config(BaseModel):
     def get_config(cls) -> 'Config':
         with open(_CONFIG_PATH, 'r') as file:
             data = yaml.load(file, Loader=yaml.FullLoader)
-        return Config.model_validate(data)
+        return Config.parse_obj(data)
