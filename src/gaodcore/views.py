@@ -147,7 +147,7 @@ class DownloadView(APIViewMixin):
             OpenApiParameter(
                 "filters",
                 description="Matching conditions to select, e.g {'key1': 'a', 'key2': 'b'}.",
-                type=OpenApiTypes.OBJECT,
+                type={'type': 'object'},
             ),
             OpenApiParameter(
                 "offset",
@@ -167,7 +167,7 @@ class DownloadView(APIViewMixin):
             OpenApiParameter(
                 "like",
                 description="Matching conditions to select, e.g {'key1': 'a', 'key2': 'b'}.",
-                type=OpenApiTypes.OBJECT,
+                type={'type': 'object'},
             ),
             OpenApiParameter(
                 "columns",
