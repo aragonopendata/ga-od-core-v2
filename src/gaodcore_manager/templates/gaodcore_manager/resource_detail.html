@@ -1,0 +1,304 @@
+{% extends 'gaodcore_manager/base.html' %}
+
+{% block title %}{{ resource.name }} - GA_OD_Core Manager{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item">
+                            <a href="{% url 'manager:resource-list' %}">
+                                <i class="bi bi-collection"></i> Resources
+                            </a>
+                        </li>
+                        <li class="breadcrumb-item active">{{ resource.name }}</li>
+                    </ol>
+                </nav>
+                <h1>
+                    <i class="bi bi-collection"></i> {{ resource.name }}
+                </h1>
+            </div>
+            <div>
+                <a href="{% url 'manager:resource-list' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to List
+                </a>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Resource Details -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-info-circle"></i> Resource Details
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-muted">Name</h6>
+                                <p class="mb-3">{{ resource.name }}</p>
+
+                                <h6 class="text-muted">Status</h6>
+                                <p class="mb-3">
+                                    {% if resource.enabled %}
+                                        <i class="bi bi-check-circle text-success"></i> Enabled
+                                    {% else %}
+                                        <i class="bi bi-x-circle text-danger"></i> Disabled
+                                    {% endif %}
+                                </p>
+
+                                <h6 class="text-muted">Object Location</h6>
+                                <p class="mb-3">
+                                    {% if resource.object_location %}
+                                        {{ resource.object_location }}
+                                    {% else %}
+                                        <span class="text-muted">N/A (API Resource)</span>
+                                    {% endif %}
+                                </p>
+
+                                <h6 class="text-muted">Schema</h6>
+                                <p class="mb-3">
+                                    {% if resource.object_location_schema %}
+                                        {{ resource.object_location_schema }}
+                                    {% else %}
+                                        <span class="text-muted">Default</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-muted">Connector</h6>
+                                <p class="mb-3">
+                                    <a href="{% url 'manager:connector-detail' resource.connector_config.pk %}"
+                                       class="text-decoration-none">
+                                        <i class="bi bi-plug"></i> {{ resource.connector_config.name }}
+                                    </a>
+                                    {% if resource.connector_config.enabled %}
+                                        <i class="bi bi-check-circle text-success ms-2"></i>
+                                    {% else %}
+                                        <i class="bi bi-x-circle text-danger ms-2"></i>
+                                    {% endif %}
+                                </p>
+
+                                <h6 class="text-muted">Created</h6>
+                                <p class="mb-3">
+                                    <i class="bi bi-calendar"></i> {{ resource.created_at|date:"F d, Y \a\t g:i A" }}
+                                </p>
+
+                                <h6 class="text-muted">Last Updated</h6>
+                                <p class="mb-3">
+                                    <i class="bi bi-clock"></i> {{ resource.updated_at|date:"F d, Y \a\t g:i A" }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats and Size Info -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-graph-up"></i> Resource Stats
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span>Resource Status</span>
+                            {% if resource.enabled %}
+                                <i class="bi bi-check-circle text-success"></i>
+                            {% else %}
+                                <i class="bi bi-x-circle text-danger"></i>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span>Connector Status</span>
+                            {% if resource.connector_config.enabled %}
+                                <i class="bi bi-check-circle text-success"></i>
+                            {% else %}
+                                <i class="bi bi-x-circle text-danger"></i>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <span>Overall Status</span>
+                            {% if resource.enabled and resource.connector_config.enabled %}
+                                <i class="bi bi-check-circle text-success"></i>
+                            {% else %}
+                                <i class="bi bi-exclamation-triangle text-warning"></i>
+                            {% endif %}
+                        </div>
+
+                        {% if resource_size %}
+                            <hr>
+                            <h6 class="text-muted mb-3">Size Information</h6>
+                            {% if resource_size.registries %}
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>Records</span>
+                                    <span>{{ resource_size.registries|floatformat:0 }}</span>
+                                </div>
+                            {% endif %}
+                            {% if resource_size.size %}
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>Size</span>
+                                    <span>{{ resource_size.size }} MB</span>
+                                </div>
+                            {% endif %}
+                            {% if resource_size.updated_at %}
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span>Size updated</span>
+                                    <span class="text-muted">{{ resource_size.updated_at|date:"M d, Y" }}</span>
+                                </div>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connector Information -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-plug"></i> Connector Information
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-muted">Connector Name</h6>
+                                <p class="mb-3">
+                                    <a href="{% url 'manager:connector-detail' resource.connector_config.pk %}"
+                                       class="text-decoration-none">
+                                        {{ resource.connector_config.name }}
+                                    </a>
+                                </p>
+
+                                <h6 class="text-muted">Connection Status</h6>
+                                <p class="mb-3">
+                                    {% if resource.connector_config.enabled %}
+                                        <i class="bi bi-check-circle text-success"></i> Enabled
+                                    {% else %}
+                                        <i class="bi bi-x-circle text-danger"></i> Disabled
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-muted">Connection URI</h6>
+                                <div class="mb-3">
+                                    {{ resource.connector_config.uri }}
+                                </div>
+
+                                <h6 class="text-muted">Connector Created</h6>
+                                <p class="mb-3">
+                                    <i class="bi bi-calendar"></i> {{ resource.connector_config.created_at|date:"F d, Y \a\t g:i A" }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end">
+                            <a href="{% url 'manager:connector-detail' resource.connector_config.pk %}"
+                               class="btn btn-outline-primary">
+                                <i class="bi bi-eye"></i> View Connector Details
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resource Configuration -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-gear"></i> Configuration Summary
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <tbody>
+                                    <tr>
+                                        <th scope="row" class="text-muted">Resource ID</th>
+                                        <td>{{ resource.pk }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row" class="text-muted">Resource Name</th>
+                                        <td>{{ resource.name }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row" class="text-muted">Connector</th>
+                                        <td>
+                                            <a href="{% url 'manager:connector-detail' resource.connector_config.pk %}"
+                                               class="text-decoration-none">
+                                                {{ resource.connector_config.name }}
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row" class="text-muted">Object Location</th>
+                                        <td>
+                                            {% if resource.object_location %}
+                                                {{ resource.object_location }}
+                                            {% else %}
+                                                <span class="text-muted">N/A (API Resource)</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row" class="text-muted">Schema</th>
+                                        <td>
+                                            {% if resource.object_location_schema %}
+                                                {{ resource.object_location_schema }}
+                                            {% else %}
+                                                <span class="text-muted">Default</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row" class="text-muted">Resource Enabled</th>
+                                        <td>
+                                            {% if resource.enabled %}
+                                                <i class="bi bi-check-circle text-success"></i> Yes
+                                            {% else %}
+                                                <i class="bi bi-x-circle text-danger"></i> No
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row" class="text-muted">Connector Enabled</th>
+                                        <td>
+                                            {% if resource.connector_config.enabled %}
+                                                <i class="bi bi-check-circle text-success"></i> Yes
+                                            {% else %}
+                                                <i class="bi bi-x-circle text-danger"></i> No
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row" class="text-muted">Created</th>
+                                        <td>{{ resource.created_at|date:"F d, Y \a\t g:i A" }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row" class="text-muted">Last Updated</th>
+                                        <td>{{ resource.updated_at|date:"F d, Y \a\t g:i A" }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -15,6 +15,7 @@ Including another URLconf
 """
 from django.urls import path, re_path, include
 from django.contrib import admin
+from django.shortcuts import redirect
 
 from .schema_views import PublicSchemaView, AdminSchemaView, PublicSwaggerView, AdminSwaggerView
 
@@ -30,6 +31,7 @@ urlpatterns = [
     re_path(
         r'^GA_OD_Core_admin/',
         include([
+            path('', lambda request: redirect('/GA_OD_Core_admin/manager/views/resources/')),
             path('admin/', admin.site.urls),
             path('manager/', include('gaodcore_manager.urls')),
             path('ui/schema/', AdminSchemaView.as_view(), name='admin-schema'),

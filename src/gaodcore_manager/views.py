@@ -1,4 +1,7 @@
 from django.utils.decorators import method_decorator
+from django.views.generic import ListView, DetailView
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Q
 from drf_excel.mixins import XLSXFileMixin
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
@@ -87,3 +90,119 @@ class ValidatorView(APIViewMixin):
         format_is_xlsx = 'application/xlsx' in accept_header or 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' in accept_header
 
         return Response(get_return_list(data, format_is_xlsx=format_is_xlsx))
+
+
+# Template-based views for admin interface
+class ConnectorListView(LoginRequiredMixin, ListView):
+    model = ConnectorConfig
+    template_name = 'gaodcore_manager/connector_list.html'
+    context_object_name = 'connectors'
+    paginate_by = 20
+    ordering = ['id']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        search_query = self.request.GET.get('search')
+        status_filter = self.request.GET.get('status')
+
+        if search_query:
+            # Try to convert search_query to int for ID search
+            try:
+                search_id = int(search_query)
+                queryset = queryset.filter(
+                    Q(id=search_id) |
+                    Q(name__icontains=search_query) |
+                    Q(uri__icontains=search_query)
+                )
+            except ValueError:
+                # If not a number, search by name and URI only
+                queryset = queryset.filter(
+                    Q(name__icontains=search_query) |
+                    Q(uri__icontains=search_query)
+                )
+
+        if status_filter == 'enabled':
+            queryset = queryset.filter(enabled=True)
+        elif status_filter == 'disabled':
+            queryset = queryset.filter(enabled=False)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['search_query'] = self.request.GET.get('search', '')
+        context['status_filter'] = self.request.GET.get('status', '')
+        return context
+
+
+class ConnectorDetailView(LoginRequiredMixin, DetailView):
+    model = ConnectorConfig
+    template_name = 'gaodcore_manager/connector_detail.html'
+    context_object_name = 'connector'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['resources'] = ResourceConfig.objects.filter(
+            connector_config=self.object
+        ).order_by('name')
+        return context
+
+
+class ResourceListView(LoginRequiredMixin, ListView):
+    model = ResourceConfig
+    template_name = 'gaodcore_manager/resource_list.html'
+    context_object_name = 'resources'
+    paginate_by = 20
+    ordering = ['id']
+
+    def get_queryset(self):
+        # Only show resources from enabled connectors
+        queryset = super().get_queryset().select_related('connector_config').filter(
+            connector_config__enabled=True
+        )
+        search_query = self.request.GET.get('search')
+        status_filter = self.request.GET.get('status')
+        connector_filter = self.request.GET.get('connector')
+
+        if search_query:
+            # Try to convert search_query to int for ID search
+            try:
+                search_id = int(search_query)
+                queryset = queryset.filter(
+                    Q(id=search_id) |
+                    Q(name__icontains=search_query) |
+                    Q(object_location__icontains=search_query) |
+                    Q(connector_config__name__icontains=search_query)
+                )
+            except ValueError:
+                # If not a valid integer, search by text fields only
+                queryset = queryset.filter(
+                    Q(name__icontains=search_query) |
+                    Q(object_location__icontains=search_query) |
+                    Q(connector_config__name__icontains=search_query)
+                )
+
+        if status_filter == 'enabled':
+            queryset = queryset.filter(enabled=True)
+        elif status_filter == 'disabled':
+            queryset = queryset.filter(enabled=False)
+
+        if connector_filter:
+            queryset = queryset.filter(connector_config__id=connector_filter)
+
+        return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['search_query'] = self.request.GET.get('search', '')
+        context['status_filter'] = self.request.GET.get('status', '')
+        context['connector_filter'] = self.request.GET.get('connector', '')
+        # Only include enabled connectors in the filter dropdown
+        context['connectors'] = ConnectorConfig.objects.filter(enabled=True).order_by('name')
+        return context
+
+
+class ResourceDetailView(LoginRequiredMixin, DetailView):
+    model = ResourceConfig
+    template_name = 'gaodcore_manager/resource_detail.html'
+    context_object_name = 'resource'
