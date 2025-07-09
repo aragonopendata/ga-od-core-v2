@@ -232,6 +232,10 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
+# Authentication URLs
+LOGIN_URL = '/GA_OD_Core_admin/manager/login/'
+LOGIN_REDIRECT_URL = '/GA_OD_Core_admin/manager/views/resources/'
+
 # Enhanced security settings for Django 4.2
 # Use secure cookies in production
 # Uncomment these in production with HTTPS
