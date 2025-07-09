@@ -1,6 +1,7 @@
 from django.utils.decorators import method_decorator
 from django.views.generic import ListView, DetailView
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import LoginView
 from django.db.models import Q
 from drf_excel.mixins import XLSXFileMixin
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -206,3 +207,11 @@ class ResourceDetailView(LoginRequiredMixin, DetailView):
     model = ResourceConfig
     template_name = 'gaodcore_manager/resource_detail.html'
     context_object_name = 'resource'
+
+
+class ManagerLoginView(LoginView):
+    template_name = 'gaodcore_manager/login.html'
+    redirect_authenticated_user = True
+
+    def get_success_url(self):
+        return '/GA_OD_Core_admin/manager/views/resources/'
