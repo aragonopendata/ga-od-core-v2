@@ -1,0 +1,151 @@
+{% extends 'gaodcore_manager/base.html' %}
+
+{% block title %}Connectors - GA_OD_Core Manager{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="bi bi-plug"></i> Connectors</h1>
+            <div class="text-muted">
+                <i class="bi bi-info-circle"></i>
+                Total: {{ paginator.count }} connector{{ paginator.count|pluralize }}
+            </div>
+        </div>
+
+        <!-- Search and Filter Form -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form method="GET" class="row g-3">
+                    <div class="col-md-6">
+                        <label for="search" class="form-label">Search</label>
+                        <input type="text" class="form-control" id="search" name="search"
+                               value="{{ search_query }}"
+                               placeholder="Search by ID, name, or URI...">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="">All</option>
+                            <option value="enabled" {% if status_filter == 'enabled' %}selected{% endif %}>Enabled</option>
+                            <option value="disabled" {% if status_filter == 'disabled' %}selected{% endif %}>Disabled</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="bi bi-search"></i> Search
+                        </button>
+                        <a href="{% url 'manager:connector-list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-clockwise"></i> Reset
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Connectors Table -->
+        <div class="card">
+            <div class="card-body">
+                {% if connectors %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>URI</th>
+                                    <th>Resources</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for connector in connectors %}
+                                <tr onclick="window.location.href='{% url 'manager:connector-detail' connector.pk %}'" style="cursor: pointer;">
+                                    <td>
+                                        {{ connector.id }}
+                                    </td>
+                                    <td>
+                                        {{ connector.name }}
+                                    </td>
+                                    <td>
+                                        {{ connector.uri|truncatechars:50 }}
+                                    </td>
+                                    <td>
+                                        {{ connector.resourceconfig_set.count }}
+                                    </td>
+                                    <td>
+                                        {% if connector.enabled %}
+                                            <span style="color: #28a745; font-size: 1.1em;">✓</span>
+                                        {% else %}
+                                            <span style="color: #dc3545; font-size: 1.1em;">✗</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if is_paginated %}
+                    <nav aria-label="Connectors pagination">
+                        <ul class="pagination justify-content-center mt-4">
+                            {% if page_obj.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+                                        <i class="bi bi-chevron-double-left"></i>
+                                    </a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+                                        <i class="bi bi-chevron-left"></i>
+                                    </a>
+                                </li>
+                            {% endif %}
+
+                            {% for num in page_obj.paginator.page_range %}
+                                {% if page_obj.number == num %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ num }}</span>
+                                    </li>
+                                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">{{ num }}</a>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+                                        <i class="bi bi-chevron-right"></i>
+                                    </a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}">
+                                        <i class="bi bi-chevron-double-right"></i>
+                                    </a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-plug display-1 text-muted"></i>
+                        <h3 class="mt-3">No connectors found</h3>
+                        <p class="text-muted">
+                            {% if search_query or status_filter %}
+                                Try adjusting your search criteria or
+                                <a href="{% url 'manager:connector-list' %}">clear filters</a>.
+                            {% else %}
+                                No connectors have been configured yet.
+                            {% endif %}
+                        </p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,185 @@
+{% extends 'gaodcore_manager/base.html' %}
+
+{% block title %}Resources - GA_OD_Core Manager{% endblock %}
+
+{% block content %}
+<style>
+    .table tbody tr[onclick]:hover {
+        background-color: rgba(0, 123, 255, 0.1) !important;
+    }
+    .table tbody tr[onclick]:hover td {
+        background-color: transparent;
+    }
+</style>
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="bi bi-collection"></i> Resources</h1>
+            <div class="text-muted">
+                <i class="bi bi-info-circle"></i>
+                Total: {{ paginator.count }} resource{{ paginator.count|pluralize }}
+            </div>
+        </div>
+
+        <!-- Search and Filter Form -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form method="GET" class="row g-3">
+                    <div class="col-md-4">
+                        <label for="search" class="form-label">Search</label>
+                        <input type="text" class="form-control" id="search" name="search"
+                               value="{{ search_query }}"
+                               placeholder="Search by ID, name, object location, or connector...">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="">All</option>
+                            <option value="enabled" {% if status_filter == 'enabled' %}selected{% endif %}>Enabled</option>
+                            <option value="disabled" {% if status_filter == 'disabled' %}selected{% endif %}>Disabled</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="connector" class="form-label">Connector</label>
+                        <select class="form-select" id="connector" name="connector">
+                            <option value="">All Connectors</option>
+                            {% for connector in connectors %}
+                                <option value="{{ connector.id }}" {% if connector_filter == connector.id|stringformat:"s" %}selected{% endif %}>
+                                    {{ connector.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary me-2">
+                            <i class="bi bi-search"></i> Search
+                        </button>
+                        <a href="{% url 'manager:resource-list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-clockwise"></i> Reset
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Resources Table -->
+        <div class="card">
+            <div class="card-body">
+                {% if resources %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Name</th>
+                                    <th>Connector</th>
+                                    <th>Object Location</th>
+                                    <th>Schema</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for resource in resources %}
+                                <tr onclick="window.location='{% url 'manager:resource-detail' resource.pk %}'" style="cursor: pointer;">
+                                    <td>
+                                        {{ resource.id }}
+                                    </td>
+                                    <td>
+                                        <strong>{{ resource.name }}</strong>
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'manager:connector-detail' resource.connector_config.pk %}"
+                                           class="text-decoration-none" onclick="event.stopPropagation();">
+                                            {{ resource.connector_config.name }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        {% if resource.object_location %}
+                                            <span class="text-break">{{ resource.object_location }}</span>
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if resource.object_location_schema %}
+                                            {{ resource.object_location_schema }}
+                                        {% else %}
+                                            <span class="text-muted">Default</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if resource.enabled %}
+                                            <i class="bi bi-check-circle-fill text-success" title="Enabled"></i>
+                                        {% else %}
+                                            <i class="bi bi-x-circle-fill text-danger" title="Disabled"></i>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if is_paginated %}
+                    <nav aria-label="Resources pagination">
+                        <ul class="pagination justify-content-center mt-4">
+                            {% if page_obj.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if connector_filter %}&connector={{ connector_filter }}{% endif %}">
+                                        <i class="bi bi-chevron-double-left"></i>
+                                    </a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if connector_filter %}&connector={{ connector_filter }}{% endif %}">
+                                        <i class="bi bi-chevron-left"></i>
+                                    </a>
+                                </li>
+                            {% endif %}
+
+                            {% for num in page_obj.paginator.page_range %}
+                                {% if page_obj.number == num %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ num }}</span>
+                                    </li>
+                                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if connector_filter %}&connector={{ connector_filter }}{% endif %}">{{ num }}</a>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if connector_filter %}&connector={{ connector_filter }}{% endif %}">
+                                        <i class="bi bi-chevron-right"></i>
+                                    </a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if connector_filter %}&connector={{ connector_filter }}{% endif %}">
+                                        <i class="bi bi-chevron-double-right"></i>
+                                    </a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-collection display-1 text-muted"></i>
+                        <h3 class="mt-3">No resources found</h3>
+                        <p class="text-muted">
+                            {% if search_query or status_filter or connector_filter %}
+                                Try adjusting your search criteria or
+                                <a href="{% url 'manager:resource-list' %}">clear filters</a>.
+                            {% else %}
+                                No resources have been configured yet.
+                            {% endif %}
+                        </p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
