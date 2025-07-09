@@ -46,7 +46,7 @@ from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
 
 logger = logging.getLogger(__name__)
 
-_DATABASE_SCHEMAS = {"postgresql", "mysql", "mssql+pyodbc", "oracle", "sqlite"}
+_DATABASE_SCHEMAS = {"postgresql", "mysql", "mssql+pyodbc", "oracle+oracledb", "sqlite"}
 _HTTP_SCHEMAS = {"http", "https"}
 _RESOURCE_MAX_ROWS = 1048576
 _TEMPORAL_TABLE_NAME = "temporal_table"

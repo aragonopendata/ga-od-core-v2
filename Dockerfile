@@ -13,13 +13,15 @@ RUN apt install -y wget
 RUN apt clean -y
 
 
-# Install Oracle Instant client
-RUN apt install libaio1 libaio-dev
-RUN mkdir $ORACLE_DIR
-RUN wget $ORACLE_INSTANT_CLIENT_URL -O $ORACLE_INSTANT_CLIENT_TMP
-RUN unzip $ORACLE_INSTANT_CLIENT_TMP -d $ORACLE_DIR
-RUN rm $ORACLE_INSTANT_CLIENT_TMP
-ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/opt/oracle/instantclient_$ORACLE_INSTANT_CLIENT_VERSION"
+# Install Oracle Instant client (optional - only needed for python-oracledb Thick mode)
+# For python-oracledb Thin mode (default), these dependencies are not required
+# Uncomment the following lines if you need Thick mode features:
+# RUN apt install libaio1 libaio-dev
+# RUN mkdir $ORACLE_DIR
+# RUN wget $ORACLE_INSTANT_CLIENT_URL -O $ORACLE_INSTANT_CLIENT_TMP
+# RUN unzip $ORACLE_INSTANT_CLIENT_TMP -d $ORACLE_DIR
+# RUN rm $ORACLE_INSTANT_CLIENT_TMP
+# ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/opt/oracle/instantclient_$ORACLE_INSTANT_CLIENT_VERSION"
 
 
 #install MSSQL Instant
