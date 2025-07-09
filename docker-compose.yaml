@@ -14,8 +14,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-gaodcore}
       - POSTGRES_DB=${POSTGRES_DB:-ga_od_core}
       - "DJANGO_LOG_LEVEL=${DJANGO_LOG_LEVEL:-INFO}"
-      # Note: API_BASE_URL removed to eliminate server selector in Swagger UI
-      # The /GA_OD_Core path is configured in Django URLs, not via environment variables
+      # API_BASE_URL removed - using automatic server detection
     configs:
       - source: gaodcore-config
         target: /etc/gaodcore/config.yaml
@@ -36,8 +35,8 @@ services:
       dockerfile: Dockerfile
     container_name: postgres-gaodcore
     restart: always
-    ports:
-      - "5432:5432"
+    #ports:
+    #  - "5432:5432"
     volumes:
       - postgres_storage:/var/lib/postgresql/data
     environment:
