@@ -40,8 +40,8 @@ ALLOWED_HOSTS = CONFIG.common_config.allowed_hosts
 
 INSTALLED_APPS = [
     'django.contrib.admin', 'django.contrib.auth', 'django.contrib.contenttypes', 'django.contrib.sessions',
-    'django.contrib.messages', 'django.contrib.staticfiles', 'gaodcore', 'gaodcore_manager', 'drf_spectacular',
-    'rest_framework', 'axes', 'easyaudit',
+    'django.contrib.messages', 'django.contrib.staticfiles', 'gaodcore', 'gaodcore_manager', 'gaodcore_health',
+    'drf_spectacular', 'rest_framework', 'axes', 'easyaudit',
 ]
 
 MIDDLEWARE = [

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health Monitor Dashboard - GA-OD-Core</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            border-radius: 8px;
+        }
+
+        .header h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            text-align: center;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .dashboard-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-card.healthy {
+            border-left: 4px solid #28a745;
+        }
+
+        .stat-card.unhealthy {
+            border-left: 4px solid #dc3545;
+        }
+
+        .stat-card.unknown {
+            border-left: 4px solid #ffc107;
+        }
+
+        .stat-card.total {
+            border-left: 4px solid #007bff;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .connectors-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .connector-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .connector-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .connector-card.healthy {
+            border-left: 4px solid #28a745;
+        }
+
+        .connector-card.unhealthy {
+            border-left: 4px solid #dc3545;
+        }
+
+        .connector-card.unknown {
+            border-left: 4px solid #ffc107;
+        }
+
+        .connector-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .connector-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .status-badge.healthy {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status-badge.unhealthy {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-badge.unknown {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+
+        .connector-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .detail-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .detail-value {
+            color: #333;
+        }
+
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            word-break: break-word;
+        }
+
+        .refresh-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        .refresh-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .last-updated {
+            text-align: center;
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 20px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .empty-state h3 {
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        .empty-state p {
+            color: #999;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-summary {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .connectors-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .connector-details {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏥 Health Monitor Dashboard</h1>
+            <p>Real-time monitoring of connector health and performance</p>
+        </div>
+
+        <button class="refresh-button" onclick="window.location.reload()">
+            🔄 Refresh Dashboard
+        </button>
+
+        <div class="dashboard-summary">
+            <div class="stat-card total">
+                <div class="stat-number">{{ connectors|length }}</div>
+                <div class="stat-label">Total Connectors</div>
+            </div>
+            <div class="stat-card healthy">
+                <div class="stat-number">{{ healthy_count }}</div>
+                <div class="stat-label">Healthy</div>
+            </div>
+            <div class="stat-card unhealthy">
+                <div class="stat-number">{{ unhealthy_count }}</div>
+                <div class="stat-label">Unhealthy</div>
+            </div>
+            <div class="stat-card unknown">
+                <div class="stat-number">{{ unknown_count }}</div>
+                <div class="stat-label">Unknown</div>
+            </div>
+        </div>
+
+        {% if connectors %}
+        <div class="connectors-grid">
+            {% for connector in connectors %}
+            <div class="connector-card {{ connector.status_class }}">
+                <div class="connector-header">
+                    <div class="connector-name">{{ connector.name }}</div>
+                    <div class="status-badge {{ connector.status_class }}">
+                        {% if connector.status_class == 'healthy' %}
+                            ✅ {{ connector.status }}
+                        {% elif connector.status_class == 'unhealthy' %}
+                            ❌ {{ connector.status }}
+                        {% else %}
+                            ⚠️ {{ connector.status }}
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="connector-details">
+                    <div class="detail-item">
+                        <span class="detail-label">Last Check:</span>
+                        <span class="detail-value">
+                            {% if connector.last_check %}
+                                {{ connector.last_check|date:"M d, H:i" }}
+                            {% else %}
+                                Never
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <div class="detail-item">
+                        <span class="detail-label">Response Time:</span>
+                        <span class="detail-value">
+                            {% if connector.response_time_ms %}
+                                {{ connector.response_time_ms }}ms
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <div class="detail-item">
+                        <span class="detail-label">Connector ID:</span>
+                        <span class="detail-value">#{{ connector.id }}</span>
+                    </div>
+                </div>
+
+                {% if connector.error_message %}
+                <div class="error-message">
+                    <strong>Error:</strong> {{ connector.error_message }}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <h3>No Connectors Found</h3>
+            <p>No enabled connectors are currently configured for monitoring.</p>
+        </div>
+        {% endif %}
+
+        <div class="last-updated">
+            Last updated: {{ "now"|date:"M d, Y H:i:s" }}
+        </div>
+    </div>
+
+    <script>
+        // Auto-refresh every 30 seconds
+        setTimeout(function() {
+            window.location.reload();
+        }, 30000);
+
+        // Add visual feedback on card hover
+        document.querySelectorAll('.connector-card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-2px)';
+            });
+
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+            });
+        });
+    </script>
+</body>
+</html>

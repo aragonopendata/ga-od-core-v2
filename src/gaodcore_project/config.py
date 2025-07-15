@@ -89,12 +89,29 @@ class Database(BaseModel):
     PORT: Optional[Union[str, int]] = None
 
 
+class HealthAlertsConfig(BaseModel):
+    enabled: bool = True
+    failure_threshold_minutes: int = 10
+    recovery_notification: bool = True
+    consecutive_failures_threshold: int = 3
+
+
+class HealthMonitoringConfig(BaseModel):
+    enabled: bool = True
+    check_interval_minutes: int = 5
+    timeout_seconds: int = 30
+    concurrency_limit: int = 5
+    retention_days: int = 30
+    alerts: HealthAlertsConfig = HealthAlertsConfig()
+
+
 class CommonConfig(BaseModel):
     allowed_hosts: List[str]
     secret_key: str
     debug: bool
     databases: Dict[str, Database]
     cache_ttl: int
+    health_monitoring: HealthMonitoringConfig = HealthMonitoringConfig()
 
 
 class Config(BaseModel):
