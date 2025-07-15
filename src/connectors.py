@@ -863,6 +863,27 @@ def _get_engine(uri: str) -> Engine:
         uri_parsed = urlparse(uri)
 
     if uri_parsed.scheme in _DATABASE_SCHEMAS:
+        # Special handling for Oracle to enable thick mode for older password verifiers
+        if uri_parsed.scheme == "oracle+oracledb":
+            try:
+                import oracledb
+                # Initialize thick mode for compatibility with older Oracle versions
+                oracledb.init_oracle_client()
+                logger.info("Oracle thick mode initialized successfully")
+                return create_engine(uri, max_identifier_length=128)
+            except Exception as e:
+                logger.warning(f"Could not initialize Oracle thick mode: {e}")
+                # Try with connection parameters for thin mode compatibility
+                try:
+                    return create_engine(
+                        uri,
+                        max_identifier_length=128,
+                        connect_args={"thick_mode": False}
+                    )
+                except Exception:
+                    # Last resort: try with basic connection
+                    return create_engine(uri, max_identifier_length=128)
+
         return create_engine(uri, max_identifier_length=128)
     if uri_parsed.scheme in _HTTP_SCHEMAS:
         return _get_engine_from_api(uri)
