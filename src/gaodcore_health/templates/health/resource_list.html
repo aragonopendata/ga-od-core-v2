@@ -1,0 +1,178 @@
+{% extends 'health/base.html' %}
+
+{% block title %}Resource Health Monitor{% endblock %}
+
+{% block content %}
+<button class="refresh-button" onclick="window.location.reload()">
+    🔄 Refresh Data
+</button>
+
+<!-- Filter Info -->
+{% if connector %}
+<div class="filter-info" style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+    <h3 style="margin: 0 0 10px 0; color: #333;">
+        📊 Resources for Connector: <span style="color: #667eea;">{{ connector.name }}</span>
+    </h3>
+    <p style="margin: 0; color: #666;">
+        <strong>Type:</strong> {{ connector.connector_type|default:"Unknown" }} |
+        <strong>URI:</strong> {{ connector.uri }}
+    </p>
+</div>
+{% endif %}
+
+<!-- Summary Cards -->
+<div class="summary-cards">
+    <div class="stat-card total">
+        <div class="stat-number">{{ resource_health_data.total_count }}</div>
+        <div class="stat-label">Total Resources</div>
+    </div>
+    <div class="stat-card healthy">
+        <div class="stat-number">{{ resource_health_data.healthy_count }}</div>
+        <div class="stat-label">Healthy</div>
+    </div>
+    <div class="stat-card unhealthy">
+        <div class="stat-number">{{ resource_health_data.unhealthy_count }}</div>
+        <div class="stat-label">Unhealthy</div>
+    </div>
+    <div class="stat-card unknown">
+        <div class="stat-number">{{ resource_health_data.unknown_count }}</div>
+        <div class="stat-label">Unknown</div>
+    </div>
+</div>
+
+<!-- Resources Grid -->
+{% if resource_health_data.resources %}
+<div class="items-grid">
+    {% for resource in resource_health_data.resources %}
+    <div class="item-card {{ resource.status_class }}">
+        <div class="item-header">
+            <div class="item-name">{{ resource.name }}</div>
+            <div class="status-badge {{ resource.status_class }}">
+                {% if resource.status_class == 'healthy' %}
+                    ✅ {{ resource.status }}
+                {% elif resource.status_class == 'unhealthy' %}
+                    ❌ {{ resource.status }}
+                {% else %}
+                    ⚠️ {{ resource.status }}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="item-details">
+            <div class="detail-item">
+                <span class="detail-label">Resource ID:</span>
+                <span class="detail-value">#{{ resource.id }}</span>
+            </div>
+
+            <div class="detail-item">
+                <span class="detail-label">Object Location:</span>
+                <span class="detail-value">{{ resource.object_location|truncatechars:25 }}</span>
+            </div>
+
+            {% if not connector %}
+            <div class="detail-item">
+                <span class="detail-label">Connector:</span>
+                <span class="detail-value">
+                    <a href="{% url 'gaodcore_health:connector_resources' resource.connector_id %}"
+                       style="color: #667eea; text-decoration: none;">
+                        {{ resource.connector_name }}
+                    </a>
+                </span>
+            </div>
+            {% endif %}
+
+            <div class="detail-item">
+                <span class="detail-label">Last Check:</span>
+                <span class="detail-value">
+                    {% if resource.last_check %}
+                        {{ resource.last_check|date:"M d, H:i" }}
+                    {% else %}
+                        Never
+                    {% endif %}
+                </span>
+            </div>
+
+            <div class="detail-item">
+                <span class="detail-label">Response Time:</span>
+                <span class="detail-value">
+                    {% if resource.response_time_ms %}
+                        {{ resource.response_time_ms }}ms
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </span>
+            </div>
+
+            <div class="detail-item">
+                <span class="detail-label">Enabled:</span>
+                <span class="detail-value">
+                    {% if resource.enabled %}
+                        ✅ Yes
+                    {% else %}
+                        ❌ No
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+
+        {% if resource.error_message %}
+        <div class="error-message">
+            <strong>Error Type:</strong> {{ resource.error_type|default:"Unknown" }}<br>
+            <strong>Message:</strong> {{ resource.error_message }}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if is_paginated %}
+<div class="pagination">
+    <span class="step-links">
+        {% if page_obj.has_previous %}
+            <a href="?page=1">&laquo; First</a>
+            <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
+        {% endif %}
+
+        <span class="current">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </span>
+
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+        {% endif %}
+    </span>
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    <h3>No Resources Found</h3>
+    {% if connector %}
+        <p>No enabled resources are configured for connector <strong>{{ connector.name }}</strong>.</p>
+        <p>Create resources for this connector in the resource management interface.</p>
+    {% else %}
+        <p>No enabled resources are currently configured for monitoring.</p>
+        <p>Create resources in the resource management interface.</p>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add hover effect for resource cards
+    document.querySelectorAll('.item-card').forEach(card => {
+        card.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-2px)';
+            this.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+        });
+
+        card.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        });
+    });
+</script>
+{% endblock %}

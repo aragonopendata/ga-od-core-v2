@@ -1,0 +1,153 @@
+{% extends 'health/base.html' %}
+
+{% block title %}Connector Health Monitor{% endblock %}
+
+{% block content %}
+<button class="refresh-button" onclick="window.location.reload()">
+    🔄 Refresh Data
+</button>
+
+<!-- Summary Cards -->
+<div class="summary-cards">
+    <div class="stat-card total">
+        <div class="stat-number">{{ connector_health_data.total_count }}</div>
+        <div class="stat-label">Total Connectors</div>
+    </div>
+    <div class="stat-card healthy">
+        <div class="stat-number">{{ connector_health_data.healthy_count }}</div>
+        <div class="stat-label">Healthy</div>
+    </div>
+    <div class="stat-card unhealthy">
+        <div class="stat-number">{{ connector_health_data.unhealthy_count }}</div>
+        <div class="stat-label">Unhealthy</div>
+    </div>
+    <div class="stat-card unknown">
+        <div class="stat-number">{{ connector_health_data.unknown_count }}</div>
+        <div class="stat-label">Unknown</div>
+    </div>
+</div>
+
+<!-- Connectors Grid -->
+{% if connector_health_data.connectors %}
+<div class="items-grid">
+    {% for connector in connector_health_data.connectors %}
+    <div class="item-card {{ connector.status_class }}"
+         onclick="window.location.href='{% url 'gaodcore_health:connector_resources' connector.id %}';">
+        <div class="item-header">
+            <div class="item-name">{{ connector.name }}</div>
+            <div class="status-badge {{ connector.status_class }}">
+                {% if connector.status_class == 'healthy' %}
+                    ✅ {{ connector.status }}
+                {% elif connector.status_class == 'unhealthy' %}
+                    ❌ {{ connector.status }}
+                {% else %}
+                    ⚠️ {{ connector.status }}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="item-details">
+            <div class="detail-item">
+                <span class="detail-label">Connector ID:</span>
+                <span class="detail-value">#{{ connector.id }}</span>
+            </div>
+
+            <div class="detail-item">
+                <span class="detail-label">Type:</span>
+                <span class="detail-value">{{ connector.object.connector_type|default:"Unknown" }}</span>
+            </div>
+
+            <div class="detail-item">
+                <span class="detail-label">Last Check:</span>
+                <span class="detail-value">
+                    {% if connector.last_check %}
+                        {{ connector.last_check|date:"M d, H:i" }}
+                    {% else %}
+                        Never
+                    {% endif %}
+                </span>
+            </div>
+
+            <div class="detail-item">
+                <span class="detail-label">Response Time:</span>
+                <span class="detail-value">
+                    {% if connector.response_time_ms %}
+                        {{ connector.response_time_ms }}ms
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </span>
+            </div>
+
+            <div class="detail-item">
+                <span class="detail-label">URI:</span>
+                <span class="detail-value">{{ connector.uri|truncatechars:30 }}</span>
+            </div>
+
+            <div class="detail-item">
+                <span class="detail-label">Enabled:</span>
+                <span class="detail-value">
+                    {% if connector.enabled %}
+                        ✅ Yes
+                    {% else %}
+                        ❌ No
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+
+        {% if connector.error_message %}
+        <div class="error-message">
+            <strong>Error:</strong> {{ connector.error_message }}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if is_paginated %}
+<div class="pagination">
+    <span class="step-links">
+        {% if page_obj.has_previous %}
+            <a href="?page=1">&laquo; First</a>
+            <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
+        {% endif %}
+
+        <span class="current">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </span>
+
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+        {% endif %}
+    </span>
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    <h3>No Connectors Found</h3>
+    <p>No enabled connectors are currently configured for monitoring.</p>
+    <p>Create connectors in the connector management interface.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add hover effect for clickable cards
+    document.querySelectorAll('.item-card').forEach(card => {
+        card.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-4px)';
+            this.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+        });
+
+        card.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+        });
+    });
+</script>
+{% endblock %}
