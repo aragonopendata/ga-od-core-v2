@@ -1,6 +1,6 @@
 from django.db import models
 from django.utils import timezone
-from gaodcore_manager.models import ConnectorConfig
+from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 
 
 class HealthCheckResult(models.Model):
@@ -152,6 +152,126 @@ class HealthCheckAlert(models.Model):
 
     def __str__(self):
         return f"{self.connector.name} - {self.alert_type} alert"
+
+    def should_send_alert(self):
+        """Check if an alert should be sent based on threshold"""
+        if not self.is_active:
+            return False
+
+        if self.last_alert_time is None:
+            return True
+
+        from datetime import timedelta
+        threshold_time = timezone.now() - timedelta(minutes=self.threshold_minutes)
+        return self.last_alert_time <= threshold_time
+
+    def mark_alert_sent(self):
+        """Mark that an alert has been sent"""
+        self.last_alert_time = timezone.now()
+        self.save()
+
+
+class ResourceHealthCheckResult(models.Model):
+    """
+    Model to store health check results for resources.
+
+    This model tracks the health status of each resource over time,
+    storing response times, error messages, and health status.
+    """
+
+    resource = models.ForeignKey(
+        ResourceConfig,
+        on_delete=models.CASCADE,
+        help_text="The resource that was checked"
+    )
+    check_time = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Timestamp when the health check was performed"
+    )
+    is_healthy = models.BooleanField(
+        help_text="Whether the resource is healthy (True) or not (False)"
+    )
+    response_time_ms = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Response time in milliseconds"
+    )
+    error_message = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Error message if health check failed"
+    )
+    error_type = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="Type of error (connection_error, timeout, object_error, unknown_error, etc.)"
+    )
+
+    class Meta:
+        ordering = ['-check_time']
+        indexes = [
+            models.Index(fields=['resource', '-check_time']),
+            models.Index(fields=['is_healthy', '-check_time']),
+            models.Index(fields=['check_time']),
+        ]
+
+    def __str__(self):
+        status = "healthy" if self.is_healthy else "unhealthy"
+        return f"{self.resource.name} - {status} at {self.check_time}"
+
+
+class ResourceHealthCheckAlert(models.Model):
+    """
+    Model to configure alerts for resource health check failures.
+
+    This model defines alerting rules for when resources fail health checks.
+    """
+
+    ALERT_TYPES = [
+        ('failure', 'Failure'),
+        ('recovery', 'Recovery'),
+        ('timeout', 'Timeout'),
+        ('consecutive_failures', 'Consecutive Failures'),
+    ]
+
+    resource = models.ForeignKey(
+        ResourceConfig,
+        on_delete=models.CASCADE,
+        help_text="The resource to monitor for alerts"
+    )
+    alert_type = models.CharField(
+        max_length=50,
+        choices=ALERT_TYPES,
+        default='failure',
+        help_text="Type of alert (failure, recovery, timeout, consecutive_failures)"
+    )
+    threshold_minutes = models.IntegerField(
+        default=5,
+        help_text="Threshold in minutes before triggering alert"
+    )
+    consecutive_failures_threshold = models.IntegerField(
+        default=3,
+        help_text="Number of consecutive failures before triggering alert"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this alert is active"
+    )
+    last_alert_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of the last alert sent"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['resource__name', 'alert_type']
+        unique_together = ['resource', 'alert_type']
+
+    def __str__(self):
+        return f"{self.resource.name} - {self.alert_type} alert"
 
     def should_send_alert(self):
         """Check if an alert should be sent based on threshold"""
