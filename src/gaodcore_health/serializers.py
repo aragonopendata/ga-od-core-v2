@@ -3,29 +3,35 @@ Serializers for health monitoring API endpoints.
 """
 
 from rest_framework import serializers
-from .models import HealthCheckResult, HealthCheckSchedule, HealthCheckAlert, ResourceHealthCheckResult, ResourceHealthCheckAlert
+from .models import (
+    HealthCheckResult,
+    HealthCheckSchedule,
+    HealthCheckAlert,
+    ResourceHealthCheckResult,
+    ResourceHealthCheckAlert,
+)
 
 
 class HealthCheckResultSerializer(serializers.ModelSerializer):
     """Serializer for HealthCheckResult model."""
 
-    connector_name = serializers.CharField(source='connector.name', read_only=True)
-    connector_uri = serializers.CharField(source='connector.uri', read_only=True)
+    connector_name = serializers.CharField(source="connector.name", read_only=True)
+    connector_uri = serializers.CharField(source="connector.uri", read_only=True)
 
     class Meta:
         model = HealthCheckResult
         fields = [
-            'id',
-            'connector',
-            'connector_name',
-            'connector_uri',
-            'check_time',
-            'is_healthy',
-            'response_time_ms',
-            'error_message',
-            'error_type',
+            "id",
+            "connector",
+            "connector_name",
+            "connector_uri",
+            "check_time",
+            "is_healthy",
+            "response_time_ms",
+            "error_message",
+            "error_type",
         ]
-        read_only_fields = ['id', 'check_time', 'connector_name', 'connector_uri']
+        read_only_fields = ["id", "check_time", "connector_name", "connector_uri"]
 
 
 class HealthCheckScheduleSerializer(serializers.ModelSerializer):
@@ -34,38 +40,38 @@ class HealthCheckScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = HealthCheckSchedule
         fields = [
-            'id',
-            'name',
-            'interval_minutes',
-            'enabled',
-            'last_run',
-            'next_run',
-            'created_at',
-            'updated_at',
+            "id",
+            "name",
+            "interval_minutes",
+            "enabled",
+            "last_run",
+            "next_run",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ["id", "created_at", "updated_at"]
 
 
 class HealthCheckAlertSerializer(serializers.ModelSerializer):
     """Serializer for HealthCheckAlert model."""
 
-    connector_name = serializers.CharField(source='connector.name', read_only=True)
+    connector_name = serializers.CharField(source="connector.name", read_only=True)
 
     class Meta:
         model = HealthCheckAlert
         fields = [
-            'id',
-            'connector',
-            'connector_name',
-            'alert_type',
-            'threshold_minutes',
-            'consecutive_failures_threshold',
-            'is_active',
-            'last_alert_time',
-            'created_at',
-            'updated_at',
+            "id",
+            "connector",
+            "connector_name",
+            "alert_type",
+            "threshold_minutes",
+            "consecutive_failures_threshold",
+            "is_active",
+            "last_alert_time",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'connector_name']
+        read_only_fields = ["id", "created_at", "updated_at", "connector_name"]
 
 
 class HealthStatusSerializer(serializers.Serializer):
@@ -110,52 +116,66 @@ class ConnectorHealthDetailSerializer(serializers.Serializer):
 
 # Resource Health Check Serializers
 
+
 class ResourceHealthCheckResultSerializer(serializers.ModelSerializer):
     """Serializer for ResourceHealthCheckResult model."""
 
-    resource_name = serializers.CharField(source='resource.name', read_only=True)
-    resource_object_location = serializers.CharField(source='resource.object_location', read_only=True)
-    connector_name = serializers.CharField(source='resource.connector_config.name', read_only=True)
-    connector_uri = serializers.CharField(source='resource.connector_config.uri', read_only=True)
+    resource_name = serializers.CharField(source="resource.name", read_only=True)
+    resource_object_location = serializers.CharField(
+        source="resource.object_location", read_only=True
+    )
+    connector_name = serializers.CharField(
+        source="resource.connector_config.name", read_only=True
+    )
+    connector_uri = serializers.CharField(
+        source="resource.connector_config.uri", read_only=True
+    )
 
     class Meta:
         model = ResourceHealthCheckResult
         fields = [
-            'id',
-            'resource',
-            'resource_name',
-            'resource_object_location',
-            'connector_name',
-            'connector_uri',
-            'check_time',
-            'is_healthy',
-            'response_time_ms',
-            'error_message',
-            'error_type',
+            "id",
+            "resource",
+            "resource_name",
+            "resource_object_location",
+            "connector_name",
+            "connector_uri",
+            "check_time",
+            "is_healthy",
+            "response_time_ms",
+            "error_message",
+            "error_type",
         ]
-        read_only_fields = ['id', 'check_time', 'resource_name', 'resource_object_location', 'connector_name', 'connector_uri']
+        read_only_fields = [
+            "id",
+            "check_time",
+            "resource_name",
+            "resource_object_location",
+            "connector_name",
+            "connector_uri",
+        ]
 
 
 class ResourceHealthCheckAlertSerializer(serializers.ModelSerializer):
     """Serializer for ResourceHealthCheckAlert model."""
 
-    resource_name = serializers.CharField(source='resource.name', read_only=True)
+    resource_name = serializers.CharField(source="resource.name", read_only=True)
 
     class Meta:
         model = ResourceHealthCheckAlert
         fields = [
-            'id',
-            'resource',
-            'resource_name',
-            'alert_type',
-            'threshold_minutes',
-            'consecutive_failures_threshold',
-            'is_active',
-            'last_alert_time',
-            'created_at',
-            'updated_at',
+            "id",
+            "resource",
+            "resource_name",
+            "alert_type",
+            "threshold_minutes",
+            "consecutive_failures_threshold",
+            "is_active",
+            "last_alert_time",
+            "created_at",
+            "updated_at",
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'resource_name']
+        read_only_fields = ["id", "created_at", "updated_at", "resource_name"]
 
 
 class ResourceHealthStatusSerializer(serializers.Serializer):

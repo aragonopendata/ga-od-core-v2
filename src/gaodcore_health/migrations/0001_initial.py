@@ -5,62 +5,210 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
-        ('gaodcore_manager', '0003_auto_20240912_1036'),
+        ("gaodcore_manager", "0003_auto_20240912_1036"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='HealthCheckSchedule',
+            name="HealthCheckSchedule",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(help_text='Name of the health check schedule', max_length=255, unique=True)),
-                ('interval_minutes', models.IntegerField(default=5, help_text='Interval between health checks in minutes')),
-                ('enabled', models.BooleanField(default=True, help_text='Whether this schedule is enabled')),
-                ('last_run', models.DateTimeField(blank=True, help_text='Timestamp of the last health check run', null=True)),
-                ('next_run', models.DateTimeField(blank=True, help_text='Timestamp of the next scheduled health check', null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "name",
+                    models.CharField(
+                        help_text="Name of the health check schedule",
+                        max_length=255,
+                        unique=True,
+                    ),
+                ),
+                (
+                    "interval_minutes",
+                    models.IntegerField(
+                        default=5, help_text="Interval between health checks in minutes"
+                    ),
+                ),
+                (
+                    "enabled",
+                    models.BooleanField(
+                        default=True, help_text="Whether this schedule is enabled"
+                    ),
+                ),
+                (
+                    "last_run",
+                    models.DateTimeField(
+                        blank=True,
+                        help_text="Timestamp of the last health check run",
+                        null=True,
+                    ),
+                ),
+                (
+                    "next_run",
+                    models.DateTimeField(
+                        blank=True,
+                        help_text="Timestamp of the next scheduled health check",
+                        null=True,
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'ordering': ['name'],
+                "ordering": ["name"],
             },
         ),
         migrations.CreateModel(
-            name='HealthCheckResult',
+            name="HealthCheckResult",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('check_time', models.DateTimeField(auto_now_add=True, help_text='Timestamp when the health check was performed')),
-                ('is_healthy', models.BooleanField(help_text='Whether the connector is healthy (True) or not (False)')),
-                ('response_time_ms', models.IntegerField(blank=True, help_text='Response time in milliseconds', null=True)),
-                ('error_message', models.TextField(blank=True, help_text='Error message if health check failed', null=True)),
-                ('error_type', models.CharField(blank=True, help_text='Type of error (connection_error, timeout, unknown_error, etc.)', max_length=100, null=True)),
-                ('connector', models.ForeignKey(help_text='The connector that was checked', on_delete=django.db.models.deletion.CASCADE, to='gaodcore_manager.connectorconfig')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "check_time",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        help_text="Timestamp when the health check was performed",
+                    ),
+                ),
+                (
+                    "is_healthy",
+                    models.BooleanField(
+                        help_text="Whether the connector is healthy (True) or not (False)"
+                    ),
+                ),
+                (
+                    "response_time_ms",
+                    models.IntegerField(
+                        blank=True, help_text="Response time in milliseconds", null=True
+                    ),
+                ),
+                (
+                    "error_message",
+                    models.TextField(
+                        blank=True,
+                        help_text="Error message if health check failed",
+                        null=True,
+                    ),
+                ),
+                (
+                    "error_type",
+                    models.CharField(
+                        blank=True,
+                        help_text="Type of error (connection_error, timeout, unknown_error, etc.)",
+                        max_length=100,
+                        null=True,
+                    ),
+                ),
+                (
+                    "connector",
+                    models.ForeignKey(
+                        help_text="The connector that was checked",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="gaodcore_manager.connectorconfig",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-check_time'],
-                'indexes': [models.Index(fields=['connector', '-check_time'], name='gaodcore_he_connect_15779d_idx'), models.Index(fields=['is_healthy', '-check_time'], name='gaodcore_he_is_heal_8af70f_idx'), models.Index(fields=['check_time'], name='gaodcore_he_check_t_525556_idx')],
+                "ordering": ["-check_time"],
+                "indexes": [
+                    models.Index(
+                        fields=["connector", "-check_time"],
+                        name="gaodcore_he_connect_15779d_idx",
+                    ),
+                    models.Index(
+                        fields=["is_healthy", "-check_time"],
+                        name="gaodcore_he_is_heal_8af70f_idx",
+                    ),
+                    models.Index(
+                        fields=["check_time"], name="gaodcore_he_check_t_525556_idx"
+                    ),
+                ],
             },
         ),
         migrations.CreateModel(
-            name='HealthCheckAlert',
+            name="HealthCheckAlert",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('alert_type', models.CharField(choices=[('failure', 'Failure'), ('recovery', 'Recovery'), ('timeout', 'Timeout'), ('consecutive_failures', 'Consecutive Failures')], default='failure', help_text='Type of alert (failure, recovery, timeout, consecutive_failures)', max_length=50)),
-                ('threshold_minutes', models.IntegerField(default=5, help_text='Threshold in minutes before triggering alert')),
-                ('consecutive_failures_threshold', models.IntegerField(default=3, help_text='Number of consecutive failures before triggering alert')),
-                ('is_active', models.BooleanField(default=True, help_text='Whether this alert is active')),
-                ('last_alert_time', models.DateTimeField(blank=True, help_text='Timestamp of the last alert sent', null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('connector', models.ForeignKey(help_text='The connector to monitor for alerts', on_delete=django.db.models.deletion.CASCADE, to='gaodcore_manager.connectorconfig')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "alert_type",
+                    models.CharField(
+                        choices=[
+                            ("failure", "Failure"),
+                            ("recovery", "Recovery"),
+                            ("timeout", "Timeout"),
+                            ("consecutive_failures", "Consecutive Failures"),
+                        ],
+                        default="failure",
+                        help_text="Type of alert (failure, recovery, timeout, consecutive_failures)",
+                        max_length=50,
+                    ),
+                ),
+                (
+                    "threshold_minutes",
+                    models.IntegerField(
+                        default=5,
+                        help_text="Threshold in minutes before triggering alert",
+                    ),
+                ),
+                (
+                    "consecutive_failures_threshold",
+                    models.IntegerField(
+                        default=3,
+                        help_text="Number of consecutive failures before triggering alert",
+                    ),
+                ),
+                (
+                    "is_active",
+                    models.BooleanField(
+                        default=True, help_text="Whether this alert is active"
+                    ),
+                ),
+                (
+                    "last_alert_time",
+                    models.DateTimeField(
+                        blank=True,
+                        help_text="Timestamp of the last alert sent",
+                        null=True,
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "connector",
+                    models.ForeignKey(
+                        help_text="The connector to monitor for alerts",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="gaodcore_manager.connectorconfig",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['connector__name', 'alert_type'],
-                'unique_together': {('connector', 'alert_type')},
+                "ordering": ["connector__name", "alert_type"],
+                "unique_together": {("connector", "alert_type")},
             },
         ),
     ]

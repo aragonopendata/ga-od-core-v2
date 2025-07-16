@@ -5,45 +5,154 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('gaodcore_manager', '0003_auto_20240912_1036'),
-        ('gaodcore_health', '0001_initial'),
+        ("gaodcore_manager", "0003_auto_20240912_1036"),
+        ("gaodcore_health", "0001_initial"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ResourceHealthCheckResult',
+            name="ResourceHealthCheckResult",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('check_time', models.DateTimeField(auto_now_add=True, help_text='Timestamp when the health check was performed')),
-                ('is_healthy', models.BooleanField(help_text='Whether the resource is healthy (True) or not (False)')),
-                ('response_time_ms', models.IntegerField(blank=True, help_text='Response time in milliseconds', null=True)),
-                ('error_message', models.TextField(blank=True, help_text='Error message if health check failed', null=True)),
-                ('error_type', models.CharField(blank=True, help_text='Type of error (connection_error, timeout, object_error, unknown_error, etc.)', max_length=100, null=True)),
-                ('resource', models.ForeignKey(help_text='The resource that was checked', on_delete=django.db.models.deletion.CASCADE, to='gaodcore_manager.resourceconfig')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "check_time",
+                    models.DateTimeField(
+                        auto_now_add=True,
+                        help_text="Timestamp when the health check was performed",
+                    ),
+                ),
+                (
+                    "is_healthy",
+                    models.BooleanField(
+                        help_text="Whether the resource is healthy (True) or not (False)"
+                    ),
+                ),
+                (
+                    "response_time_ms",
+                    models.IntegerField(
+                        blank=True, help_text="Response time in milliseconds", null=True
+                    ),
+                ),
+                (
+                    "error_message",
+                    models.TextField(
+                        blank=True,
+                        help_text="Error message if health check failed",
+                        null=True,
+                    ),
+                ),
+                (
+                    "error_type",
+                    models.CharField(
+                        blank=True,
+                        help_text="Type of error (connection_error, timeout, object_error, unknown_error, etc.)",
+                        max_length=100,
+                        null=True,
+                    ),
+                ),
+                (
+                    "resource",
+                    models.ForeignKey(
+                        help_text="The resource that was checked",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="gaodcore_manager.resourceconfig",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-check_time'],
-                'indexes': [models.Index(fields=['resource', '-check_time'], name='gaodcore_he_resourc_7a9713_idx'), models.Index(fields=['is_healthy', '-check_time'], name='gaodcore_he_is_heal_29dfab_idx'), models.Index(fields=['check_time'], name='gaodcore_he_check_t_bcb337_idx')],
+                "ordering": ["-check_time"],
+                "indexes": [
+                    models.Index(
+                        fields=["resource", "-check_time"],
+                        name="gaodcore_he_resourc_7a9713_idx",
+                    ),
+                    models.Index(
+                        fields=["is_healthy", "-check_time"],
+                        name="gaodcore_he_is_heal_29dfab_idx",
+                    ),
+                    models.Index(
+                        fields=["check_time"], name="gaodcore_he_check_t_bcb337_idx"
+                    ),
+                ],
             },
         ),
         migrations.CreateModel(
-            name='ResourceHealthCheckAlert',
+            name="ResourceHealthCheckAlert",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('alert_type', models.CharField(choices=[('failure', 'Failure'), ('recovery', 'Recovery'), ('timeout', 'Timeout'), ('consecutive_failures', 'Consecutive Failures')], default='failure', help_text='Type of alert (failure, recovery, timeout, consecutive_failures)', max_length=50)),
-                ('threshold_minutes', models.IntegerField(default=5, help_text='Threshold in minutes before triggering alert')),
-                ('consecutive_failures_threshold', models.IntegerField(default=3, help_text='Number of consecutive failures before triggering alert')),
-                ('is_active', models.BooleanField(default=True, help_text='Whether this alert is active')),
-                ('last_alert_time', models.DateTimeField(blank=True, help_text='Timestamp of the last alert sent', null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('resource', models.ForeignKey(help_text='The resource to monitor for alerts', on_delete=django.db.models.deletion.CASCADE, to='gaodcore_manager.resourceconfig')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "alert_type",
+                    models.CharField(
+                        choices=[
+                            ("failure", "Failure"),
+                            ("recovery", "Recovery"),
+                            ("timeout", "Timeout"),
+                            ("consecutive_failures", "Consecutive Failures"),
+                        ],
+                        default="failure",
+                        help_text="Type of alert (failure, recovery, timeout, consecutive_failures)",
+                        max_length=50,
+                    ),
+                ),
+                (
+                    "threshold_minutes",
+                    models.IntegerField(
+                        default=5,
+                        help_text="Threshold in minutes before triggering alert",
+                    ),
+                ),
+                (
+                    "consecutive_failures_threshold",
+                    models.IntegerField(
+                        default=3,
+                        help_text="Number of consecutive failures before triggering alert",
+                    ),
+                ),
+                (
+                    "is_active",
+                    models.BooleanField(
+                        default=True, help_text="Whether this alert is active"
+                    ),
+                ),
+                (
+                    "last_alert_time",
+                    models.DateTimeField(
+                        blank=True,
+                        help_text="Timestamp of the last alert sent",
+                        null=True,
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "resource",
+                    models.ForeignKey(
+                        help_text="The resource to monitor for alerts",
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="gaodcore_manager.resourceconfig",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['resource__name', 'alert_type'],
-                'unique_together': {('resource', 'alert_type')},
+                "ordering": ["resource__name", "alert_type"],
+                "unique_together": {("resource", "alert_type")},
             },
         ),
     ]

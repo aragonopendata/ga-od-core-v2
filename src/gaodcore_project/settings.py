@@ -215,7 +215,12 @@ LOGGING = {
         },
         'sqlalchemy': {
             'handlers': ['console'],
-            'level': 'WARNING',
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'sqlalchemy.engine': {
+            'handlers': ['console'],
+            'level': 'ERROR',
             'propagate': False,
         },
     },
