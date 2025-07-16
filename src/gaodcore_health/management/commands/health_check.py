@@ -35,6 +35,11 @@ class Command(BaseCommand):
             help='Maximum number of concurrent health checks (default: 5)'
         )
         parser.add_argument(
+            '--timeout',
+            type=int,
+            help='Timeout in seconds for health checks (uses config default if not specified)'
+        )
+        parser.add_argument(
             '--report',
             action='store_true',
             help='Generate and display health report'
@@ -96,17 +101,17 @@ class Command(BaseCommand):
 
             # Handle health checks
             if options['connector_id']:
-                self.check_specific_connector(options['connector_id'], options['json'])
+                self.check_specific_connector(options['connector_id'], options['json'], options['timeout'])
             else:
-                self.check_all_connectors(options['concurrency'], options['json'])
+                self.check_all_connectors(options['concurrency'], options['json'], options['timeout'])
 
         except Exception as e:
             raise CommandError(f'Health check failed: {str(e)}')
 
-    def check_specific_connector(self, connector_id: int, json_output: bool = False):
+    def check_specific_connector(self, connector_id: int, json_output: bool = False, timeout: int = None):
         """Check health of a specific connector."""
         try:
-            result = check_specific_connector_health_sync(connector_id)
+            result = check_specific_connector_health_sync(connector_id, timeout=timeout)
 
             if json_output:
                 output = {
@@ -131,9 +136,9 @@ class Command(BaseCommand):
         except ConnectorConfig.DoesNotExist:
             raise CommandError(f'Connector with ID {connector_id} not found')
 
-    def check_all_connectors(self, concurrency: int, json_output: bool = False):
+    def check_all_connectors(self, concurrency: int, json_output: bool = False, timeout: int = None):
         """Check health of all enabled connectors."""
-        results = check_all_connectors_health_sync(concurrency)
+        results = check_all_connectors_health_sync(concurrency, timeout=timeout)
 
         if json_output:
             output = []

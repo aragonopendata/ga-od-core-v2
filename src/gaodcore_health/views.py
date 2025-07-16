@@ -135,6 +135,11 @@ class HealthCheckView(APIView):
                 type=OpenApiTypes.INT,
                 default=5,
                 description="Maximum concurrent checks"
+            ),
+            OpenApiParameter(
+                name="timeout",
+                type=OpenApiTypes.INT,
+                description="Timeout in seconds for health checks (uses config default if not specified)"
             )
         ],
         responses={200: HealthCheckResultSerializer(many=True)}
@@ -143,16 +148,19 @@ class HealthCheckView(APIView):
         """Trigger health checks."""
         connector_id = request.data.get('connector_id') or request.query_params.get('connector_id')
         concurrency = int(request.data.get('concurrency', 5))
+        timeout = request.data.get('timeout') or request.query_params.get('timeout')
+        if timeout:
+            timeout = int(timeout)
 
         try:
             if connector_id:
                 # Check specific connector
-                result = asyncio.run(check_specific_connector_health(int(connector_id)))
+                result = asyncio.run(check_specific_connector_health(int(connector_id), timeout=timeout))
                 serializer = HealthCheckResultSerializer(result)
                 return Response(serializer.data)
             else:
                 # Check all connectors
-                results = asyncio.run(check_all_connectors_health(concurrency))
+                results = asyncio.run(check_all_connectors_health(concurrency, timeout=timeout))
                 serializer = HealthCheckResultSerializer(results, many=True)
                 return Response(serializer.data)
 

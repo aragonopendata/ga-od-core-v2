@@ -25,12 +25,13 @@ from .models import HealthCheckResult, HealthCheckAlert
 logger = logging.getLogger(__name__)
 
 
-def check_connector_health_sync(connector: ConnectorConfig) -> HealthCheckResult:
+def check_connector_health_sync(connector: ConnectorConfig, timeout: Optional[int] = None) -> HealthCheckResult:
     """
     Perform health check on a single connector (synchronous version).
 
     Args:
         connector: The ConnectorConfig instance to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
 
     Returns:
         HealthCheckResult: The result of the health check
@@ -38,9 +39,14 @@ def check_connector_health_sync(connector: ConnectorConfig) -> HealthCheckResult
     logger.info(f"Starting health check for connector: {connector.name}")
     start_time = time.time()
 
+    # Get timeout from config if not provided
+    if timeout is None:
+        config = Config.get_config()
+        timeout = config.common_config.health_monitoring.timeout_seconds
+
     try:
         # Run validation synchronously
-        validate_uri(connector.uri)
+        validate_uri(connector.uri, timeout=timeout)
 
         response_time = int((time.time() - start_time) * 1000)
 
@@ -79,31 +85,41 @@ def check_connector_health_sync(connector: ConnectorConfig) -> HealthCheckResult
 
     except Exception as e:
         response_time = int((time.time() - start_time) * 1000)
+
+        # Categorize timeout errors
+        error_type = 'unknown_error'
+        if 'timeout' in str(e).lower() or 'timed out' in str(e).lower():
+            error_type = 'timeout'
+
         result = HealthCheckResult(
             connector=connector,
             is_healthy=False,
             response_time_ms=response_time,
             error_message=str(e),
-            error_type='unknown_error'
+            error_type=error_type
         )
         logger.warning(f"Health check failed for connector: {connector.name} - {str(e)}")
         return result
 
 
-def check_all_connectors_health_sync(concurrency_limit: Optional[int] = None) -> List[HealthCheckResult]:
+def check_all_connectors_health_sync(concurrency_limit: Optional[int] = None, timeout: Optional[int] = None) -> List[HealthCheckResult]:
     """
     Perform health checks on all enabled connectors (synchronous version).
 
     Args:
         concurrency_limit: Maximum number of concurrent health checks (ignored in sync version)
+        timeout: Timeout in seconds for health checks (uses config default if None)
 
     Returns:
         List[HealthCheckResult]: List of health check results
     """
-    # Get concurrency limit from config if not provided
-    if concurrency_limit is None:
+    # Get concurrency limit and timeout from config if not provided
+    if concurrency_limit is None or timeout is None:
         config = Config.get_config()
-        concurrency_limit = config.common_config.health_monitoring.concurrency_limit
+        if concurrency_limit is None:
+            concurrency_limit = config.common_config.health_monitoring.concurrency_limit
+        if timeout is None:
+            timeout = config.common_config.health_monitoring.timeout_seconds
 
     connectors = ConnectorConfig.objects.filter(enabled=True)
 
@@ -116,7 +132,7 @@ def check_all_connectors_health_sync(concurrency_limit: Optional[int] = None) ->
     # Run health checks synchronously
     results = []
     for connector in connectors:
-        result = check_connector_health_sync(connector)
+        result = check_connector_health_sync(connector, timeout=timeout)
         results.append(result)
 
     # Bulk save results to database
@@ -132,12 +148,13 @@ def check_all_connectors_health_sync(concurrency_limit: Optional[int] = None) ->
     return results
 
 
-def check_specific_connector_health_sync(connector_id: int) -> HealthCheckResult:
+def check_specific_connector_health_sync(connector_id: int, timeout: Optional[int] = None) -> HealthCheckResult:
     """
     Check health of a specific connector by ID (synchronous version).
 
     Args:
         connector_id: ID of the connector to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
 
     Returns:
         HealthCheckResult: The health check result
@@ -146,7 +163,7 @@ def check_specific_connector_health_sync(connector_id: int) -> HealthCheckResult
         ConnectorConfig.DoesNotExist: If connector not found
     """
     connector = ConnectorConfig.objects.get(id=connector_id)
-    result = check_connector_health_sync(connector)
+    result = check_connector_health_sync(connector, timeout=timeout)
 
     # Save individual result
     result.save()
@@ -154,12 +171,13 @@ def check_specific_connector_health_sync(connector_id: int) -> HealthCheckResult
     return result
 
 
-async def check_connector_health(connector: ConnectorConfig) -> HealthCheckResult:
+async def check_connector_health(connector: ConnectorConfig, timeout: Optional[int] = None) -> HealthCheckResult:
     """
     Perform health check on a single connector.
 
     Args:
         connector: The ConnectorConfig instance to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
 
     Returns:
         HealthCheckResult: The result of the health check
@@ -167,14 +185,19 @@ async def check_connector_health(connector: ConnectorConfig) -> HealthCheckResul
     logger.info(f"Starting health check for connector: {connector.name}")
     start_time = time.time()
 
+    # Get timeout from config if not provided
+    if timeout is None:
+        config = Config.get_config()
+        timeout = config.common_config.health_monitoring.timeout_seconds
+
     try:
         # Run validation in a thread to avoid blocking the event loop
         try:
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, validate_uri, connector.uri)
+            await loop.run_in_executor(None, validate_uri, connector.uri, timeout)
         except RuntimeError:
             # No event loop running, run directly
-            validate_uri(connector.uri)
+            validate_uri(connector.uri, timeout=timeout)
 
         response_time = int((time.time() - start_time) * 1000)
 
@@ -213,31 +236,41 @@ async def check_connector_health(connector: ConnectorConfig) -> HealthCheckResul
 
     except Exception as e:
         response_time = int((time.time() - start_time) * 1000)
+
+        # Categorize timeout errors
+        error_type = 'unknown_error'
+        if 'timeout' in str(e).lower() or 'timed out' in str(e).lower():
+            error_type = 'timeout'
+
         result = HealthCheckResult(
             connector=connector,
             is_healthy=False,
             response_time_ms=response_time,
             error_message=str(e),
-            error_type='unknown_error'
+            error_type=error_type
         )
         logger.warning(f"Health check failed for connector: {connector.name} - {str(e)}")
         return result
 
 
-async def check_all_connectors_health(concurrency_limit: Optional[int] = None) -> List[HealthCheckResult]:
+async def check_all_connectors_health(concurrency_limit: Optional[int] = None, timeout: Optional[int] = None) -> List[HealthCheckResult]:
     """
     Perform health checks on all enabled connectors.
 
     Args:
         concurrency_limit: Maximum number of concurrent health checks (defaults to config)
+        timeout: Timeout in seconds for health checks (uses config default if None)
 
     Returns:
         List[HealthCheckResult]: List of health check results
     """
-    # Get concurrency limit from config if not provided
-    if concurrency_limit is None:
+    # Get concurrency limit and timeout from config if not provided
+    if concurrency_limit is None or timeout is None:
         config = Config.get_config()
-        concurrency_limit = config.common_config.health_monitoring.concurrency_limit
+        if concurrency_limit is None:
+            concurrency_limit = config.common_config.health_monitoring.concurrency_limit
+        if timeout is None:
+            timeout = config.common_config.health_monitoring.timeout_seconds
 
     connectors = ConnectorConfig.objects.filter(enabled=True)
 
@@ -248,7 +281,7 @@ async def check_all_connectors_health(concurrency_limit: Optional[int] = None) -
     logger.info(f"Starting health checks for {connectors.count()} connectors with concurrency limit {concurrency_limit}")
 
     # Create health check tasks
-    tasks = [check_connector_health(connector) for connector in connectors]
+    tasks = [check_connector_health(connector, timeout=timeout) for connector in connectors]
 
     # Use existing gather_limited for concurrency control
     results = await gather_limited(concurrency_limit, tasks)
@@ -266,12 +299,13 @@ async def check_all_connectors_health(concurrency_limit: Optional[int] = None) -
     return results
 
 
-async def check_specific_connector_health(connector_id: int) -> HealthCheckResult:
+async def check_specific_connector_health(connector_id: int, timeout: Optional[int] = None) -> HealthCheckResult:
     """
     Check health of a specific connector by ID.
 
     Args:
         connector_id: ID of the connector to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
 
     Returns:
         HealthCheckResult: The health check result
@@ -280,7 +314,7 @@ async def check_specific_connector_health(connector_id: int) -> HealthCheckResul
         ConnectorConfig.DoesNotExist: If connector not found
     """
     connector = ConnectorConfig.objects.get(id=connector_id)
-    result = await check_connector_health(connector)
+    result = await check_connector_health(connector, timeout=timeout)
 
     # Save individual result
     result.save()

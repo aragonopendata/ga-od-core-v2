@@ -746,9 +746,9 @@ def _process_like_filter(args: str, model: Table) -> list:
     return filters
 
 
-def validate_uri(uri: str) -> None:
+def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
     """Validate if URI is available as resource."""
-    engine = _get_engine(uri)
+    engine = _get_engine(uri, timeout=timeout)
     try:
         with engine.connect() as _:
             pass
@@ -807,9 +807,9 @@ def _get_table_from_dict(
     return table
 
 
-def _get_engine_from_api(uri: str) -> Engine:
+def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
     try:
-        with urllib.request.urlopen(uri) as response:
+        with urllib.request.urlopen(uri, timeout=timeout) as response:
             if response.getcode() == HTTPStatus.OK:
                 split_content_type = response.info()["Content-Type"].split(";")
                 mime_type = split_content_type[0]
@@ -858,7 +858,7 @@ def _get_engine_from_api(uri: str) -> Engine:
 # Global flag to track Oracle client initialization
 _oracle_client_initialized = False
 
-def _get_engine(uri: str) -> Engine:
+def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
     global _oracle_client_initialized
     uri_parsed = urlparse(uri)
 
@@ -887,9 +887,21 @@ def _get_engine(uri: str) -> Engine:
                 logger.warning(f"Could not initialize Oracle thick mode: {e}")
                 # Fall back to thin mode (default behavior)
 
-        return create_engine(uri, max_identifier_length=128)
+        # Configure database-specific timeout parameters
+        connect_args = {}
+        if timeout is not None:
+            if uri_parsed.scheme in ["postgresql", "mysql"]:
+                connect_args["connect_timeout"] = timeout
+            elif uri_parsed.scheme == "oracle+oracledb":
+                connect_args["timeout"] = timeout
+            elif uri_parsed.scheme in ["mssql+pyodbc", "mssql"]:
+                connect_args["timeout"] = timeout
+            elif uri_parsed.scheme == "sqlite":
+                connect_args["timeout"] = timeout
+
+        return create_engine(uri, max_identifier_length=128, connect_args=connect_args)
     if uri_parsed.scheme in _HTTP_SCHEMAS:
-        return _get_engine_from_api(uri)
+        return _get_engine_from_api(uri, timeout=timeout)
     raise NotImplementedSchemaError(
         f'Schema: "{uri_parsed.scheme}" is not implemented.'
     )
