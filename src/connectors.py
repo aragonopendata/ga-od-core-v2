@@ -753,7 +753,9 @@ def validate_uri(uri: str) -> None:
         with engine.connect() as _:
             pass
     except sqlalchemy.exc.DatabaseError as err:
-        logging.exception("Connection not available.")
+        # Log connection failure as warning instead of error to avoid noisy stack traces
+        # in health checks where connection failures are expected
+        logger.warning(f"Connection not available for URI: {uri[:50]}... - {str(err)[:200]}...")
         raise DriverConnectionError("Connection not available.") from err
 
 
