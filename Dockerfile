@@ -42,7 +42,15 @@ RUN apt install postgresql-client -y
 
 RUN echo "[FreeTDS]\n\
     Description = FreeTDS unixODBC Driver\n\
-    Driver = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so" >> /etc/odbcinst.ini
+    Driver = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so\n\
+    Setup = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so" >> /etc/odbcinst.ini
+
+# Configure FreeTDS with proper settings
+RUN echo "[global]\n\
+    tds version = 8.0\n\
+    client charset = UTF-8\n\
+    text size = 64512" > /etc/freetds/freetds.conf
+
 RUN apt clean -y
 RUN cp /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so /usr/local/lib/
 

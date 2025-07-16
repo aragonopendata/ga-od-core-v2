@@ -46,7 +46,7 @@ from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
 
 logger = logging.getLogger(__name__)
 
-_DATABASE_SCHEMAS = {"postgresql", "mysql", "mssql+pyodbc", "oracle+oracledb", "sqlite"}
+_DATABASE_SCHEMAS = {"postgresql", "mysql", "mssql", "mssql+pyodbc", "oracle+oracledb", "sqlite"}
 _HTTP_SCHEMAS = {"http", "https"}
 _RESOURCE_MAX_ROWS = 1048576
 _TEMPORAL_TABLE_NAME = "temporal_table"
@@ -864,6 +864,12 @@ def _get_engine(uri: str) -> Engine:
     if uri_parsed.scheme == "oracle":
         # Convert oracle:// to oracle+oracledb:// for the new oracledb package
         uri = uri.replace("oracle://", "oracle+oracledb://", 1)
+        uri_parsed = urlparse(uri)
+
+    # Handle MSSQL URI conversion from mssql:// to mssql+pyodbc://
+    if uri_parsed.scheme == "mssql":
+        # Convert mssql:// to mssql+pyodbc:// for pyodbc driver compatibility
+        uri = uri.replace("mssql://", "mssql+pyodbc://", 1)
         uri_parsed = urlparse(uri)
 
     if uri_parsed.scheme in _DATABASE_SCHEMAS:
