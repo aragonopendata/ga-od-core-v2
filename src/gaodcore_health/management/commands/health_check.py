@@ -11,22 +11,35 @@ from django.core.management.base import BaseCommand, CommandError
 from gaodcore_health.health_check import (
     check_all_connectors_health_sync,
     check_specific_connector_health_sync,
+    check_all_resources_health_sync,
+    check_specific_resource_health_sync,
     check_and_send_alerts,
     cleanup_old_health_results,
     get_connector_health_summary
 )
 from gaodcore_health.models import HealthCheckSchedule
-from gaodcore_manager.models import ConnectorConfig
+from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 
 
 class Command(BaseCommand):
-    help = 'Perform health checks on connectors'
+    help = 'Perform health checks on connectors and resources'
 
     def add_arguments(self, parser):
         parser.add_argument(
             '--connector-id',
             type=int,
             help='Check specific connector by ID'
+        )
+        parser.add_argument(
+            '--resource-id',
+            type=int,
+            help='Check specific resource by ID'
+        )
+        parser.add_argument(
+            '--type',
+            choices=['connectors', 'resources', 'both'],
+            default='both',
+            help='Type of health check to perform (default: both)'
         )
         parser.add_argument(
             '--concurrency',
@@ -102,8 +115,17 @@ class Command(BaseCommand):
             # Handle health checks
             if options['connector_id']:
                 self.check_specific_connector(options['connector_id'], options['json'], options['timeout'])
+            elif options['resource_id']:
+                self.check_specific_resource(options['resource_id'], options['json'], options['timeout'])
             else:
-                self.check_all_connectors(options['concurrency'], options['json'], options['timeout'])
+                check_type = options['type']
+                if check_type == 'connectors':
+                    self.check_all_connectors(options['concurrency'], options['json'], options['timeout'])
+                elif check_type == 'resources':
+                    self.check_all_resources(options['concurrency'], options['json'], options['timeout'])
+                else:  # both
+                    self.check_all_connectors(options['concurrency'], options['json'], options['timeout'])
+                    self.check_all_resources(options['concurrency'], options['json'], options['timeout'])
 
         except Exception as e:
             raise CommandError(f'Health check failed: {str(e)}')
@@ -228,3 +250,65 @@ class Command(BaseCommand):
             )
             schedule.update_run_times()
             self.stdout.write(f"Created default schedule: {schedule_name}")
+
+    def check_specific_resource(self, resource_id: int, json_output: bool = False, timeout: int = None):
+        """Check health of a specific resource."""
+        try:
+            result = check_specific_resource_health_sync(resource_id, timeout=timeout)
+
+            if json_output:
+                output = {
+                    'resource_id': result.resource.id,
+                    'resource_name': result.resource.name,
+                    'is_healthy': result.is_healthy,
+                    'check_time': result.check_time.isoformat(),
+                    'response_time_ms': result.response_time_ms,
+                    'error_message': result.error_message,
+                    'error_type': result.error_type
+                }
+                self.stdout.write(json.dumps(output, indent=2))
+            else:
+                status = "✓ HEALTHY" if result.is_healthy else "✗ UNHEALTHY"
+                self.stdout.write(f"Resource: {result.resource.name}")
+                self.stdout.write(f"Status: {status}")
+                self.stdout.write(f"Response Time: {result.response_time_ms}ms")
+                if result.error_message:
+                    self.stdout.write(f"Error: {result.error_message}")
+
+        except ResourceConfig.DoesNotExist:
+            raise CommandError(f'Resource with ID {resource_id} not found')
+
+    def check_all_resources(self, concurrency: int, json_output: bool = False, timeout: int = None):
+        """Check health of all enabled resources."""
+        results = check_all_resources_health_sync(concurrency, timeout=timeout)
+
+        if json_output:
+            output = []
+            for result in results:
+                output.append({
+                    'resource_id': result.resource.id,
+                    'resource_name': result.resource.name,
+                    'is_healthy': result.is_healthy,
+                    'check_time': result.check_time.isoformat(),
+                    'response_time_ms': result.response_time_ms,
+                    'error_message': result.error_message,
+                    'error_type': result.error_type
+                })
+            self.stdout.write(json.dumps(output, indent=2))
+        else:
+            healthy_count = sum(1 for r in results if r.is_healthy)
+            unhealthy_count = len(results) - healthy_count
+
+            self.stdout.write("\nResource Health Check Summary:")
+            self.stdout.write(f"Total Resources: {len(results)}")
+            self.stdout.write(self.style.SUCCESS(f"Healthy: {healthy_count}"))
+
+            if unhealthy_count > 0:
+                self.stdout.write(self.style.ERROR(f"Unhealthy: {unhealthy_count}"))
+
+                # Show unhealthy resources
+                for result in results:
+                    if not result.is_healthy:
+                        self.stdout.write(
+                            self.style.ERROR(f"  - {result.resource.name}: {result.error_message}")
+                        )

@@ -16,18 +16,25 @@ from rest_framework import status
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
-from gaodcore_manager.models import ConnectorConfig
-from .models import HealthCheckResult
+from gaodcore_manager.models import ConnectorConfig, ResourceConfig
+from .models import HealthCheckResult, ResourceHealthCheckResult
 from .serializers import (
     HealthCheckResultSerializer,
     HealthStatusSerializer,
     HealthSummarySerializer,
-    ConnectorHealthDetailSerializer
+    ConnectorHealthDetailSerializer,
+    ResourceHealthCheckResultSerializer,
+    ResourceHealthStatusSerializer,
+    ResourceHealthSummarySerializer,
+    ResourceHealthDetailSerializer
 )
 from .health_check import (
     check_all_connectors_health,
     check_specific_connector_health,
-    get_connector_health_summary
+    get_connector_health_summary,
+    check_all_resources_health,
+    check_specific_resource_health,
+    get_resource_health_summary
 )
 
 
@@ -385,3 +392,316 @@ def health_dashboard(request):
     }
 
     return render(request, 'health/dashboard.html', context)
+
+
+# Resource Health Check Views
+
+class ResourceHealthStatusView(APIView):
+    """
+    Get current health status of all resources.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["health"],
+        summary="Get current health status of all resources",
+        description="Returns the latest health check results for all enabled resources",
+        responses={200: ResourceHealthStatusSerializer(many=True)}
+    )
+    def get(self, request):
+        """Get current health status of all resources."""
+        resources = ResourceConfig.objects.filter(enabled=True).select_related('connector_config')
+        status_data = []
+
+        for resource in resources:
+            # Get latest health check result for this resource
+            latest_result = ResourceHealthCheckResult.objects.filter(
+                resource=resource
+            ).order_by('-check_time').first()
+
+            if latest_result:
+                status_data.append({
+                    'resource_id': resource.id,
+                    'resource_name': resource.name,
+                    'resource_object_location': resource.object_location,
+                    'connector_name': resource.connector_config.name,
+                    'connector_uri': resource.connector_config.uri,
+                    'is_healthy': latest_result.is_healthy,
+                    'last_check': latest_result.check_time,
+                    'response_time_ms': latest_result.response_time_ms,
+                    'error_message': latest_result.error_message,
+                    'error_type': latest_result.error_type,
+                    'enabled': resource.enabled,
+                })
+            else:
+                status_data.append({
+                    'resource_id': resource.id,
+                    'resource_name': resource.name,
+                    'resource_object_location': resource.object_location,
+                    'connector_name': resource.connector_config.name,
+                    'connector_uri': resource.connector_config.uri,
+                    'is_healthy': None,
+                    'last_check': None,
+                    'response_time_ms': None,
+                    'error_message': None,
+                    'error_type': None,
+                    'enabled': resource.enabled,
+                })
+
+        serializer = ResourceHealthStatusSerializer(status_data, many=True)
+        return Response(serializer.data)
+
+
+class ResourceHealthSummaryView(APIView):
+    """
+    Get health summary for resources.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["health"],
+        summary="Get resource health summary",
+        description="Returns health summary statistics for resources",
+        parameters=[
+            OpenApiParameter(
+                name="hours",
+                type=OpenApiTypes.INT,
+                default=24,
+                description="Hours to look back for summary (default: 24)"
+            ),
+            OpenApiParameter(
+                name="resource_id",
+                type=OpenApiTypes.INT,
+                description="Optional resource ID to get summary for"
+            ),
+        ],
+        responses={200: ResourceHealthSummarySerializer}
+    )
+    def get(self, request):
+        """Get resource health summary."""
+        hours = int(request.query_params.get('hours', 24))
+        resource_id = request.query_params.get('resource_id')
+
+        if resource_id:
+            resource_id = int(resource_id)
+
+        summary = get_resource_health_summary(resource_id=resource_id, hours=hours)
+
+        # Calculate overall success rate
+        if summary['total_checks'] > 0:
+            summary['success_rate'] = (summary['healthy_checks'] / summary['total_checks']) * 100
+        else:
+            summary['success_rate'] = 0.0
+
+        serializer = ResourceHealthSummarySerializer(summary)
+        return Response(serializer.data)
+
+
+class ResourceHealthCheckView(APIView):
+    """
+    Trigger resource health checks manually.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["health"],
+        summary="Trigger resource health check",
+        description="Manually trigger health checks for all resources or a specific resource",
+        parameters=[
+            OpenApiParameter(
+                name="resource_id",
+                type=OpenApiTypes.INT,
+                description="Optional resource ID to check specifically"
+            ),
+            OpenApiParameter(
+                name="concurrency",
+                type=OpenApiTypes.INT,
+                default=5,
+                description="Maximum concurrent checks"
+            ),
+            OpenApiParameter(
+                name="timeout",
+                type=OpenApiTypes.INT,
+                description="Timeout in seconds for health checks (uses config default if not specified)"
+            )
+        ],
+        responses={200: ResourceHealthCheckResultSerializer(many=True)}
+    )
+    def post(self, request):
+        """Trigger resource health checks."""
+        resource_id = request.data.get('resource_id') or request.query_params.get('resource_id')
+        concurrency = int(request.data.get('concurrency', 5))
+        timeout = request.data.get('timeout') or request.query_params.get('timeout')
+        if timeout:
+            timeout = int(timeout)
+
+        try:
+            if resource_id:
+                # Check specific resource
+                result = asyncio.run(check_specific_resource_health(int(resource_id), timeout=timeout))
+                serializer = ResourceHealthCheckResultSerializer(result)
+                return Response(serializer.data)
+            else:
+                # Check all resources
+                results = asyncio.run(check_all_resources_health(concurrency, timeout=timeout))
+                serializer = ResourceHealthCheckResultSerializer(results, many=True)
+                return Response(serializer.data)
+
+        except ResourceConfig.DoesNotExist:
+            return Response(
+                {'error': f'Resource with ID {resource_id} not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Resource health check failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class ResourceHealthHistoryView(APIView):
+    """
+    Get historical resource health check results.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["health"],
+        summary="Get resource health check history",
+        description="Returns historical health check results for resources",
+        parameters=[
+            OpenApiParameter(
+                name="resource_id",
+                type=OpenApiTypes.INT,
+                description="Optional resource ID to get history for"
+            ),
+            OpenApiParameter(
+                name="hours",
+                type=OpenApiTypes.INT,
+                default=24,
+                description="Hours to look back for history (default: 24)"
+            ),
+            OpenApiParameter(
+                name="limit",
+                type=OpenApiTypes.INT,
+                default=100,
+                description="Maximum number of results to return (default: 100)"
+            ),
+            OpenApiParameter(
+                name="healthy_only",
+                type=OpenApiTypes.BOOL,
+                description="Only return healthy results"
+            ),
+            OpenApiParameter(
+                name="unhealthy_only",
+                type=OpenApiTypes.BOOL,
+                description="Only return unhealthy results"
+            ),
+        ],
+        responses={200: ResourceHealthCheckResultSerializer(many=True)}
+    )
+    def get(self, request):
+        """Get resource health check history."""
+        resource_id = request.query_params.get('resource_id')
+        hours = int(request.query_params.get('hours', 24))
+        limit = int(request.query_params.get('limit', 100))
+        healthy_only = request.query_params.get('healthy_only', '').lower() == 'true'
+        unhealthy_only = request.query_params.get('unhealthy_only', '').lower() == 'true'
+
+        since = timezone.now() - timedelta(hours=hours)
+
+        queryset = ResourceHealthCheckResult.objects.filter(
+            check_time__gte=since
+        ).select_related('resource', 'resource__connector_config').order_by('-check_time')
+
+        if resource_id:
+            queryset = queryset.filter(resource_id=int(resource_id))
+
+        if healthy_only:
+            queryset = queryset.filter(is_healthy=True)
+        elif unhealthy_only:
+            queryset = queryset.filter(is_healthy=False)
+
+        results = queryset[:limit]
+        serializer = ResourceHealthCheckResultSerializer(results, many=True)
+        return Response(serializer.data)
+
+
+class ResourceHealthDetailView(APIView):
+    """
+    Get detailed health information for a specific resource.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["health"],
+        summary="Get detailed resource health information",
+        description="Returns detailed health information for a specific resource",
+        parameters=[
+            OpenApiParameter(
+                name="hours",
+                type=OpenApiTypes.INT,
+                default=24,
+                description="Hours to look back for detailed information (default: 24)"
+            ),
+        ],
+        responses={200: ResourceHealthDetailSerializer}
+    )
+    def get(self, request, resource_id):
+        """Get detailed health information for a specific resource."""
+        hours = int(request.query_params.get('hours', 24))
+
+        try:
+            resource = ResourceConfig.objects.get(id=resource_id)
+        except ResourceConfig.DoesNotExist:
+            return Response(
+                {'error': f'Resource with ID {resource_id} not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        since = timezone.now() - timedelta(hours=hours)
+
+        results = ResourceHealthCheckResult.objects.filter(
+            resource=resource,
+            check_time__gte=since
+        ).order_by('-check_time')
+
+        if not results.exists():
+            return Response(
+                {'error': f'No health check results found for resource {resource_id} in the last {hours} hours'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        total_checks = results.count()
+        healthy_checks = results.filter(is_healthy=True).count()
+        unhealthy_checks = total_checks - healthy_checks
+
+        # Calculate average response time for healthy checks
+        healthy_results = results.filter(is_healthy=True)
+        avg_response_time = None
+        if healthy_results.exists():
+            avg_response_time = healthy_results.aggregate(
+                avg=Avg('response_time_ms')
+            )['avg']
+
+        # Get recent errors
+        recent_errors = list(results.filter(
+            is_healthy=False,
+            error_message__isnull=False
+        ).values_list('error_message', flat=True)[:5])
+
+        detail = {
+            'resource_id': resource.id,
+            'resource_name': resource.name,
+            'total_checks': total_checks,
+            'healthy_checks': healthy_checks,
+            'unhealthy_checks': unhealthy_checks,
+            'success_rate': (healthy_checks / total_checks * 100) if total_checks > 0 else 0,
+            'avg_response_time_ms': round(avg_response_time) if avg_response_time else None,
+            'latest_check': results.first().check_time,
+            'is_currently_healthy': results.first().is_healthy,
+            'recent_errors': recent_errors,
+        }
+
+        serializer = ResourceHealthDetailSerializer(detail)
+        return Response(serializer.data)

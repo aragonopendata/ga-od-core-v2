@@ -15,11 +15,11 @@ from django.utils import timezone
 from django.db import transaction
 from django.db import models
 
-from connectors import validate_uri, DriverConnectionError, NoObjectError
-from gaodcore_manager.models import ConnectorConfig
+from connectors import validate_uri, validate_resource, DriverConnectionError, NoObjectError
+from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from gaodcore_project.config import Config
 from utils import gather_limited
-from .models import HealthCheckResult, HealthCheckAlert
+from .models import HealthCheckResult, HealthCheckAlert, ResourceHealthCheckResult
 
 
 logger = logging.getLogger(__name__)
@@ -481,6 +481,383 @@ def get_connector_health_summary(connector_id: Optional[int] = None, hours: int 
                 'avg_response_time_ms': round(avg_response_time) if avg_response_time else None,
                 'latest_check': connector_results.first().check_time,
                 'is_currently_healthy': connector_results.first().is_healthy
+            }
+
+    return summary
+
+
+# Resource Health Check Functions
+
+def check_resource_health_sync(resource: ResourceConfig, timeout: Optional[int] = None) -> ResourceHealthCheckResult:
+    """
+    Perform health check on a single resource (synchronous version).
+
+    Args:
+        resource: The ResourceConfig instance to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        ResourceHealthCheckResult: The result of the health check
+    """
+    logger.info(f"Starting resource health check for resource: {resource.name}")
+    start_time = time.time()
+
+    # Get timeout from config if not provided
+    if timeout is None:
+        config = Config.get_config()
+        timeout = config.common_config.health_monitoring.timeout_seconds
+
+    try:
+        # Run resource validation synchronously
+        validate_resource(
+            uri=resource.connector_config.uri,
+            object_location=resource.object_location,
+            object_location_schema=resource.object_location_schema
+        )
+
+        response_time = int((time.time() - start_time) * 1000)
+
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=True,
+            response_time_ms=response_time
+        )
+
+        logger.info(f"Resource health check passed for resource: {resource.name} ({response_time}ms)")
+        return result
+
+    except DriverConnectionError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type='connection_error'
+        )
+        logger.warning(f"Resource health check failed for resource: {resource.name} - {str(e)}")
+        return result
+
+    except NoObjectError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type='object_error'
+        )
+        logger.warning(f"Resource health check failed for resource: {resource.name} - {str(e)}")
+        return result
+
+    except Exception as e:
+        response_time = int((time.time() - start_time) * 1000)
+
+        # Categorize timeout errors
+        error_type = 'unknown_error'
+        if 'timeout' in str(e).lower() or 'timed out' in str(e).lower():
+            error_type = 'timeout'
+
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type=error_type
+        )
+        logger.warning(f"Resource health check failed for resource: {resource.name} - {str(e)}")
+        return result
+
+
+def check_all_resources_health_sync(concurrency_limit: Optional[int] = None, timeout: Optional[int] = None) -> List[ResourceHealthCheckResult]:
+    """
+    Perform health checks on all enabled resources (synchronous version).
+
+    Args:
+        concurrency_limit: Maximum number of concurrent health checks (ignored in sync version)
+        timeout: Timeout in seconds for health checks (uses config default if None)
+
+    Returns:
+        List[ResourceHealthCheckResult]: List of health check results
+    """
+    # Get concurrency limit and timeout from config if not provided
+    if concurrency_limit is None or timeout is None:
+        config = Config.get_config()
+        if concurrency_limit is None:
+            concurrency_limit = config.common_config.health_monitoring.concurrency_limit
+        if timeout is None:
+            timeout = config.common_config.health_monitoring.timeout_seconds
+
+    resources = ResourceConfig.objects.filter(enabled=True).select_related('connector_config')
+
+    if not resources.exists():
+        logger.info("No enabled resources found for health check")
+        return []
+
+    logger.info(f"Starting resource health checks for {resources.count()} resources")
+
+    # Run health checks synchronously
+    results = []
+    for resource in resources:
+        result = check_resource_health_sync(resource, timeout=timeout)
+        results.append(result)
+
+    # Bulk save results to database
+    with transaction.atomic():
+        ResourceHealthCheckResult.objects.bulk_create(results)
+
+    # Log summary
+    healthy_count = sum(1 for result in results if result.is_healthy)
+    unhealthy_count = len(results) - healthy_count
+
+    logger.info(f"Resource health check completed: {healthy_count} healthy, {unhealthy_count} unhealthy")
+
+    return results
+
+
+def check_specific_resource_health_sync(resource_id: int, timeout: Optional[int] = None) -> ResourceHealthCheckResult:
+    """
+    Check health of a specific resource by ID (synchronous version).
+
+    Args:
+        resource_id: ID of the resource to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        ResourceHealthCheckResult: The health check result
+
+    Raises:
+        ResourceConfig.DoesNotExist: If resource not found
+    """
+    resource = ResourceConfig.objects.get(id=resource_id)
+    result = check_resource_health_sync(resource, timeout=timeout)
+
+    # Save individual result
+    result.save()
+
+    return result
+
+
+async def check_resource_health(resource: ResourceConfig, timeout: Optional[int] = None) -> ResourceHealthCheckResult:
+    """
+    Perform health check on a single resource.
+
+    Args:
+        resource: The ResourceConfig instance to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        ResourceHealthCheckResult: The result of the health check
+    """
+    logger.info(f"Starting resource health check for resource: {resource.name}")
+    start_time = time.time()
+
+    # Get timeout from config if not provided
+    if timeout is None:
+        config = Config.get_config()
+        timeout = config.common_config.health_monitoring.timeout_seconds
+
+    try:
+        # Run validation in a thread to avoid blocking the event loop
+        def validate_resource_with_timeout():
+            return validate_resource(
+                uri=resource.connector_config.uri,
+                object_location=resource.object_location,
+                object_location_schema=resource.object_location_schema
+            )
+
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, validate_resource_with_timeout)
+        except RuntimeError:
+            # No event loop running, run directly
+            validate_resource_with_timeout()
+
+        response_time = int((time.time() - start_time) * 1000)
+
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=True,
+            response_time_ms=response_time
+        )
+
+        logger.info(f"Resource health check passed for resource: {resource.name} ({response_time}ms)")
+        return result
+
+    except DriverConnectionError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type='connection_error'
+        )
+        logger.warning(f"Resource health check failed for resource: {resource.name} - {str(e)}")
+        return result
+
+    except NoObjectError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type='object_error'
+        )
+        logger.warning(f"Resource health check failed for resource: {resource.name} - {str(e)}")
+        return result
+
+    except Exception as e:
+        response_time = int((time.time() - start_time) * 1000)
+
+        # Categorize timeout errors
+        error_type = 'unknown_error'
+        if 'timeout' in str(e).lower() or 'timed out' in str(e).lower():
+            error_type = 'timeout'
+
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type=error_type
+        )
+        logger.warning(f"Resource health check failed for resource: {resource.name} - {str(e)}")
+        return result
+
+
+async def check_all_resources_health(concurrency_limit: Optional[int] = None, timeout: Optional[int] = None) -> List[ResourceHealthCheckResult]:
+    """
+    Perform health checks on all enabled resources.
+
+    Args:
+        concurrency_limit: Maximum number of concurrent health checks (defaults to config)
+        timeout: Timeout in seconds for health checks (uses config default if None)
+
+    Returns:
+        List[ResourceHealthCheckResult]: List of health check results
+    """
+    # Get concurrency limit and timeout from config if not provided
+    if concurrency_limit is None or timeout is None:
+        config = Config.get_config()
+        if concurrency_limit is None:
+            concurrency_limit = config.common_config.health_monitoring.concurrency_limit
+        if timeout is None:
+            timeout = config.common_config.health_monitoring.timeout_seconds
+
+    resources = ResourceConfig.objects.filter(enabled=True).select_related('connector_config')
+
+    if not resources.exists():
+        logger.info("No enabled resources found for health check")
+        return []
+
+    logger.info(f"Starting resource health checks for {resources.count()} resources with concurrency limit {concurrency_limit}")
+
+    # Create health check tasks
+    tasks = [check_resource_health(resource, timeout=timeout) for resource in resources]
+
+    # Use existing gather_limited for concurrency control
+    results = await gather_limited(concurrency_limit, tasks)
+
+    # Bulk save results to database
+    with transaction.atomic():
+        ResourceHealthCheckResult.objects.bulk_create(results)
+
+    # Log summary
+    healthy_count = sum(1 for result in results if result.is_healthy)
+    unhealthy_count = len(results) - healthy_count
+
+    logger.info(f"Resource health check completed: {healthy_count} healthy, {unhealthy_count} unhealthy")
+
+    return results
+
+
+async def check_specific_resource_health(resource_id: int, timeout: Optional[int] = None) -> ResourceHealthCheckResult:
+    """
+    Check health of a specific resource by ID.
+
+    Args:
+        resource_id: ID of the resource to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        ResourceHealthCheckResult: The health check result
+
+    Raises:
+        ResourceConfig.DoesNotExist: If resource not found
+    """
+    resource = ResourceConfig.objects.get(id=resource_id)
+    result = await check_resource_health(resource, timeout=timeout)
+
+    # Save individual result
+    result.save()
+
+    return result
+
+
+def get_resource_health_summary(resource_id: Optional[int] = None, hours: int = 24) -> dict:
+    """
+    Get health summary for resources.
+
+    Args:
+        resource_id: Optional specific resource ID to get summary for
+        hours: Number of hours to look back
+
+    Returns:
+        dict: Health summary data
+    """
+    since = timezone.now() - timedelta(hours=hours)
+
+    results_query = ResourceHealthCheckResult.objects.filter(check_time__gte=since)
+
+    if resource_id:
+        results_query = results_query.filter(resource_id=resource_id)
+
+    results = results_query.select_related('resource')
+
+    if not results.exists():
+        return {
+            'period': f'Last {hours} hours',
+            'total_checks': 0,
+            'healthy_checks': 0,
+            'unhealthy_checks': 0,
+            'resources': {}
+        }
+
+    summary = {
+        'period': f'Last {hours} hours',
+        'total_checks': results.count(),
+        'healthy_checks': results.filter(is_healthy=True).count(),
+        'unhealthy_checks': results.filter(is_healthy=False).count(),
+        'resources': {}
+    }
+
+    # Get per-resource summary
+    for resource in ResourceConfig.objects.filter(enabled=True):
+        resource_results = results.filter(resource=resource).order_by('-check_time')
+
+        if resource_results.exists():
+            total_count = resource_results.count()
+            healthy_count = resource_results.filter(is_healthy=True).count()
+
+            # Calculate average response time for healthy checks
+            healthy_results = resource_results.filter(is_healthy=True)
+            avg_response_time = None
+            if healthy_results.exists():
+                avg_response_time = healthy_results.aggregate(
+                    avg=models.Avg('response_time_ms')
+                )['avg']
+
+            summary['resources'][resource.name] = {
+                'resource_id': resource.id,
+                'total_checks': total_count,
+                'healthy_checks': healthy_count,
+                'unhealthy_checks': total_count - healthy_count,
+                'success_rate': (healthy_count / total_count * 100) if total_count > 0 else 0,
+                'avg_response_time_ms': round(avg_response_time) if avg_response_time else None,
+                'latest_check': resource_results.first().check_time,
+                'is_currently_healthy': resource_results.first().is_healthy
             }
 
     return summary

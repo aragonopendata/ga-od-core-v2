@@ -893,11 +893,12 @@ def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
             if uri_parsed.scheme in ["postgresql", "mysql"]:
                 connect_args["connect_timeout"] = timeout
             elif uri_parsed.scheme == "oracle+oracledb":
-                connect_args["timeout"] = timeout
+                # Oracle oracledb driver doesn't support timeout in connect_args
+                # Timeout is typically handled at the TNS level
+                pass
             elif uri_parsed.scheme in ["mssql+pyodbc", "mssql"]:
                 connect_args["timeout"] = timeout
-            elif uri_parsed.scheme == "sqlite":
-                connect_args["timeout"] = timeout
+            # SQLite doesn't support timeout parameter - file operations are typically fast
 
         return create_engine(uri, max_identifier_length=128, connect_args=connect_args)
     if uri_parsed.scheme in _HTTP_SCHEMAS:
