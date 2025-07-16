@@ -86,7 +86,7 @@ def check_connector_health_sync(connector: ConnectorConfig) -> HealthCheckResult
             error_message=str(e),
             error_type='unknown_error'
         )
-        logger.error(f"Health check failed for connector: {connector.name} - {str(e)}")
+        logger.warning(f"Health check failed for connector: {connector.name} - {str(e)}")
         return result
 
 
@@ -220,7 +220,7 @@ async def check_connector_health(connector: ConnectorConfig) -> HealthCheckResul
             error_message=str(e),
             error_type='unknown_error'
         )
-        logger.error(f"Health check failed for connector: {connector.name} - {str(e)}")
+        logger.warning(f"Health check failed for connector: {connector.name} - {str(e)}")
         return result
 
 
