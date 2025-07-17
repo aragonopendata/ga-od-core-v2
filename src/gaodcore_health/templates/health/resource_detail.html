@@ -1,0 +1,137 @@
+{% extends 'health/base.html' %}
+
+{% block title %}{{ resource.name }} - Resource Details{% endblock %}
+
+{% block content %}
+<button class="refresh-button" onclick="window.location.reload()">
+    🔄 Refresh Data
+</button>
+
+<!-- Resource Information -->
+<div class="detail-section">
+    <h2>📊 Resource Information</h2>
+    <div class="health-table">
+        <table>
+            <tbody>
+                <tr>
+                    <td class="info-label">ID</td>
+                    <td class="info-value">{{ resource.id }}</td>
+                </tr>
+                <tr>
+                    <td class="info-label">Name</td>
+                    <td class="info-value">{{ resource.name }}</td>
+                </tr>
+                <tr>
+                    <td class="info-label">Object Location</td>
+                    <td class="info-value">{{ resource.object_location }}</td>
+                </tr>
+                <tr>
+                    <td class="info-label">Connector</td>
+                    <td class="info-value">
+                        <a href="{% url 'gaodcore_health:connector_detail' resource.connector_config.id %}"
+                           class="connector-link">
+                            {{ resource.connector_config.name }}
+                        </a>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="info-label">Enabled</td>
+                    <td class="info-value">
+                        {% if resource.enabled %}
+                            ✅ Yes
+                        {% else %}
+                            ❌ No
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="info-label">Created</td>
+                    <td class="info-value">{{ resource.created_at|date:"M d, Y H:i" }}</td>
+                </tr>
+                <tr>
+                    <td class="info-label">Updated</td>
+                    <td class="info-value">{{ resource.updated_at|date:"M d, Y H:i" }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Health Information -->
+<div class="detail-section">
+    <h2>🏥 Health Information</h2>
+    {% if resource_health_data.resources %}
+        {% for health in resource_health_data.resources %}
+        <div class="health-table">
+            <table>
+                <tbody>
+                    <tr>
+                        <td class="info-label">Status</td>
+                        <td class="info-value">
+                            <span class="status-icon">
+                                {% if health.status_class == 'healthy' %}
+                                    ✅
+                                {% elif health.status_class == 'unhealthy' %}
+                                    ❌
+                                {% else %}
+                                    ⚠️
+                                {% endif %}
+                            </span>
+                            <span class="status-text {{ health.status_class }}">{{ health.status }}</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Last Check</td>
+                        <td class="info-value">
+                            {% if health.last_check %}
+                                {{ health.last_check|date:"M d, Y H:i:s" }}
+                            {% else %}
+                                Never
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Response Time</td>
+                        <td class="info-value">
+                            {% if health.response_time_ms %}
+                                {{ health.response_time_ms }}ms
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if health.error_message %}
+                    <tr>
+                        <td class="info-label">Error Type</td>
+                        <td class="info-value">{{ health.error_type|default:"Unknown" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Error Message</td>
+                        <td class="info-value error-text">{{ health.error_message }}</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="health-table">
+            <table>
+                <tbody>
+                    <tr>
+                        <td class="info-label">Status</td>
+                        <td class="info-value">⚠️ No health data available</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // No additional JavaScript needed for resource detail
+</script>
+{% endblock %}

@@ -13,12 +13,13 @@ class ConnectorHealthMixin:
     Mixin to provide connector health status functionality.
     """
 
-    def get_connector_health_data(self, connector_id=None):
+    def get_connector_health_data(self, connector_id=None, status_filter=None):
         """
         Get health data for connectors.
 
         Args:
             connector_id: Optional connector ID to filter by
+            status_filter: Optional status filter ('healthy', 'unhealthy', 'unknown', 'all')
 
         Returns:
             dict: Health data with connectors and summary statistics
@@ -66,6 +67,12 @@ class ConnectorHealthMixin:
                 }
             )
 
+        # Filter by status if specified
+        if status_filter and status_filter != 'all':
+            connector_statuses = [
+                c for c in connector_statuses if c["status_class"] == status_filter
+            ]
+
         # Calculate summary statistics
         healthy_count = sum(
             1 for c in connector_statuses if c["status_class"] == "healthy"
@@ -91,21 +98,23 @@ class ResourceHealthMixin:
     Mixin to provide resource health status functionality.
     """
 
-    def get_resource_health_data(self, connector_id=None, resource_id=None):
+    def get_resource_health_data(self, connector_id=None, resource_id=None, status_filter=None):
         """
         Get health data for resources.
 
         Args:
             connector_id: Optional connector ID to filter resources by
             resource_id: Optional resource ID to filter by
+            status_filter: Optional status filter ('healthy', 'unhealthy', 'unknown', 'all')
 
         Returns:
             dict: Health data with resources and summary statistics
         """
-        # Get resources
-        resources = ResourceConfig.objects.filter(enabled=True).select_related(
-            "connector_config"
-        )
+        # Get resources - only enabled resources with enabled connectors
+        resources = ResourceConfig.objects.filter(
+            enabled=True,
+            connector_config__enabled=True
+        ).select_related("connector_config")
         if connector_id:
             resources = resources.filter(connector_config_id=connector_id)
         if resource_id:
@@ -154,6 +163,12 @@ class ResourceHealthMixin:
                     "object": resource,  # Include the full object for template use
                 }
             )
+
+        # Filter by status if specified
+        if status_filter and status_filter != 'all':
+            resource_statuses = [
+                r for r in resource_statuses if r["status_class"] == status_filter
+            ]
 
         # Calculate summary statistics
         healthy_count = sum(

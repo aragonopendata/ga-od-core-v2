@@ -6,7 +6,6 @@ import json
 import logging
 import math
 import re
-import signal
 import urllib.request
 import uuid
 from collections import OrderedDict
@@ -47,7 +46,14 @@ from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
 
 logger = logging.getLogger(__name__)
 
-_DATABASE_SCHEMAS = {"postgresql", "mysql", "mssql", "mssql+pyodbc", "oracle+oracledb", "sqlite"}
+_DATABASE_SCHEMAS = {
+    "postgresql",
+    "mysql",
+    "mssql",
+    "mssql+pyodbc",
+    "oracle+oracledb",
+    "sqlite",
+}
 _HTTP_SCHEMAS = {"http", "https"}
 _RESOURCE_MAX_ROWS = 1048576
 _TEMPORAL_TABLE_NAME = "temporal_table"
@@ -61,34 +67,6 @@ _SQLALCHEMY_MAP_TYPE = {
     time: Time,
 }
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
-
-
-def _timeout_handler(signum, frame):
-    """Handler for timeout signal."""
-    raise TimeoutError("Operation timed out")
-
-
-def _with_timeout(timeout_seconds: Optional[int]):
-    """Decorator to add timeout support to functions."""
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            if timeout_seconds is None:
-                return func(*args, **kwargs)
-
-            # Set up signal handler for timeout
-            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-            signal.alarm(timeout_seconds)
-
-            try:
-                result = func(*args, **kwargs)
-                return result
-            finally:
-                # Restore old signal handler and cancel alarm
-                signal.alarm(0)
-                signal.signal(signal.SIGALRM, old_handler)
-
-        return wrapper
-    return decorator
 
 
 class MimeType(Enum):
@@ -112,10 +90,6 @@ class DriverConnectionError(Exception):
 
 class NoObjectError(Exception):
     """Object is not available. Connection was successfully done but object is not available."""
-
-
-class TimeoutError(Exception):
-    """Operation timed out."""
 
 
 class TooManyRowsErrorExcel(Exception):
@@ -220,13 +194,21 @@ def get_resource_columns(
 
 
 def validate_resource(
-    *, uri: str, object_location: Optional[str], object_location_schema: Optional[str], timeout: Optional[int] = None
+    *,
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int] = None,
 ) -> Iterable[Dict[str, Any]]:
     """Validate if resource is available . Return data of resource, a iterable of
     dictionaries."""
+
     def _validate_resource_internal():
         _validate_max_rows_allowed(
-            uri, object_location, object_location_schema=object_location_schema, timeout=timeout
+            uri,
+            object_location,
+            object_location_schema=object_location_schema,
+            timeout=timeout,
         )
         return get_resource_data(
             uri=uri,
@@ -239,15 +221,8 @@ def validate_resource(
             timeout=timeout,
         )
 
-    # Apply timeout wrapper for Oracle connections or when timeout is specified
-    uri_parsed = urlparse(uri)
-    if timeout is not None and uri_parsed.scheme in ("oracle", "oracle+oracledb"):
-        try:
-            return _with_timeout(timeout)(_validate_resource_internal)()
-        except TimeoutError:
-            raise DriverConnectionError(f"Resource validation timed out after {timeout} seconds")
-    else:
-        return _validate_resource_internal()
+    # For Oracle connections, timeout is handled at the connection level
+    return _validate_resource_internal()
 
 
 def validate_resource_mssql(
@@ -313,7 +288,10 @@ def validator_max_excel_allowed(
 
 
 def _validate_max_rows_allowed(
-    uri: str, object_location: Optional[str], object_location_schema: Optional[str], timeout: Optional[int] = None
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int] = None,
 ):
     """Validate if resource is aviable."""
     engine = _get_engine(uri, timeout=timeout)
@@ -801,9 +779,10 @@ def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
         with engine.connect() as _:
             pass
     except sqlalchemy.exc.DatabaseError as err:
-        # Log connection failure as warning instead of error to avoid noisy stack traces
-        # in health checks where connection failures are expected
-        logger.warning(f"Connection not available for URI: {uri[:50]}... - {str(err)[:200]}...")
+        # Log connection failure as warning - expected in health checks
+        logger.warning(
+            "Connection not available for URI: %s... - %s", uri[:50], str(err)[:200]
+        )
         raise DriverConnectionError("Connection not available.") from err
 
 
@@ -928,6 +907,7 @@ def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
         if uri_parsed.scheme == "oracle+oracledb" and not _oracle_client_initialized:
             try:
                 import oracledb
+
                 # Initialize thick mode for compatibility with older Oracle versions
                 oracledb.init_oracle_client()
                 _oracle_client_initialized = True

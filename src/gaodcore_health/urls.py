@@ -13,6 +13,16 @@ urlpatterns = [
     path("connectors/", views.ConnectorHealthListView.as_view(), name="connector_list"),
     path("resources/", views.ResourceHealthListView.as_view(), name="resource_list"),
     path(
+        "connectors/<int:connector_id>/",
+        views.ConnectorHealthDetailView.as_view(),
+        name="connector_detail",
+    ),
+    path(
+        "resources/<int:resource_id>/",
+        views.ResourceHealthDetailView.as_view(),
+        name="resource_detail",
+    ),
+    path(
         "connectors/<int:connector_id>/resources/",
         views.ConnectorResourceListView.as_view(),
         name="connector_resources",
@@ -26,7 +36,7 @@ urlpatterns = [
     path("api/history/", views.HealthHistoryView.as_view(), name="api_history"),
     path(
         "api/connector/<int:connector_id>/detail/",
-        views.ConnectorHealthDetailView.as_view(),
+        views.ConnectorHealthDetailAPIView.as_view(),
         name="api_connector_detail",
     ),
     # Resource API endpoints
@@ -52,7 +62,7 @@ urlpatterns = [
     ),
     path(
         "api/resource/<int:resource_id>/detail/",
-        views.ResourceHealthDetailView.as_view(),
+        views.ResourceHealthDetailAPIView.as_view(),
         name="api_resource_detail",
     ),
 ]
