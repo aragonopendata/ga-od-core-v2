@@ -1,30 +1,31 @@
 {% extends 'health/base.html' %}
+{% load i18n %}
 
-{% block title %}Resource Health Monitor{% endblock %}
+{% block title %}{% trans "Resource Health Monitor" %}{% endblock %}
 
 {% block content %}
 <button class="refresh-button" onclick="window.location.reload()">
-    🔄 Refresh Data
+    🔄 {% trans "Refresh Data" %}
 </button>
 
 <!-- Filter Controls -->
 <div class="filter-controls">
-    <label>Filter by Status:</label>
-    <a href="?status=all" class="filter-button {% if current_status_filter == 'all' %}active{% endif %}">All</a>
-    <a href="?status=healthy" class="filter-button {% if current_status_filter == 'healthy' %}active{% endif %}">Healthy</a>
-    <a href="?status=unhealthy" class="filter-button {% if current_status_filter == 'unhealthy' %}active{% endif %}">Unhealthy</a>
-    <a href="?status=unknown" class="filter-button {% if current_status_filter == 'unknown' %}active{% endif %}">Unknown</a>
+    <label>{% trans "Filter by Status:" %}</label>
+    <a href="?status=all" class="filter-button {% if current_status_filter == 'all' %}active{% endif %}">{% trans "All" %}</a>
+    <a href="?status=healthy" class="filter-button {% if current_status_filter == 'healthy' %}active{% endif %}">{% trans "Healthy" %}</a>
+    <a href="?status=unhealthy" class="filter-button {% if current_status_filter == 'unhealthy' %}active{% endif %}">{% trans "Unhealthy" %}</a>
+    <a href="?status=unknown" class="filter-button {% if current_status_filter == 'unknown' %}active{% endif %}">{% trans "Unknown" %}</a>
 </div>
 
 <!-- Filter Info -->
 {% if connector %}
 <div class="filter-info" style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
     <h3 style="margin: 0 0 10px 0; color: #333;">
-        📊 Resources for Connector: <span style="color: #667eea;">{{ connector.name }}</span>
+        📊 {% trans "Resources for Connector:" %} <span style="color: #667eea;">{{ connector.name }}</span>
     </h3>
     <p style="margin: 0; color: #666;">
-        <strong>Type:</strong> {{ connector.connector_type|default:"Unknown" }} |
-        <strong>URI:</strong> {{ connector.uri }}
+        <strong>{% trans "Type:" %}</strong> {{ connector.connector_type|default:"Unknown" }} |
+        <strong>{% trans "URI:" %}</strong> {{ connector.uri }}
     </p>
 </div>
 {% endif %}

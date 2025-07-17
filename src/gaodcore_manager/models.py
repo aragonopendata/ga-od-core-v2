@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 
 class ConnectorConfig(models.Model):
@@ -14,22 +15,37 @@ class ConnectorConfig(models.Model):
     @param updated_at: DateTimeField - Timestamp when the record was last updated.
     """
 
-    id = models.AutoField(primary_key=True, help_text="Primary key of ConnectorConfig.")
+    id = models.AutoField(
+        primary_key=True,
+        help_text=_("Primary key of ConnectorConfig.")
+    )
     name = models.CharField(
         max_length=255,
         unique=True,
-        help_text="Human readable name. This must be identificable and unique.",
+        verbose_name=_("Name"),
+        help_text=_("Human readable name. This must be identificable and unique."),
     )
     uri = models.TextField(
         unique=True,
-        help_text='This can have and http/s API or database URI. Ex. "https://domain.es/file.ext" or '
-        '"oracle://username:password@host".',
+        verbose_name=_("URI"),
+        help_text=_("This can have and http/s API or database URI. Ex. 'https://domain.es/file.ext' or 'oracle://username:password@host'."),
     )
     enabled = models.BooleanField(
-        help_text="Resource will be offered if connector and resource are enabled."
+        verbose_name=_("Enabled"),
+        help_text=_("Resource will be offered if connector and resource are enabled.")
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_("Created At")
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name=_("Updated At")
+    )
+
+    class Meta:
+        verbose_name = _("Connector Configuration")
+        verbose_name_plural = _("Connector Configurations")
 
     def __str__(self):
         return str(self.name)
@@ -52,35 +68,51 @@ class ResourceConfig(models.Model):
     @param updated_at: DateTimeField - Timestamp when the record was last updated.
     """
 
-    id = models.AutoField(primary_key=True, help_text="Primary key of ResourceConfig.")
+    id = models.AutoField(
+        primary_key=True,
+        help_text=_("Primary key of ResourceConfig.")
+    )
     name = models.CharField(
         max_length=255,
         unique=True,
-        help_text="Human readable name. This must be identificable and unique.",
+        verbose_name=_("Name"),
+        help_text=_("Human readable name. This must be identificable and unique."),
     )
     connector_config = models.ForeignKey(
         ConnectorConfig,
         on_delete=models.CASCADE,
-        help_text="Foreign key of ResourceConfig.",
+        verbose_name=_("Connector Configuration"),
+        help_text=_("Foreign key of ResourceConfig."),
     )
 
     enabled = models.BooleanField(
-        help_text="Resource will be offered if ConnectorConfig and ResourceConfig are enabled."
+        verbose_name=_("Enabled"),
+        help_text=_("Resource will be offered if ConnectorConfig and ResourceConfig are enabled.")
     )
     object_location = models.CharField(
         max_length=255,
         null=True,
-        help_text="Only used in database resources. it can be a table, view, function, etc. APIs resources "
-        "must be null.",
+        verbose_name=_("Object Location"),
+        help_text=_("Only used in database resources. it can be a table, view, function, etc. APIs resources must be null."),
     )
     object_location_schema = models.CharField(
         max_length=255,
         null=True,
-        help_text="Only used in database resources. Is not required if are in default schema. APIs resources must be "
-        "null.",
+        verbose_name=_("Object Location Schema"),
+        help_text=_("Only used in database resources. Is not required if are in default schema. APIs resources must be null."),
     )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_("Created At")
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name=_("Updated At")
+    )
+
+    class Meta:
+        verbose_name = _("Resource Configuration")
+        verbose_name_plural = _("Resource Configurations")
 
     def __str__(self):
         return str(self.name)

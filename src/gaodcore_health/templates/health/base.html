@@ -1,9 +1,10 @@
+{% load i18n %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE|default:'es' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Health Monitor{% endblock %} - GA-OD-Core</title>
+    <title>{% block title %}{% trans "Health Monitor" %}{% endblock %} - GA-OD-Core</title>
     <style>
         * {
             margin: 0;
@@ -648,8 +649,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏥 Health Monitor</h1>
-            <p>Real-time monitoring of connector and resource health</p>
+            <h1>🏥 {% trans "Health Monitor" %}</h1>
+            <p>{% trans "Real-time monitoring of connector and resource health" %}</p>
         </div>
 
         <!-- Navigation -->
@@ -658,13 +659,13 @@
                 <li>
                     <a href="{% url 'gaodcore_health:connector_list' %}"
                        class="{% if current_section == 'connectors' %}active{% endif %}">
-                        🔌 Connectors
+                        🔌 {% trans "Connectors" %}
                     </a>
                 </li>
                 <li>
                     <a href="{% url 'gaodcore_health:resource_list' %}"
                        class="{% if current_section == 'resources' %}active{% endif %}">
-                        📊 Resources
+                        📊 {% trans "Resources" %}
                     </a>
                 </li>
             </ul>

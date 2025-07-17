@@ -1,0 +1,421 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: GA-OD-Core\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-07-17 12:41+0200\n"
+"PO-Revision-Date: 2025-07-17 12:26+0200\n"
+"Last-Translator: System\n"
+"Language-Team: Spanish\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: gaodcore_health/models.py:18 gaodcore_health/models.py:138
+msgid "Connector"
+msgstr "Conector"
+
+#: gaodcore_health/models.py:19
+msgid "The connector that was checked"
+msgstr "El conector que fue verificado"
+
+#: gaodcore_health/models.py:23 gaodcore_health/models.py:221
+msgid "Check Time"
+msgstr "Hora de Verificación"
+
+#: gaodcore_health/models.py:24 gaodcore_health/models.py:222
+msgid "Timestamp when the health check was performed"
+msgstr "Marca de tiempo cuando se realizó la verificación de salud"
+
+#: gaodcore_health/models.py:27 gaodcore_health/models.py:225
+msgid "Is Healthy"
+msgstr "Está Sano"
+
+#: gaodcore_health/models.py:28
+msgid "Whether the connector is healthy (True) or not (False)"
+msgstr "Si el conector está sano (True) o no (False)"
+
+#: gaodcore_health/models.py:32 gaodcore_health/models.py:230
+msgid "Response Time (ms)"
+msgstr "Tiempo de Respuesta (ms)"
+
+#: gaodcore_health/models.py:33 gaodcore_health/models.py:231
+msgid "Response time in milliseconds"
+msgstr "Tiempo de respuesta en milisegundos"
+
+#: gaodcore_health/models.py:37 gaodcore_health/models.py:235
+msgid "Error Message"
+msgstr "Mensaje de Error"
+
+#: gaodcore_health/models.py:38 gaodcore_health/models.py:236
+msgid "Error message if health check failed"
+msgstr "Mensaje de error si la verificación de salud falló"
+
+#: gaodcore_health/models.py:44 gaodcore_health/models.py:242
+msgid "Error Type"
+msgstr "Tipo de Error"
+
+#: gaodcore_health/models.py:45
+msgid "Type of error (connection_error, timeout, unknown_error, etc.)"
+msgstr "Tipo de error (connection_error, timeout, unknown_error, etc.)"
+
+#: gaodcore_health/models.py:50
+msgid "Health Check Result"
+msgstr "Resultado de Verificación de Salud"
+
+#: gaodcore_health/models.py:51
+msgid "Health Check Results"
+msgstr "Resultados de Verificación de Salud"
+
+#: gaodcore_health/models.py:72
+#: gaodcore_health/templates/health/connector_list.html:47
+#: gaodcore_manager/models.py:25 gaodcore_manager/models.py:78
+msgid "Name"
+msgstr "Nombre"
+
+#: gaodcore_health/models.py:73
+msgid "Name of the health check schedule"
+msgstr ""
+
+#: gaodcore_health/models.py:77
+msgid "Interval (minutes)"
+msgstr ""
+
+#: gaodcore_health/models.py:78
+msgid "Interval between health checks in minutes"
+msgstr ""
+
+#: gaodcore_health/models.py:82 gaodcore_manager/models.py:34
+#: gaodcore_manager/models.py:89
+msgid "Enabled"
+msgstr "Habilitado"
+
+#: gaodcore_health/models.py:83
+msgid "Whether this schedule is enabled"
+msgstr ""
+
+#: gaodcore_health/models.py:87
+msgid "Last Run"
+msgstr ""
+
+#: gaodcore_health/models.py:88
+msgid "Timestamp of the last health check run"
+msgstr ""
+
+#: gaodcore_health/models.py:92
+msgid "Next Run"
+msgstr ""
+
+#: gaodcore_health/models.py:93
+msgid "Timestamp of the next scheduled health check"
+msgstr ""
+
+#: gaodcore_health/models.py:97 gaodcore_health/models.py:170
+#: gaodcore_health/models.py:310 gaodcore_manager/models.py:39
+#: gaodcore_manager/models.py:106
+msgid "Created At"
+msgstr "Creado en"
+
+#: gaodcore_health/models.py:101 gaodcore_health/models.py:174
+#: gaodcore_health/models.py:314 gaodcore_manager/models.py:43
+#: gaodcore_manager/models.py:110
+msgid "Updated At"
+msgstr "Actualizado en"
+
+#: gaodcore_health/models.py:106
+msgid "Health Check Schedule"
+msgstr ""
+
+#: gaodcore_health/models.py:107
+msgid "Health Check Schedules"
+msgstr ""
+
+#: gaodcore_health/models.py:129 gaodcore_health/models.py:269
+msgid "Failure"
+msgstr "Fallo"
+
+#: gaodcore_health/models.py:130 gaodcore_health/models.py:270
+msgid "Recovery"
+msgstr "Recuperación"
+
+#: gaodcore_health/models.py:131 gaodcore_health/models.py:271
+msgid "Timeout"
+msgstr "Tiempo Agotado"
+
+#: gaodcore_health/models.py:132 gaodcore_health/models.py:272
+msgid "Consecutive Failures"
+msgstr "Fallos Consecutivos"
+
+#: gaodcore_health/models.py:139
+msgid "The connector to monitor for alerts"
+msgstr ""
+
+#: gaodcore_health/models.py:145 gaodcore_health/models.py:285
+msgid "Alert Type"
+msgstr "Tipo de Alerta"
+
+#: gaodcore_health/models.py:146 gaodcore_health/models.py:286
+msgid "Type of alert (failure, recovery, timeout, consecutive_failures)"
+msgstr ""
+
+#: gaodcore_health/models.py:150 gaodcore_health/models.py:290
+msgid "Threshold (minutes)"
+msgstr ""
+
+#: gaodcore_health/models.py:151 gaodcore_health/models.py:291
+msgid "Threshold in minutes before triggering alert"
+msgstr ""
+
+#: gaodcore_health/models.py:155 gaodcore_health/models.py:295
+msgid "Consecutive Failures Threshold"
+msgstr ""
+
+#: gaodcore_health/models.py:156 gaodcore_health/models.py:296
+msgid "Number of consecutive failures before triggering alert"
+msgstr ""
+
+#: gaodcore_health/models.py:160 gaodcore_health/models.py:300
+msgid "Is Active"
+msgstr "Está Activo"
+
+#: gaodcore_health/models.py:161 gaodcore_health/models.py:301
+msgid "Whether this alert is active"
+msgstr ""
+
+#: gaodcore_health/models.py:165 gaodcore_health/models.py:305
+msgid "Last Alert Time"
+msgstr ""
+
+#: gaodcore_health/models.py:166 gaodcore_health/models.py:306
+msgid "Timestamp of the last alert sent"
+msgstr ""
+
+#: gaodcore_health/models.py:180
+msgid "Health Check Alert"
+msgstr "Alerta de Verificación de Salud"
+
+#: gaodcore_health/models.py:181
+msgid "Health Check Alerts"
+msgstr "Alertas de Verificación de Salud"
+
+#: gaodcore_health/models.py:216 gaodcore_health/models.py:278
+#, fuzzy
+#| msgid "Resources"
+msgid "Resource"
+msgstr "Recurso"
+
+#: gaodcore_health/models.py:217
+msgid "The resource that was checked"
+msgstr ""
+
+#: gaodcore_health/models.py:226
+msgid "Whether the resource is healthy (True) or not (False)"
+msgstr ""
+
+#: gaodcore_health/models.py:243
+msgid ""
+"Type of error (connection_error, timeout, object_error, unknown_error, etc.)"
+msgstr ""
+
+#: gaodcore_health/models.py:248
+#, fuzzy
+#| msgid "Resource Health Monitor"
+msgid "Resource Health Check Result"
+msgstr "Monitor de Salud de Recursos"
+
+#: gaodcore_health/models.py:249
+#, fuzzy
+#| msgid "Resource Health Monitor"
+msgid "Resource Health Check Results"
+msgstr "Monitor de Salud de Recursos"
+
+#: gaodcore_health/models.py:279
+msgid "The resource to monitor for alerts"
+msgstr ""
+
+#: gaodcore_health/models.py:320
+#, fuzzy
+#| msgid "Resource Health Monitor"
+msgid "Resource Health Check Alert"
+msgstr "Monitor de Salud de Recursos"
+
+#: gaodcore_health/models.py:321
+#, fuzzy
+#| msgid "Resource Health Monitor"
+msgid "Resource Health Check Alerts"
+msgstr "Monitor de Salud de Recursos"
+
+#: gaodcore_health/templates/health/base.html:7
+#: gaodcore_health/templates/health/base.html:652
+msgid "Health Monitor"
+msgstr "Monitor de Salud"
+
+#: gaodcore_health/templates/health/base.html:653
+msgid "Real-time monitoring of connector and resource health"
+msgstr "Monitoreo en tiempo real de la salud de conectores y recursos"
+
+#: gaodcore_health/templates/health/base.html:662
+msgid "Connectors"
+msgstr "Conectores"
+
+#: gaodcore_health/templates/health/base.html:668
+msgid "Resources"
+msgstr "Recursos"
+
+#: gaodcore_health/templates/health/connector_list.html:4
+msgid "Connector Health Monitor"
+msgstr "Monitor de Salud de Conectores"
+
+#: gaodcore_health/templates/health/connector_list.html:8
+#: gaodcore_health/templates/health/resource_list.html:8
+msgid "Refresh Data"
+msgstr "Actualizar Datos"
+
+#: gaodcore_health/templates/health/connector_list.html:13
+#: gaodcore_health/templates/health/resource_list.html:13
+msgid "Filter by Status:"
+msgstr "Filtrar por Estado:"
+
+#: gaodcore_health/templates/health/connector_list.html:14
+#: gaodcore_health/templates/health/resource_list.html:14
+msgid "All"
+msgstr "Todos"
+
+#: gaodcore_health/templates/health/connector_list.html:15
+#: gaodcore_health/templates/health/connector_list.html:28
+#: gaodcore_health/templates/health/resource_list.html:15
+msgid "Healthy"
+msgstr "Sano"
+
+#: gaodcore_health/templates/health/connector_list.html:16
+#: gaodcore_health/templates/health/connector_list.html:32
+#: gaodcore_health/templates/health/resource_list.html:16
+msgid "Unhealthy"
+msgstr "No Sano"
+
+#: gaodcore_health/templates/health/connector_list.html:17
+#: gaodcore_health/templates/health/connector_list.html:36
+#: gaodcore_health/templates/health/resource_list.html:17
+msgid "Unknown"
+msgstr "Desconocido"
+
+#: gaodcore_health/templates/health/connector_list.html:24
+msgid "Total Connectors"
+msgstr "Total Conectores"
+
+#: gaodcore_health/templates/health/connector_list.html:48
+msgid "Type"
+msgstr "Tipo"
+
+#: gaodcore_health/templates/health/connector_list.html:49
+msgid "Status"
+msgstr "Estado"
+
+#: gaodcore_health/templates/health/connector_list.html:50
+msgid "Last Check"
+msgstr "Última Verificación"
+
+#: gaodcore_health/templates/health/resource_list.html:4
+msgid "Resource Health Monitor"
+msgstr "Monitor de Salud de Recursos"
+
+#: gaodcore_health/templates/health/resource_list.html:24
+msgid "Resources for Connector:"
+msgstr "Recursos para Conector:"
+
+#: gaodcore_health/templates/health/resource_list.html:27
+msgid "Type:"
+msgstr "Tipo:"
+
+#: gaodcore_health/templates/health/resource_list.html:28
+msgid "URI:"
+msgstr "URI:"
+
+#: gaodcore_manager/models.py:20
+msgid "Primary key of ConnectorConfig."
+msgstr ""
+
+#: gaodcore_manager/models.py:26 gaodcore_manager/models.py:79
+msgid "Human readable name. This must be identificable and unique."
+msgstr ""
+
+#: gaodcore_manager/models.py:30
+#, fuzzy
+#| msgid "URI:"
+msgid "URI"
+msgstr "URI:"
+
+#: gaodcore_manager/models.py:31
+msgid ""
+"This can have and http/s API or database URI. Ex. 'https://domain.es/file."
+"ext' or 'oracle://username:password@host'."
+msgstr ""
+
+#: gaodcore_manager/models.py:35
+#, fuzzy
+#| msgid "Real-time monitoring of connector and resource health"
+msgid "Resource will be offered if connector and resource are enabled."
+msgstr "Monitoreo en tiempo real de la salud de conectores y recursos"
+
+#: gaodcore_manager/models.py:47 gaodcore_manager/models.py:84
+#, fuzzy
+#| msgid "Connector Health Monitor"
+msgid "Connector Configuration"
+msgstr "Monitor de Salud de Conectores"
+
+#: gaodcore_manager/models.py:48
+#, fuzzy
+#| msgid "Connector Health Monitor"
+msgid "Connector Configurations"
+msgstr "Monitor de Salud de Conectores"
+
+#: gaodcore_manager/models.py:73
+msgid "Primary key of ResourceConfig."
+msgstr ""
+
+#: gaodcore_manager/models.py:85
+msgid "Foreign key of ResourceConfig."
+msgstr ""
+
+#: gaodcore_manager/models.py:90
+msgid ""
+"Resource will be offered if ConnectorConfig and ResourceConfig are enabled."
+msgstr ""
+
+#: gaodcore_manager/models.py:95
+msgid "Object Location"
+msgstr ""
+
+#: gaodcore_manager/models.py:96
+msgid ""
+"Only used in database resources. it can be a table, view, function, etc. "
+"APIs resources must be null."
+msgstr ""
+
+#: gaodcore_manager/models.py:101
+msgid "Object Location Schema"
+msgstr ""
+
+#: gaodcore_manager/models.py:102
+msgid ""
+"Only used in database resources. Is not required if are in default schema. "
+"APIs resources must be null."
+msgstr ""
+
+#: gaodcore_manager/models.py:114
+#, fuzzy
+#| msgid "Resource Health Monitor"
+msgid "Resource Configuration"
+msgstr "Monitor de Salud de Recursos"
+
+#: gaodcore_manager/models.py:115
+#, fuzzy
+#| msgid "Resource Health Monitor"
+msgid "Resource Configurations"
+msgstr "Monitor de Salud de Recursos"
