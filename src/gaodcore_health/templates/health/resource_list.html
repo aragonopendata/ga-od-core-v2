@@ -7,6 +7,15 @@
     🔄 Refresh Data
 </button>
 
+<!-- Filter Controls -->
+<div class="filter-controls">
+    <label>Filter by Status:</label>
+    <a href="?status=all" class="filter-button {% if current_status_filter == 'all' %}active{% endif %}">All</a>
+    <a href="?status=healthy" class="filter-button {% if current_status_filter == 'healthy' %}active{% endif %}">Healthy</a>
+    <a href="?status=unhealthy" class="filter-button {% if current_status_filter == 'unhealthy' %}active{% endif %}">Unhealthy</a>
+    <a href="?status=unknown" class="filter-button {% if current_status_filter == 'unknown' %}active{% endif %}">Unknown</a>
+</div>
+
 <!-- Filter Info -->
 {% if connector %}
 <div class="filter-info" style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
@@ -40,89 +49,63 @@
     </div>
 </div>
 
-<!-- Resources Grid -->
+<!-- Resources Table -->
 {% if resource_health_data.resources %}
-<div class="items-grid">
-    {% for resource in resource_health_data.resources %}
-    <div class="item-card {{ resource.status_class }}">
-        <div class="item-header">
-            <div class="item-name">{{ resource.name }}</div>
-            <div class="status-badge {{ resource.status_class }}">
-                {% if resource.status_class == 'healthy' %}
-                    ✅ {{ resource.status }}
-                {% elif resource.status_class == 'unhealthy' %}
-                    ❌ {{ resource.status }}
-                {% else %}
-                    ⚠️ {{ resource.status }}
+<div class="health-table">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                {% if not connector %}
+                <th>Connector</th>
                 {% endif %}
-            </div>
-        </div>
-
-        <div class="item-details">
-            <div class="detail-item">
-                <span class="detail-label">Resource ID:</span>
-                <span class="detail-value">#{{ resource.id }}</span>
-            </div>
-
-            <div class="detail-item">
-                <span class="detail-label">Object Location:</span>
-                <span class="detail-value">{{ resource.object_location|truncatechars:25 }}</span>
-            </div>
-
-            {% if not connector %}
-            <div class="detail-item">
-                <span class="detail-label">Connector:</span>
-                <span class="detail-value">
+                <th>Status</th>
+                <th>Last Check</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for resource in resource_health_data.resources %}
+            <tr class="table-row {{ resource.status_class }}"
+                onclick="window.location.href='{% url 'gaodcore_health:resource_detail' resource.id %}';"">
+                <td>
+                    <span class="item-id">{{ resource.id }}</span>
+                </td>
+                <td>
+                    <span class="item-name">{{ resource.name }}</span>
+                </td>
+                {% if not connector %}
+                <td>
                     <a href="{% url 'gaodcore_health:connector_resources' resource.connector_id %}"
-                       style="color: #667eea; text-decoration: none;">
+                       class="connector-link">
                         {{ resource.connector_name }}
                     </a>
-                </span>
-            </div>
-            {% endif %}
-
-            <div class="detail-item">
-                <span class="detail-label">Last Check:</span>
-                <span class="detail-value">
-                    {% if resource.last_check %}
-                        {{ resource.last_check|date:"M d, H:i" }}
-                    {% else %}
-                        Never
-                    {% endif %}
-                </span>
-            </div>
-
-            <div class="detail-item">
-                <span class="detail-label">Response Time:</span>
-                <span class="detail-value">
-                    {% if resource.response_time_ms %}
-                        {{ resource.response_time_ms }}ms
-                    {% else %}
-                        N/A
-                    {% endif %}
-                </span>
-            </div>
-
-            <div class="detail-item">
-                <span class="detail-label">Enabled:</span>
-                <span class="detail-value">
-                    {% if resource.enabled %}
-                        ✅ Yes
-                    {% else %}
-                        ❌ No
-                    {% endif %}
-                </span>
-            </div>
-        </div>
-
-        {% if resource.error_message %}
-        <div class="error-message">
-            <strong>Error Type:</strong> {{ resource.error_type|default:"Unknown" }}<br>
-            <strong>Message:</strong> {{ resource.error_message }}
-        </div>
-        {% endif %}
-    </div>
-    {% endfor %}
+                </td>
+                {% endif %}
+                <td>
+                    <span class="status-icon">
+                        {% if resource.status_class == 'healthy' %}
+                            ✅
+                        {% elif resource.status_class == 'unhealthy' %}
+                            ❌
+                        {% else %}
+                            ⚠️
+                        {% endif %}
+                    </span>
+                </td>
+                <td>
+                    <span class="last-check">
+                        {% if resource.last_check %}
+                            {{ resource.last_check|date:"M d, H:i" }}
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 <!-- Pagination -->
@@ -130,8 +113,8 @@
 <div class="pagination">
     <span class="step-links">
         {% if page_obj.has_previous %}
-            <a href="?page=1">&laquo; First</a>
-            <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
+            <a href="?page=1{% if current_status_filter != 'all' %}&status={{ current_status_filter }}{% endif %}">&laquo; First</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if current_status_filter != 'all' %}&status={{ current_status_filter }}{% endif %}">Previous</a>
         {% endif %}
 
         <span class="current">
@@ -139,8 +122,8 @@
         </span>
 
         {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}">Next</a>
-            <a href="?page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+            <a href="?page={{ page_obj.next_page_number }}{% if current_status_filter != 'all' %}&status={{ current_status_filter }}{% endif %}">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% if current_status_filter != 'all' %}&status={{ current_status_filter }}{% endif %}">Last &raquo;</a>
         {% endif %}
     </span>
 </div>
@@ -162,16 +145,15 @@
 
 {% block extra_js %}
 <script>
-    // Add hover effect for resource cards
-    document.querySelectorAll('.item-card').forEach(card => {
-        card.addEventListener('mouseenter', function() {
-            this.style.transform = 'translateY(-2px)';
-            this.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
-        });
-
-        card.addEventListener('mouseleave', function() {
-            this.style.transform = 'translateY(0)';
-            this.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+    // Add click handler for resource table rows
+    document.querySelectorAll('.table-row').forEach(row => {
+        row.addEventListener('click', function(e) {
+            // Don't navigate if clicking on a link within the row
+            if (e.target.tagName === 'A') {
+                return;
+            }
+            const url = this.getAttribute('onclick').match(/'([^']+)'/)[1];
+            window.location.href = url;
         });
     });
 </script>

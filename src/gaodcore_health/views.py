@@ -8,7 +8,7 @@ from datetime import timedelta
 from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.db.models import Avg
-from django.views.generic import ListView
+from django.views.generic import ListView, DetailView
 from django.contrib.auth.mixins import LoginRequiredMixin
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -274,7 +274,7 @@ class HealthHistoryView(APIView):
         return Response(serializer.data)
 
 
-class ConnectorHealthDetailView(APIView):
+class ConnectorHealthDetailAPIView(APIView):
     """
     Get detailed health information for a specific connector.
     """
@@ -463,14 +463,17 @@ class ConnectorHealthListView(
 
     def get_queryset(self):
         """Return enabled connectors - ListView will handle pagination."""
-        return ConnectorConfig.objects.filter(enabled=True).order_by("name")
+        return ConnectorConfig.objects.filter(enabled=True).order_by("id")
 
     def get_context_data(self, **kwargs):
         """Add health data to context."""
         context = self.get_health_context_data(**kwargs)
 
+        # Get status filter from query parameters
+        status_filter = self.request.GET.get('status', 'all')
+
         # Get health data for all connectors
-        health_data = self.get_connector_health_data()
+        health_data = self.get_connector_health_data(status_filter=status_filter)
 
         # Add health data to context
         context.update(
@@ -481,6 +484,7 @@ class ConnectorHealthListView(
                     {"name": "Health", "url": None},
                     {"name": "Connectors", "url": None, "active": True},
                 ],
+                "current_status_filter": status_filter,
             }
         )
 
@@ -504,15 +508,18 @@ class ResourceHealthListView(
         return (
             ResourceConfig.objects.filter(enabled=True)
             .select_related("connector_config")
-            .order_by("name")
+            .order_by("id")
         )
 
     def get_context_data(self, **kwargs):
         """Add health data to context."""
         context = self.get_health_context_data(**kwargs)
 
+        # Get status filter from query parameters
+        status_filter = self.request.GET.get('status', 'all')
+
         # Get health data for all resources
-        health_data = self.get_resource_health_data()
+        health_data = self.get_resource_health_data(status_filter=status_filter)
 
         # Add health data to context
         context.update(
@@ -523,6 +530,7 @@ class ResourceHealthListView(
                     {"name": "Health", "url": None},
                     {"name": "Resources", "url": None, "active": True},
                 ],
+                "current_status_filter": status_filter,
             }
         )
 
@@ -549,7 +557,7 @@ class ConnectorResourceListView(
                 enabled=True, connector_config_id=connector_id
             )
             .select_related("connector_config")
-            .order_by("name")
+            .order_by("id")
         )
 
     def get_context_data(self, **kwargs):
@@ -564,8 +572,11 @@ class ConnectorResourceListView(
         except ConnectorConfig.DoesNotExist:
             connector = None
 
+        # Get status filter from query parameters
+        status_filter = self.request.GET.get('status', 'all')
+
         # Get health data for resources of this connector
-        health_data = self.get_resource_health_data(connector_id=connector_id)
+        health_data = self.get_resource_health_data(connector_id=connector_id, status_filter=status_filter)
 
         # Add health data to context
         context.update(
@@ -582,8 +593,95 @@ class ConnectorResourceListView(
                         "active": True,
                     },
                 ],
+                "current_status_filter": status_filter,
             }
         )
+
+        return context
+
+
+class ConnectorHealthDetailView(
+    LoginRequiredMixin, ConnectorHealthMixin, ResourceHealthMixin, HealthContextMixin, DetailView
+):
+    """
+    Detail view for a specific connector showing info, health data, and resources.
+    """
+
+    model = ConnectorConfig
+    template_name = "health/connector_detail.html"
+    context_object_name = "connector"
+    pk_url_kwarg = "connector_id"
+    current_section = "connectors"
+
+    def get_queryset(self):
+        """Return enabled connectors only."""
+        return ConnectorConfig.objects.filter(enabled=True)
+
+    def get_context_data(self, **kwargs):
+        """Add health data and resources to context."""
+        context = self.get_health_context_data(**kwargs)
+        connector = self.get_object()
+
+        # Get connector health data
+        connector_health = self.get_connector_health_data(connector_id=connector.id)
+
+        # Get resources for this connector
+        resources_health = self.get_resource_health_data(connector_id=connector.id)
+
+        # Add breadcrumbs
+        context.update({
+            "connector_health_data": connector_health,
+            "resource_health_data": resources_health,
+            "page_title": f"Connector Details - {connector.name}",
+            "breadcrumbs": [
+                {"name": "Health", "url": None},
+                {"name": "Connectors", "url": "gaodcore_health:connector_list"},
+                {"name": connector.name, "url": None, "active": True},
+            ],
+        })
+
+        return context
+
+
+class ResourceHealthDetailView(
+    LoginRequiredMixin, ResourceHealthMixin, HealthContextMixin, DetailView
+):
+    """
+    Detail view for a specific resource showing info and health data.
+    """
+
+    model = ResourceConfig
+    template_name = "health/resource_detail.html"
+    context_object_name = "resource"
+    pk_url_kwarg = "resource_id"
+    current_section = "resources"
+
+    def get_queryset(self):
+        """Return enabled resources with enabled connectors only."""
+        return ResourceConfig.objects.filter(
+            enabled=True,
+            connector_config__enabled=True
+        ).select_related("connector_config")
+
+    def get_context_data(self, **kwargs):
+        """Add health data to context."""
+        context = self.get_health_context_data(**kwargs)
+        resource = self.get_object()
+
+        # Get resource health data
+        resource_health = self.get_resource_health_data(resource_id=resource.id)
+
+        # Add breadcrumbs
+        context.update({
+            "resource_health_data": resource_health,
+            "page_title": f"Resource Details - {resource.name}",
+            "breadcrumbs": [
+                {"name": "Health", "url": None},
+                {"name": "Connectors", "url": "gaodcore_health:connector_list"},
+                {"name": resource.connector_config.name, "url": "gaodcore_health:connector_detail", "url_kwargs": {"connector_id": resource.connector_config.id}},
+                {"name": resource.name, "url": None, "active": True},
+            ],
+        })
 
         return context
 
@@ -846,7 +944,7 @@ class ResourceHealthHistoryView(APIView):
         return Response(serializer.data)
 
 
-class ResourceHealthDetailView(APIView):
+class ResourceHealthDetailAPIView(APIView):
     """
     Get detailed health information for a specific resource.
     """

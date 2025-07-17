@@ -348,6 +348,221 @@
             border-color: #667eea;
         }
 
+        /* Health Table Styles */
+        .health-table {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 30px;
+        }
+
+        .health-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .health-table th {
+            background: #f8f9fa;
+            color: #333;
+            font-weight: 600;
+            padding: 15px;
+            text-align: left;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .health-table td {
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+            vertical-align: middle;
+        }
+
+        .health-table .table-row {
+            transition: background-color 0.2s ease;
+            cursor: pointer;
+        }
+
+        .health-table .table-row:hover {
+            background-color: #f8f9fa;
+        }
+
+        .health-table .table-row.healthy {
+            border-left: 4px solid #28a745;
+        }
+
+        .health-table .table-row.unhealthy {
+            border-left: 4px solid #dc3545;
+        }
+
+        .health-table .table-row.unknown {
+            border-left: 4px solid #ffc107;
+        }
+
+        .status-icon {
+            font-size: 1.2rem;
+            margin-right: 8px;
+        }
+
+        .status-text {
+            font-weight: 500;
+        }
+
+        .status-text.healthy {
+            color: #28a745;
+        }
+
+        .status-text.unhealthy {
+            color: #dc3545;
+        }
+
+        .status-text.unknown {
+            color: #ffc107;
+        }
+
+        .item-id {
+            font-family: monospace;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .item-name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .last-check {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .connector-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .connector-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Filter Controls */
+        .filter-controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-controls label {
+            font-weight: 500;
+            color: #333;
+            margin-right: 10px;
+        }
+
+        .filter-button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            color: #333;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        .filter-button:hover {
+            background: #f8f9fa;
+            border-color: #667eea;
+        }
+
+        .filter-button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        /* Detail View Styles */
+        .detail-section {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            padding: 25px;
+        }
+
+        .detail-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+            font-size: 1.4rem;
+        }
+
+        .detail-fields {
+            display: grid;
+            gap: 15px;
+        }
+
+        .field-row {
+            display: flex;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f5f5f5;
+        }
+
+        .field-row:last-child {
+            border-bottom: none;
+        }
+
+        .field-label {
+            flex: 0 0 150px;
+            font-weight: 600;
+            color: #555;
+            font-size: 0.95rem;
+        }
+
+        .field-value {
+            flex: 1;
+            color: #333;
+            font-size: 0.95rem;
+        }
+
+        .field-value.error-text {
+            color: #dc3545;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
+        .no-data {
+            color: #666;
+            font-style: italic;
+            text-align: center;
+            padding: 20px;
+        }
+
+        /* Info table styles for detail views */
+        .info-label {
+            font-weight: 600;
+            color: #555;
+            background-color: #f8f9fa;
+            width: 30%;
+            padding: 12px 15px;
+            border-right: 1px solid #e9ecef;
+        }
+
+        .info-value {
+            color: #333;
+            padding: 12px 15px;
+        }
+
+        .info-value.error-text {
+            color: #dc3545;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .summary-cards {
@@ -373,6 +588,58 @@
 
             .nav-bar a.active {
                 border-left-color: #764ba2;
+            }
+
+            /* Responsive table */
+            .health-table {
+                overflow-x: auto;
+            }
+
+            .health-table th,
+            .health-table td {
+                padding: 10px;
+                font-size: 0.9rem;
+            }
+
+            .filter-controls {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .filter-button {
+                font-size: 0.8rem;
+                padding: 6px 12px;
+            }
+
+            /* Detail view responsive */
+            .field-row {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+
+            .field-label {
+                flex: none;
+                font-weight: 700;
+            }
+
+            .field-value {
+                flex: none;
+                width: 100%;
+            }
+
+            /* Info table responsive */
+            .info-label {
+                width: 100%;
+                font-weight: 700;
+                border-right: none;
+                border-bottom: 1px solid #e9ecef;
+                background-color: #f8f9fa;
+            }
+
+            .info-value {
+                width: 100%;
+                padding-top: 8px;
             }
         }
     </style>
@@ -410,7 +677,11 @@
                 {% for breadcrumb in breadcrumbs %}
                 <li>
                     {% if breadcrumb.url %}
-                        <a href="{% url breadcrumb.url %}">{{ breadcrumb.name }}</a>
+                        {% if breadcrumb.url_kwargs %}
+                            <a href="{% url breadcrumb.url breadcrumb.url_kwargs.connector_id %}">{{ breadcrumb.name }}</a>
+                        {% else %}
+                            <a href="{% url breadcrumb.url %}">{{ breadcrumb.name }}</a>
+                        {% endif %}
                     {% else %}
                         <span class="{% if breadcrumb.active %}active{% endif %}">
                             {{ breadcrumb.name }}

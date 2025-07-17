@@ -20,7 +20,6 @@ from connectors import (
     validate_resource,
     DriverConnectionError,
     NoObjectError,
-    TimeoutError,
 )
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from gaodcore_project.config import Config
@@ -44,7 +43,7 @@ def check_connector_health_sync(
     Returns:
         HealthCheckResult: The result of the health check
     """
-    logger.info(f"Starting health check for connector: {connector.name}")
+    logger.info("Starting health check for connector: %s", connector.name)
     start_time = time.time()
 
     # Get timeout from config if not provided
@@ -63,7 +62,9 @@ def check_connector_health_sync(
         )
 
         logger.info(
-            f"Health check passed for connector: {connector.name} ({response_time}ms)"
+            "Health check passed for connector: %s (%sms)",
+            connector.name,
+            response_time,
         )
         return result
 
@@ -77,7 +78,7 @@ def check_connector_health_sync(
             error_type="connection_error",
         )
         logger.warning(
-            f"Health check failed for connector: {connector.name} - {str(e)}"
+            "Health check failed for connector: %s - %s", connector.name, str(e)
         )
         return result
 
@@ -91,7 +92,7 @@ def check_connector_health_sync(
             error_type="object_error",
         )
         logger.warning(
-            f"Health check failed for connector: {connector.name} - {str(e)}"
+            "Health check failed for connector: %s - %s", connector.name, str(e)
         )
         return result
 
@@ -111,7 +112,7 @@ def check_connector_health_sync(
             error_type=error_type,
         )
         logger.warning(
-            f"Health check failed for connector: {connector.name} - {str(e)}"
+            "Health check failed for connector: %s - %s", connector.name, str(e)
         )
         return result
 
@@ -143,7 +144,7 @@ def check_all_connectors_health_sync(
         logger.info("No enabled connectors found for health check")
         return []
 
-    logger.info(f"Starting health checks for {connectors.count()} connectors")
+    logger.info("Starting health checks for %s connectors", connectors.count())
 
     # Run health checks synchronously
     results = []
@@ -160,7 +161,9 @@ def check_all_connectors_health_sync(
     unhealthy_count = len(results) - healthy_count
 
     logger.info(
-        f"Health check completed: {healthy_count} healthy, {unhealthy_count} unhealthy"
+        "Health check completed: %s healthy, %s unhealthy",
+        healthy_count,
+        unhealthy_count,
     )
 
     return results
@@ -204,7 +207,7 @@ async def check_connector_health(
     Returns:
         HealthCheckResult: The result of the health check
     """
-    logger.info(f"Starting health check for connector: {connector.name}")
+    logger.info("Starting health check for connector: %s", connector.name)
     start_time = time.time()
 
     # Get timeout from config if not provided
@@ -228,7 +231,9 @@ async def check_connector_health(
         )
 
         logger.info(
-            f"Health check passed for connector: {connector.name} ({response_time}ms)"
+            "Health check passed for connector: %s (%sms)",
+            connector.name,
+            response_time,
         )
         return result
 
@@ -242,7 +247,7 @@ async def check_connector_health(
             error_type="connection_error",
         )
         logger.warning(
-            f"Health check failed for connector: {connector.name} - {str(e)}"
+            "Health check failed for connector: %s - %s", connector.name, str(e)
         )
         return result
 
@@ -256,7 +261,7 @@ async def check_connector_health(
             error_type="object_error",
         )
         logger.warning(
-            f"Health check failed for connector: {connector.name} - {str(e)}"
+            "Health check failed for connector: %s - %s", connector.name, str(e)
         )
         return result
 
@@ -276,7 +281,7 @@ async def check_connector_health(
             error_type=error_type,
         )
         logger.warning(
-            f"Health check failed for connector: {connector.name} - {str(e)}"
+            "Health check failed for connector: %s - %s", connector.name, str(e)
         )
         return result
 
@@ -309,7 +314,9 @@ async def check_all_connectors_health(
         return []
 
     logger.info(
-        f"Starting health checks for {connectors.count()} connectors with concurrency limit {concurrency_limit}"
+        "Starting health checks for %s connectors with concurrency limit %s",
+        connectors.count(),
+        concurrency_limit,
     )
 
     # Create health check tasks
@@ -329,7 +336,9 @@ async def check_all_connectors_health(
     unhealthy_count = len(results) - healthy_count
 
     logger.info(
-        f"Health check completed: {healthy_count} healthy, {unhealthy_count} unhealthy"
+        "Health check completed: %s healthy, %s unhealthy",
+        healthy_count,
+        unhealthy_count,
     )
 
     return results
@@ -431,7 +440,7 @@ def send_alert(alert: HealthCheckAlert, message: str):
         alert: The HealthCheckAlert configuration
         message: The alert message to send
     """
-    logger.warning(f"HEALTH ALERT: {message}")
+    logger.warning("HEALTH ALERT: %s", message)
 
     # TODO: Implement actual alert sending (email, webhook, etc.)
     # For now, just log the alert
@@ -457,7 +466,9 @@ def cleanup_old_health_results(retention_days: Optional[int] = None):
     ).delete()[0]
 
     logger.info(
-        f"Cleaned up {deleted_count} old health check results (retention: {retention_days} days)"
+        "Cleaned up %s old health check results (retention: %s days)",
+        deleted_count,
+        retention_days,
     )
 
 
@@ -556,7 +567,7 @@ def check_resource_health_sync(
     Returns:
         ResourceHealthCheckResult: The result of the health check
     """
-    logger.info(f"Starting resource health check for resource: {resource.name}")
+    logger.info("Starting resource health check for resource: %s", resource.name)
     start_time = time.time()
 
     # Get timeout from config if not provided
@@ -580,7 +591,9 @@ def check_resource_health_sync(
         )
 
         logger.info(
-            f"Resource health check passed for resource: {resource.name} ({response_time}ms)"
+            "Resource health check passed for resource: %s (%sms)",
+            resource.name,
+            response_time,
         )
         return result
 
@@ -594,7 +607,7 @@ def check_resource_health_sync(
             error_type="connection_error",
         )
         logger.warning(
-            f"Resource health check failed for resource: {resource.name} - {str(e)}"
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
         )
         return result
 
@@ -608,7 +621,7 @@ def check_resource_health_sync(
             error_type="object_error",
         )
         logger.warning(
-            f"Resource health check failed for resource: {resource.name} - {str(e)}"
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
         )
         return result
 
@@ -622,7 +635,9 @@ def check_resource_health_sync(
             error_type="timeout",
         )
         logger.warning(
-            f"Resource health check timed out for resource: {resource.name} - {str(e)}"
+            "Resource health check timed out for resource: %s - %s",
+            resource.name,
+            str(e),
         )
         return result
 
@@ -642,7 +657,7 @@ def check_resource_health_sync(
             error_type=error_type,
         )
         logger.warning(
-            f"Resource health check failed for resource: {resource.name} - {str(e)}"
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
         )
         return result
 
@@ -668,15 +683,15 @@ def check_all_resources_health_sync(
         if timeout is None:
             timeout = config.common_config.health_monitoring.timeout_seconds
 
-    resources = ResourceConfig.objects.filter(enabled=True).select_related(
-        "connector_config"
-    )
+    resources = ResourceConfig.objects.filter(
+        enabled=True, connector_config__enabled=True
+    ).select_related("connector_config")
 
     if not resources.exists():
         logger.info("No enabled resources found for health check")
         return []
 
-    logger.info(f"Starting resource health checks for {resources.count()} resources")
+    logger.info("Starting resource health checks for %s resources", resources.count())
 
     # Run health checks synchronously
     results = []
@@ -693,7 +708,9 @@ def check_all_resources_health_sync(
     unhealthy_count = len(results) - healthy_count
 
     logger.info(
-        f"Resource health check completed: {healthy_count} healthy, {unhealthy_count} unhealthy"
+        "Resource health check completed: %s healthy, %s unhealthy",
+        healthy_count,
+        unhealthy_count,
     )
 
     return results
@@ -737,7 +754,7 @@ async def check_resource_health(
     Returns:
         ResourceHealthCheckResult: The result of the health check
     """
-    logger.info(f"Starting resource health check for resource: {resource.name}")
+    logger.info("Starting resource health check for resource: %s", resource.name)
     start_time = time.time()
 
     # Get timeout from config if not provided
@@ -769,7 +786,9 @@ async def check_resource_health(
         )
 
         logger.info(
-            f"Resource health check passed for resource: {resource.name} ({response_time}ms)"
+            "Resource health check passed for resource: %s (%sms)",
+            resource.name,
+            response_time,
         )
         return result
 
@@ -783,7 +802,7 @@ async def check_resource_health(
             error_type="connection_error",
         )
         logger.warning(
-            f"Resource health check failed for resource: {resource.name} - {str(e)}"
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
         )
         return result
 
@@ -797,7 +816,7 @@ async def check_resource_health(
             error_type="object_error",
         )
         logger.warning(
-            f"Resource health check failed for resource: {resource.name} - {str(e)}"
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
         )
         return result
 
@@ -811,7 +830,9 @@ async def check_resource_health(
             error_type="timeout",
         )
         logger.warning(
-            f"Resource health check timed out for resource: {resource.name} - {str(e)}"
+            "Resource health check timed out for resource: %s - %s",
+            resource.name,
+            str(e),
         )
         return result
 
@@ -831,7 +852,7 @@ async def check_resource_health(
             error_type=error_type,
         )
         logger.warning(
-            f"Resource health check failed for resource: {resource.name} - {str(e)}"
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
         )
         return result
 
@@ -857,16 +878,18 @@ async def check_all_resources_health(
         if timeout is None:
             timeout = config.common_config.health_monitoring.timeout_seconds
 
-    resources = ResourceConfig.objects.filter(enabled=True).select_related(
-        "connector_config"
-    )
+    resources = ResourceConfig.objects.filter(
+        enabled=True, connector_config__enabled=True
+    ).select_related("connector_config")
 
     if not resources.exists():
         logger.info("No enabled resources found for health check")
         return []
 
     logger.info(
-        f"Starting resource health checks for {resources.count()} resources with concurrency limit {concurrency_limit}"
+        "Starting resource health checks for %s resources with concurrency limit %s",
+        resources.count(),
+        concurrency_limit,
     )
 
     # Create health check tasks
@@ -884,7 +907,9 @@ async def check_all_resources_health(
     unhealthy_count = len(results) - healthy_count
 
     logger.info(
-        f"Resource health check completed: {healthy_count} healthy, {unhealthy_count} unhealthy"
+        "Resource health check completed: %s healthy, %s unhealthy",
+        healthy_count,
+        unhealthy_count,
     )
 
     return results
