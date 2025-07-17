@@ -1054,7 +1054,7 @@ def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
             if len(max_key) > len(item.keys()):
                 for k in max_key:
                     item.setdefault(k, None)
-    engine = create_engine("sqlite:///:memory:", echo=True, future=True)
+    engine = create_engine("sqlite:///:memory:", echo=False, future=True)
     metadata = MetaData()
     if data:
         table = _get_table_from_dict(data, engine, metadata)
