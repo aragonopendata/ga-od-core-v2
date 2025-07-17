@@ -35,6 +35,7 @@ from sqlalchemy import (
     DateTime,
     Time,
     REAL,
+    text,
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
@@ -125,13 +126,166 @@ class OrderBy:
     ascending: bool
 
 
+def _create_table_from_information_schema(
+    engine: Engine,
+    object_location: str,
+    object_location_schema: str,
+    meta_data: MetaData,
+) -> Table:
+    """
+    Create a SQLAlchemy Table object by querying information_schema instead of using reflection.
+
+    This fallback approach is used when standard SQLAlchemy reflection fails, commonly
+    due to PostgreSQL system catalog issues or custom data types.
+
+    @param engine: SQLAlchemy Engine instance
+    @param object_location: Table/view name
+    @param object_location_schema: Schema name
+    @param meta_data: MetaData object to attach the table to
+
+    @return: SQLAlchemy Table object
+    @raises NoObjectError: If table doesn't exist or no columns found
+    @raises DriverConnectionError: If connection fails
+    """
+
+    schema = object_location_schema or "public"
+
+    # PostgreSQL data type mapping for common types
+    pg_type_mapping = {
+        "integer": Integer,
+        "bigint": Integer,
+        "smallint": Integer,
+        "numeric": Numeric,
+        "real": REAL,
+        "double precision": REAL,
+        "text": Text,
+        "character varying": Text,
+        "character": Text,
+        "varchar": Text,
+        "char": Text,
+        "boolean": Boolean,
+        "date": Date,
+        "timestamp without time zone": DateTime,
+        "timestamp with time zone": DateTime,
+        "time without time zone": Time,
+        "time with time zone": Time,
+        # PostGIS and other custom types default to Text
+        "geometry": Text,
+        "geography": Text,
+        "uuid": Text,
+        "json": Text,
+        "jsonb": Text,
+        "xml": Text,
+        "inet": Text,
+        "cidr": Text,
+        "macaddr": Text,
+    }
+
+    try:
+        with engine.connect() as conn:
+            # Check if table/view exists
+            exists_query = """
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = :schema AND table_name = :table
+            UNION ALL
+            SELECT 1 FROM information_schema.views
+            WHERE table_schema = :schema AND table_name = :table
+            """
+
+            result = conn.execute(
+                text(exists_query), {"schema": schema, "table": object_location}
+            )
+            if not result.fetchone():
+                raise NoObjectError(
+                    f"Table/view {schema}.{object_location} does not exist"
+                )
+
+            # Get column information
+            columns_query = """
+            SELECT
+                column_name,
+                data_type,
+                is_nullable,
+                column_default,
+                ordinal_position
+            FROM information_schema.columns
+            WHERE table_schema = :schema AND table_name = :table
+            ORDER BY ordinal_position
+            """
+
+            result = conn.execute(
+                text(columns_query), {"schema": schema, "table": object_location}
+            )
+            columns_info = result.fetchall()
+
+            if not columns_info:
+                raise NoObjectError(
+                    f"No columns found for table {schema}.{object_location}"
+                )
+
+            # Create SQLAlchemy columns
+            sqlalchemy_columns = []
+            for col_info in columns_info:
+                col_name = col_info[0]
+                col_type = col_info[1].lower()
+                is_nullable = col_info[2] == "YES"
+
+                # Map PostgreSQL type to SQLAlchemy type
+                sqlalchemy_type = pg_type_mapping.get(col_type, Text)
+
+                # Create column
+                column = Column(col_name, sqlalchemy_type, nullable=is_nullable)
+                sqlalchemy_columns.append(column)
+
+            # Create the table
+            table = Table(
+                object_location,
+                meta_data,
+                *sqlalchemy_columns,
+                schema=object_location_schema,
+            )
+
+            logger.info(
+                "Successfully created table using information_schema fallback. Table: %s, Schema: %s, Columns: %d",
+                object_location,
+                object_location_schema,
+                len(sqlalchemy_columns),
+                extra={
+                    "fallback_success": True,
+                    "object_location": object_location,
+                    "object_location_schema": object_location_schema,
+                    "column_count": len(sqlalchemy_columns),
+                    "column_names": [col.name for col in sqlalchemy_columns],
+                },
+            )
+
+            return table
+
+    except sqlalchemy.exc.NoSuchTableError as err:
+        raise NoObjectError("Object not available.") from err
+    except (
+        sqlalchemy.exc.OperationalError,
+        sqlalchemy.exc.DatabaseError,
+        sqlalchemy.exc.ProgrammingError,
+    ) as err:
+        raise DriverConnectionError("Connection not available.") from err
+
+
 def _get_model(
     *, engine: Engine, object_location: str, object_location_schema: str
 ) -> Table:
     """
     Get SQLAlchemy model from object_location and object_location_schema.
-    # Note: if object_location is None meaning that original data is not in a database so is writen in a temporarily
-    #  table.
+
+    This function implements a graceful fallback approach to handle PostgreSQL reflection
+    issues. It first attempts standard SQLAlchemy reflection, then falls back to manual
+    table creation using information_schema queries if reflection fails.
+
+    Common reflection failures include:
+    - PostgreSQL "failed to find conversion function from unknown to text" errors
+    - Custom data types (PostGIS, enums) that confuse SQLAlchemy
+    - Version compatibility issues between SQLAlchemy and PostgreSQL
+    - System catalog permission or corruption issues
 
     @param engine: SQLAlchemy Engine instance to connect to the database.
     @param object_location: The name of the table or object location.
@@ -145,6 +299,8 @@ def _get_model(
 
     object_location = object_location or _TEMPORAL_TABLE_NAME
     meta_data = MetaData()
+
+    # Strategy 1: Try standard SQLAlchemy reflection
     try:
         return Table(
             object_location,
@@ -165,8 +321,45 @@ def _get_model(
         sqlalchemy.exc.DatabaseError,
         sqlalchemy.exc.ProgrammingError,
     ) as err:
-        logging.warning("Connection not available. Url: %s, Error: %s", engine.url, err)
-        raise DriverConnectionError("Connection not available.") from err
+        # Log reflection failure and attempt fallback for PostgreSQL
+        if "postgresql" in str(engine.url).lower():
+            logger.warning(
+                "PostgreSQL reflection failed, attempting fallback. Table: %s, Schema: %s, Error: %s",
+                object_location,
+                object_location_schema,
+                str(err)[:200],  # Truncate long error messages
+                extra={
+                    "fallback_reason": "postgresql_reflection_error",
+                    "object_location": object_location,
+                    "object_location_schema": object_location_schema,
+                    "engine_url": str(engine.url)[:50] + "...",
+                    "error_type": type(err).__name__,
+                },
+            )
+
+            # Strategy 2: Try fallback approach for PostgreSQL
+            try:
+                return _create_table_from_information_schema(
+                    engine, object_location, object_location_schema, meta_data
+                )
+            except Exception as fallback_err:
+                logger.error(
+                    "Fallback also failed for PostgreSQL table. Table: %s, Schema: %s, Error: %s",
+                    object_location,
+                    object_location_schema,
+                    str(fallback_err)[:200],
+                    extra={
+                        "fallback_failed": True,
+                        "original_error": str(err)[:200],
+                        "fallback_error": str(fallback_err)[:200],
+                    },
+                )
+                raise DriverConnectionError("Connection not available.") from err
+        else:
+            logging.warning(
+                "Connection not available. Url: %s, Error: %s", engine.url, err
+            )
+            raise DriverConnectionError("Connection not available.") from err
 
 
 def get_resource_columns(
