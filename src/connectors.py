@@ -309,7 +309,7 @@ def _get_model(
             schema=object_location_schema,
         )
     except sqlalchemy.exc.NoSuchTableError as err:
-        logging.warning(
+        logger.warning(
             "Table does not exist. Table: %s, Schema: %s, Url: %s",
             object_location,
             object_location_schema,
@@ -323,8 +323,8 @@ def _get_model(
     ) as err:
         # Log reflection failure and attempt fallback for PostgreSQL
         if "postgresql" in str(engine.url).lower():
-            logger.warning(
-                "PostgreSQL reflection failed, attempting fallback. Table: %s, Schema: %s, Error: %s",
+            logger.info(
+                "PostgreSQL reflection failed, using information_schema fallback. This is expected with older PostgreSQL versions (9.x). Table: %s, Schema: %s, Error: %s",
                 object_location,
                 object_location_schema,
                 str(err)[:200],  # Truncate long error messages

@@ -115,7 +115,7 @@ def create_connector_ga_od_core(client, test_name: str, uri: str) -> ConnectorDa
 
 
 def create_table_view(uri: str, test_name: str):
-    engine = create_engine(uri, echo=True)
+    engine = create_engine(uri, echo=False)
 
     Base = declarative_base()
     Session = sessionmaker(bind=engine)
