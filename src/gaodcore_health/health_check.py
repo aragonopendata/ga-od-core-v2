@@ -146,15 +146,18 @@ def check_all_connectors_health_sync(
 
     logger.info("Starting health checks for %s connectors", connectors.count())
 
-    # Run health checks synchronously
+    # Run health checks synchronously and save immediately
     results = []
     for connector in connectors:
         result = check_connector_health_sync(connector, timeout=timeout)
+        # Save result immediately after each check completes
+        result.save()
         results.append(result)
-
-    # Bulk save results to database
-    with transaction.atomic():
-        HealthCheckResult.objects.bulk_create(results)
+        logger.info(
+            "Saved health check result for connector: %s (%s)",
+            connector.name,
+            "healthy" if result.is_healthy else "unhealthy",
+        )
 
     # Log summary
     healthy_count = sum(1 for result in results if result.is_healthy)
@@ -693,15 +696,18 @@ def check_all_resources_health_sync(
 
     logger.info("Starting resource health checks for %s resources", resources.count())
 
-    # Run health checks synchronously
+    # Run health checks synchronously and save immediately
     results = []
     for resource in resources:
         result = check_resource_health_sync(resource, timeout=timeout)
+        # Save result immediately after each check completes
+        result.save()
         results.append(result)
-
-    # Bulk save results to database
-    with transaction.atomic():
-        ResourceHealthCheckResult.objects.bulk_create(results)
+        logger.info(
+            "Saved resource health check result for resource: %s (%s)",
+            resource.name,
+            "healthy" if result.is_healthy else "unhealthy",
+        )
 
     # Log summary
     healthy_count = sum(1 for result in results if result.is_healthy)
