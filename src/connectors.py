@@ -271,6 +271,145 @@ def _create_table_from_information_schema(
         raise DriverConnectionError("Connection not available.") from err
 
 
+def _create_table_from_oracle_system_views(
+    engine: Engine,
+    object_location: str,
+    object_location_schema: str,
+    meta_data: MetaData,
+) -> Table:
+    """
+    Create a SQLAlchemy Table object by querying Oracle system views instead of using reflection.
+
+    This fallback approach is used when standard SQLAlchemy reflection fails with Oracle views
+    or tables that cannot be introspected properly.
+
+    @param engine: SQLAlchemy Engine instance
+    @param object_location: Table/view name
+    @param object_location_schema: Schema name
+    @param meta_data: MetaData object to attach the table to
+
+    @return: SQLAlchemy Table object
+    @raises NoObjectError: If table doesn't exist or no columns found
+    @raises DriverConnectionError: If connection fails
+    """
+
+    # Oracle data type mapping for common types
+    oracle_type_mapping = {
+        "VARCHAR2": Text,
+        "CHAR": Text,
+        "NVARCHAR2": Text,
+        "NCHAR": Text,
+        "CLOB": Text,
+        "NCLOB": Text,
+        "NUMBER": REAL,
+        "BINARY_FLOAT": REAL,
+        "BINARY_DOUBLE": REAL,
+        "DATE": DateTime,
+        "TIMESTAMP": DateTime,
+        "TIMESTAMP(6)": DateTime,
+        "BLOB": Text,  # For simplicity
+        "RAW": Text,
+        "LONG": Text,
+        "LONG RAW": Text,
+        # PostGIS and spatial types
+        "SDO_GEOMETRY": Text,
+        "GEOMETRY": Text,
+        "GEOGRAPHY": Text,
+    }
+
+    try:
+        with engine.connect() as conn:
+            # Check if table/view exists in Oracle system views
+            exists_query = """
+            SELECT 1 FROM all_tables
+            WHERE UPPER(owner) = UPPER(:schema) AND UPPER(table_name) = UPPER(:table)
+            UNION ALL
+            SELECT 1 FROM all_views
+            WHERE UPPER(owner) = UPPER(:schema) AND UPPER(view_name) = UPPER(:table)
+            """
+
+            result = conn.execute(
+                text(exists_query), {"schema": object_location_schema, "table": object_location}
+            )
+            if not result.fetchone():
+                raise NoObjectError(
+                    f"Table/view {object_location_schema}.{object_location} does not exist"
+                )
+
+            # Get column information from Oracle system views
+            columns_query = """
+            SELECT
+                column_name,
+                data_type,
+                nullable,
+                column_id
+            FROM all_tab_columns
+            WHERE UPPER(owner) = UPPER(:schema) AND UPPER(table_name) = UPPER(:table)
+            ORDER BY column_id
+            """
+
+            result = conn.execute(
+                text(columns_query), {"schema": object_location_schema, "table": object_location}
+            )
+            columns_info = result.fetchall()
+
+            if not columns_info:
+                raise NoObjectError(
+                    f"No columns found for table {object_location_schema}.{object_location}"
+                )
+
+            # Create SQLAlchemy columns
+            sqlalchemy_columns = []
+            for col_info in columns_info:
+                col_name = col_info[0]
+                col_type = col_info[1]
+                is_nullable = col_info[2] == "Y"
+
+                # Map Oracle type to SQLAlchemy type
+                sqlalchemy_type = oracle_type_mapping.get(col_type, Text)
+
+                # Handle NUMBER with precision/scale
+                if col_type.startswith("NUMBER"):
+                    sqlalchemy_type = REAL
+
+                # Create column
+                column = Column(col_name, sqlalchemy_type, nullable=is_nullable)
+                sqlalchemy_columns.append(column)
+
+            # Create the table
+            table = Table(
+                object_location,
+                meta_data,
+                *sqlalchemy_columns,
+                schema=object_location_schema,
+            )
+
+            logger.info(
+                "Successfully created Oracle table using ALL_TAB_COLUMNS fallback. Table: %s, Schema: %s, Columns: %d",
+                object_location,
+                object_location_schema,
+                len(sqlalchemy_columns),
+                extra={
+                    "fallback_success": True,
+                    "object_location": object_location,
+                    "object_location_schema": object_location_schema,
+                    "column_count": len(sqlalchemy_columns),
+                    "column_names": [col.name for col in sqlalchemy_columns],
+                },
+            )
+
+            return table
+
+    except sqlalchemy.exc.NoSuchTableError as err:
+        raise NoObjectError("Object not available.") from err
+    except (
+        sqlalchemy.exc.OperationalError,
+        sqlalchemy.exc.DatabaseError,
+        sqlalchemy.exc.ProgrammingError,
+    ) as err:
+        raise DriverConnectionError("Connection not available.") from err
+
+
 def _get_model(
     *, engine: Engine, object_location: str, object_location_schema: str
 ) -> Table:
@@ -309,19 +448,54 @@ def _get_model(
             schema=object_location_schema,
         )
     except sqlalchemy.exc.NoSuchTableError as err:
-        logger.warning(
-            "Table does not exist. Table: %s, Schema: %s, Url: %s",
-            object_location,
-            object_location_schema,
-            engine.url,
-        )
-        raise NoObjectError("Object not available.") from err
+        # Check if this is Oracle and try fallback
+        if "oracle" in str(engine.url).lower():
+            logger.info(
+                "Oracle reflection failed, trying ALL_TAB_COLUMNS fallback. This is expected with some Oracle views. Table: %s, Schema: %s, Error: %s",
+                object_location,
+                object_location_schema,
+                str(err)[:200],
+                extra={
+                    "fallback_reason": "oracle_reflection_error",
+                    "object_location": object_location,
+                    "object_location_schema": object_location_schema,
+                    "engine_url": str(engine.url)[:50] + "...",
+                    "error_type": type(err).__name__,
+                },
+            )
+
+            # Strategy 2: Try fallback approach for Oracle
+            try:
+                return _create_table_from_oracle_system_views(
+                    engine, object_location, object_location_schema, meta_data
+                )
+            except Exception as fallback_err:
+                logger.error(
+                    "Fallback also failed for Oracle table. Table: %s, Schema: %s, Error: %s",
+                    object_location,
+                    object_location_schema,
+                    str(fallback_err)[:200],
+                    extra={
+                        "fallback_failed": True,
+                        "original_error": str(err)[:200],
+                        "fallback_error": str(fallback_err)[:200],
+                    },
+                )
+                raise NoObjectError("Object not available.") from err
+        else:
+            logger.warning(
+                "Table does not exist. Table: %s, Schema: %s, Url: %s",
+                object_location,
+                object_location_schema,
+                engine.url,
+            )
+            raise NoObjectError("Object not available.") from err
     except (
         sqlalchemy.exc.OperationalError,
         sqlalchemy.exc.DatabaseError,
         sqlalchemy.exc.ProgrammingError,
     ) as err:
-        # Log reflection failure and attempt fallback for PostgreSQL
+        # Log reflection failure and attempt fallback for PostgreSQL and Oracle
         if "postgresql" in str(engine.url).lower():
             logger.info(
                 "PostgreSQL reflection failed, using information_schema fallback. This is expected with older PostgreSQL versions (9.x). Table: %s, Schema: %s, Error: %s",
@@ -345,6 +519,39 @@ def _get_model(
             except Exception as fallback_err:
                 logger.error(
                     "Fallback also failed for PostgreSQL table. Table: %s, Schema: %s, Error: %s",
+                    object_location,
+                    object_location_schema,
+                    str(fallback_err)[:200],
+                    extra={
+                        "fallback_failed": True,
+                        "original_error": str(err)[:200],
+                        "fallback_error": str(fallback_err)[:200],
+                    },
+                )
+                raise DriverConnectionError("Connection not available.") from err
+        elif "oracle" in str(engine.url).lower():
+            logger.info(
+                "Oracle reflection failed, using ALL_TAB_COLUMNS fallback. This is expected with some Oracle views and tables. Table: %s, Schema: %s, Error: %s",
+                object_location,
+                object_location_schema,
+                str(err)[:200],  # Truncate long error messages
+                extra={
+                    "fallback_reason": "oracle_reflection_error",
+                    "object_location": object_location,
+                    "object_location_schema": object_location_schema,
+                    "engine_url": str(engine.url)[:50] + "...",
+                    "error_type": type(err).__name__,
+                },
+            )
+
+            # Strategy 2: Try fallback approach for Oracle
+            try:
+                return _create_table_from_oracle_system_views(
+                    engine, object_location, object_location_schema, meta_data
+                )
+            except Exception as fallback_err:
+                logger.error(
+                    "Fallback also failed for Oracle table. Table: %s, Schema: %s, Error: %s",
                     object_location,
                     object_location_schema,
                     str(fallback_err)[:200],
