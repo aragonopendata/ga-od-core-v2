@@ -36,6 +36,9 @@ DEBUG = CONFIG.common_config.debug
 
 ALLOWED_HOSTS = CONFIG.common_config.allowed_hosts
 
+# CSRF settings
+CSRF_TRUSTED_ORIGINS = CONFIG.common_config.csrf_trusted_origins
+
 # Application definition
 
 INSTALLED_APPS = [

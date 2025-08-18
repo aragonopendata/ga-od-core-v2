@@ -107,6 +107,7 @@ class HealthMonitoringConfig(BaseModel):
 
 class CommonConfig(BaseModel):
     allowed_hosts: List[str]
+    csrf_trusted_origins: Optional[List[str]] = []
     secret_key: str
     debug: bool
     databases: Dict[str, Database]
