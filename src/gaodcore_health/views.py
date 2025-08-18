@@ -137,6 +137,7 @@ class HealthCheckView(APIView):
     Trigger health checks manually.
     """
 
+    schema = None  # Exclude from OpenAPI schema
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
@@ -379,6 +380,7 @@ class ConnectorHealthDetailAPIView(APIView):
         return Response(serializer.data)
 
 
+@extend_schema(exclude=True)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def health_dashboard(request):
@@ -807,6 +809,7 @@ class ResourceHealthCheckView(APIView):
     Trigger resource health checks manually.
     """
 
+    schema = None  # Exclude from OpenAPI schema
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
