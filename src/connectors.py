@@ -365,6 +365,11 @@ def _create_table_from_oracle_system_views(
                 col_type = col_info[1]
                 is_nullable = col_info[2] == "Y"
 
+                # Convert Oracle column names to lowercase for consistency
+                # Oracle returns column names in UPPERCASE by default, but the application
+                # expects lowercase column names (as was the case with cx_Oracle behavior)
+                col_name_lower = col_name.lower()
+
                 # Map Oracle type to SQLAlchemy type
                 sqlalchemy_type = oracle_type_mapping.get(col_type, Text)
 
@@ -372,8 +377,8 @@ def _create_table_from_oracle_system_views(
                 if col_type.startswith("NUMBER"):
                     sqlalchemy_type = REAL
 
-                # Create column
-                column = Column(col_name, sqlalchemy_type, nullable=is_nullable)
+                # Create column with lowercase name
+                column = Column(col_name_lower, sqlalchemy_type, nullable=is_nullable)
                 sqlalchemy_columns.append(column)
 
             # Create the table
@@ -586,10 +591,21 @@ def get_resource_columns(
         )
     finally:
         engine.dispose()
-    data = (
-        {"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)}
-        for column in model.columns
-    )
+
+    # Convert Oracle column names to lowercase for consistency
+    from urllib.parse import urlparse
+    uri_parsed = urlparse(uri)
+    is_oracle = uri_parsed.scheme == "oracle+oracledb" or "oracle" in uri_parsed.scheme
+
+    data = []
+    for column in model.columns:
+        column_name = column.name
+        # For Oracle databases, convert column names to lowercase
+        if is_oracle:
+            column_name = column_name.lower()
+
+        data.append({"COLUMN_NAME": column_name, "DATA_TYPE": str(column.type)})
+
     return data
 
 
