@@ -100,6 +100,8 @@ class HealthMonitoringConfig(BaseModel):
     enabled: bool = True
     check_interval_minutes: int = 5
     timeout_seconds: int = 30
+    network_timeout_seconds: int = 3
+    connector_dependency_window_minutes: int = 5
     concurrency_limit: int = 5
     retention_days: int = 30
     alerts: HealthAlertsConfig = HealthAlertsConfig()

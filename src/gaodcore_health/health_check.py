@@ -17,7 +17,7 @@ from django.db import models
 
 from connectors import (
     validate_uri,
-    validate_resource,
+    get_resource_data,
     DriverConnectionError,
     NoObjectError,
 )
@@ -70,12 +70,18 @@ def check_connector_health_sync(
 
     except DriverConnectionError as e:
         response_time = int((time.time() - start_time) * 1000)
+
+        # Distinguish between network and database connection errors
+        error_type = "connection_error"
+        if "Network connectivity failed" in str(e):
+            error_type = "network_error"
+
         result = HealthCheckResult(
             connector=connector,
             is_healthy=False,
             response_time_ms=response_time,
             error_message=str(e),
-            error_type="connection_error",
+            error_type=error_type,
         )
         logger.warning(
             "Health check failed for connector: %s - %s", connector.name, str(e)
@@ -242,12 +248,18 @@ async def check_connector_health(
 
     except DriverConnectionError as e:
         response_time = int((time.time() - start_time) * 1000)
+
+        # Distinguish between network and database connection errors
+        error_type = "connection_error"
+        if "Network connectivity failed" in str(e):
+            error_type = "network_error"
+
         result = HealthCheckResult(
             connector=connector,
             is_healthy=False,
             response_time_ms=response_time,
             error_message=str(e),
-            error_type="connection_error",
+            error_type=error_type,
         )
         logger.warning(
             "Health check failed for connector: %s - %s", connector.name, str(e)
@@ -557,6 +569,90 @@ def get_connector_health_summary(
 # Resource Health Check Functions
 
 
+def validate_resource_health(
+    *,
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int] = None,
+) -> bool:
+    """
+    Lightweight resource validation for health checks.
+
+    Only fetches a small sample (limit=10) to verify the resource is accessible
+    without downloading the full dataset.
+
+    Args:
+        uri: The database URI to check
+        object_location: The table/view/function name
+        object_location_schema: The schema name (optional)
+        timeout: Timeout in seconds for the check
+
+    Returns:
+        bool: True if resource is accessible, False otherwise
+
+    Raises:
+        DriverConnectionError: If connection fails
+        NoObjectError: If resource doesn't exist
+    """
+    try:
+        # Get just a small sample to verify resource is accessible
+        result = get_resource_data(
+            uri=uri,
+            object_location=object_location,
+            object_location_schema=object_location_schema,
+            filters={},
+            like="",
+            fields=[],
+            sort=[],
+            limit=10,  # Only fetch 10 rows for health check
+            timeout=timeout,
+        )
+
+        # Just verify we can iterate the result (don't consume it all)
+        try:
+            next(iter(result))
+            return True
+        except StopIteration:
+            # Empty result is still a successful connection
+            return True
+    except (DriverConnectionError, NoObjectError):
+        # Re-raise these specific exceptions for proper error categorization
+        raise
+    except Exception as e:
+        # Convert any other exception to DriverConnectionError for consistency
+        raise DriverConnectionError(f"Resource validation failed: {str(e)}") from e
+
+
+def get_recent_connector_status(
+    connector_id: int, window_minutes: Optional[int] = None
+) -> Optional[HealthCheckResult]:
+    """
+    Get the most recent health check result for a connector within the specified time window.
+
+    Args:
+        connector_id: ID of the connector to check
+        window_minutes: Time window in minutes to look back (uses config default if None)
+
+    Returns:
+        HealthCheckResult: Most recent health check result if found, None otherwise
+    """
+    if window_minutes is None:
+        # Get dependency window from config
+        config = Config.get_config()
+        window_minutes = config.common_config.health_monitoring.connector_dependency_window_minutes
+
+    cutoff_time = timezone.now() - timedelta(minutes=window_minutes)
+
+    try:
+        return HealthCheckResult.objects.filter(
+            connector_id=connector_id,
+            check_time__gte=cutoff_time
+        ).order_by('-check_time').first()
+    except HealthCheckResult.DoesNotExist:
+        return None
+
+
 def check_resource_health_sync(
     resource: ResourceConfig, timeout: Optional[int] = None
 ) -> ResourceHealthCheckResult:
@@ -579,8 +675,8 @@ def check_resource_health_sync(
         timeout = config.common_config.health_monitoring.timeout_seconds
 
     try:
-        # Run resource validation synchronously
-        validate_resource(
+        # Run lightweight resource health validation (limit=10)
+        validate_resource_health(
             uri=resource.connector_config.uri,
             object_location=resource.object_location,
             object_location_schema=resource.object_location_schema,
@@ -696,10 +792,38 @@ def check_all_resources_health_sync(
 
     logger.info("Starting resource health checks for %s resources", resources.count())
 
+    # Cache connector health status to avoid repeated queries
+    connector_health_cache = {}
+
     # Run health checks synchronously and save immediately
     results = []
     for resource in resources:
-        result = check_resource_health_sync(resource, timeout=timeout)
+        connector_id = resource.connector_config.id
+
+        # Check if we've already looked up this connector's status
+        if connector_id not in connector_health_cache:
+            connector_health_cache[connector_id] = get_recent_connector_status(connector_id)
+
+        recent_connector_result = connector_health_cache[connector_id]
+
+        # Skip resource check if connector recently failed
+        if recent_connector_result and not recent_connector_result.is_healthy:
+            # Create a result indicating the connector failed
+            result = ResourceHealthCheckResult(
+                resource=resource,
+                is_healthy=False,
+                response_time_ms=0,
+                error_message=f"Connector '{resource.connector_config.name}' failed recently: {recent_connector_result.error_message}",
+                error_type="connector_failed",
+            )
+            logger.info(
+                "Skipped resource health check for %s - connector failed recently",
+                resource.name,
+            )
+        else:
+            # Perform actual health check
+            result = check_resource_health_sync(resource, timeout=timeout)
+
         # Save result immediately after each check completes
         result.save()
         results.append(result)
@@ -769,9 +893,9 @@ async def check_resource_health(
         timeout = config.common_config.health_monitoring.timeout_seconds
 
     try:
-        # Run validation in a thread to avoid blocking the event loop
-        def validate_resource_with_timeout():
-            return validate_resource(
+        # Run lightweight validation in a thread to avoid blocking the event loop
+        def validate_resource_health_with_timeout():
+            return validate_resource_health(
                 uri=resource.connector_config.uri,
                 object_location=resource.object_location,
                 object_location_schema=resource.object_location_schema,
@@ -780,10 +904,10 @@ async def check_resource_health(
 
         try:
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, validate_resource_with_timeout)
+            await loop.run_in_executor(None, validate_resource_health_with_timeout)
         except RuntimeError:
             # No event loop running, run directly
-            validate_resource_with_timeout()
+            validate_resource_health_with_timeout()
 
         response_time = int((time.time() - start_time) * 1000)
 

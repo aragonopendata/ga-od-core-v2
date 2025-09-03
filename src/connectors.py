@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import re
+import socket
 import urllib.request
 import uuid
 from collections import OrderedDict
@@ -1188,8 +1189,87 @@ def _process_like_filter(args: str, model: Table) -> list:
     return filters
 
 
+class NetworkConnectionError(Exception):
+    """Network connectivity check failed."""
+
+
+def check_network_connectivity(uri: str, timeout: Optional[int] = None) -> bool:
+    """
+    Perform a fast TCP connectivity check before attempting database connection.
+
+    Args:
+        uri: The database URI to check
+        timeout: Timeout in seconds for network check (uses config default if None)
+
+    Returns:
+        bool: True if network is reachable, False otherwise
+
+    Raises:
+        NetworkConnectionError: If network connectivity fails
+    """
+    if timeout is None:
+        # Get timeout from config if available
+        try:
+            from gaodcore_project.config import Config
+            config = Config.get_config()
+            timeout = config.common_config.health_monitoring.network_timeout_seconds
+        except (ImportError, AttributeError):
+            timeout = 3  # Fallback default
+
+    uri_parsed = urlparse(uri)
+
+    # Handle different URI schemes
+    if uri_parsed.scheme in _HTTP_SCHEMAS:
+        # For HTTP/HTTPS APIs, the network check is essentially the same as the full check
+        # so we skip the network pre-check for APIs
+        return True
+
+    if uri_parsed.scheme not in _DATABASE_SCHEMAS:
+        # Unknown scheme, skip network check
+        return True
+
+    # Extract host and port from database URI
+    host = uri_parsed.hostname
+    port = uri_parsed.port
+
+    if not host:
+        # No host specified (e.g., SQLite), skip network check
+        return True
+
+    # Set default ports for database schemes
+    if port is None:
+        port_map = {
+            'postgresql': 5432,
+            'mysql': 3306,
+            'mssql': 1433,
+            'mssql+pyodbc': 1433,
+            'oracle+oracledb': 1521,
+            'oracle': 1521,
+        }
+        port = port_map.get(uri_parsed.scheme, 5432)
+
+    try:
+        # Attempt TCP connection
+        with socket.create_connection((host, port), timeout=timeout):
+            logger.debug("Network connectivity check passed for %s:%s", host, port)
+            return True
+    except (socket.timeout, socket.gaierror, ConnectionRefusedError, OSError) as e:
+        logger.warning("Network connectivity check failed for %s:%s - %s", host, port, str(e))
+        raise NetworkConnectionError(f"Network connectivity failed for {host}:{port}: {str(e)}") from e
+
+
 def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
     """Validate if URI is available as resource."""
+    # Perform network connectivity pre-check for database URIs
+    try:
+        check_network_connectivity(uri)
+    except NetworkConnectionError as err:
+        # Network connectivity failed - don't attempt database connection
+        logger.warning(
+            "Network connectivity check failed for URI: %s... - %s", uri[:50], str(err)[:200]
+        )
+        raise DriverConnectionError("Network connectivity failed.") from err
+
     engine = _get_engine(uri, timeout=timeout)
     try:
         with engine.connect() as _:
