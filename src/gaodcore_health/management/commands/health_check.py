@@ -203,7 +203,10 @@ class Command(BaseCommand):
 
                 line = f"{status} {result.connector.name} ({result.response_time_ms}ms)"
                 if not result.is_healthy:
-                    line += f" - {result.error_message}"
+                    error_info = result.error_message
+                    if result.error_type:
+                        error_info = f"[{result.error_type}] {error_info}"
+                    line += f" - {error_info}"
 
                 self.stdout.write(style(line))
 
@@ -331,8 +334,11 @@ class Command(BaseCommand):
                 # Show unhealthy resources
                 for result in results:
                     if not result.is_healthy:
+                        error_info = result.error_message
+                        if result.error_type:
+                            error_info = f"[{result.error_type}] {error_info}"
                         self.stdout.write(
                             self.style.ERROR(
-                                f"  - {result.resource.name}: {result.error_message}"
+                                f"  - {result.resource.name}: {error_info}"
                             )
                         )

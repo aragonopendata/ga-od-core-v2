@@ -37,12 +37,21 @@ class HealthCheckResult(models.Model):
         verbose_name=_("Error Message"),
         help_text=_("Error message if health check failed")
     )
+    ERROR_TYPE_CHOICES = [
+        ('connection_error', _('Connection Error')),
+        ('object_error', _('Object Error')),
+        ('timeout', _('Timeout')),
+        ('network_error', _('Network Error')),
+        ('unknown_error', _('Unknown Error')),
+    ]
+
     error_type = models.CharField(
-        max_length=100,
+        max_length=200,
+        choices=ERROR_TYPE_CHOICES,
         null=True,
         blank=True,
         verbose_name=_("Error Type"),
-        help_text=_("Type of error (connection_error, timeout, unknown_error, etc.)"),
+        help_text=_("Type of error that occurred during health check"),
     )
 
     class Meta:
@@ -235,12 +244,22 @@ class ResourceHealthCheckResult(models.Model):
         verbose_name=_("Error Message"),
         help_text=_("Error message if health check failed")
     )
+    ERROR_TYPE_CHOICES = [
+        ('connection_error', _('Connection Error')),
+        ('object_error', _('Object Error')),
+        ('timeout', _('Timeout')),
+        ('network_error', _('Network Error')),
+        ('connector_failed', _('Connector Failed')),
+        ('unknown_error', _('Unknown Error')),
+    ]
+
     error_type = models.CharField(
-        max_length=100,
+        max_length=200,
+        choices=ERROR_TYPE_CHOICES,
         null=True,
         blank=True,
         verbose_name=_("Error Type"),
-        help_text=_("Type of error (connection_error, timeout, object_error, unknown_error, etc.)"),
+        help_text=_("Type of error that occurred during health check"),
     )
 
     class Meta:
