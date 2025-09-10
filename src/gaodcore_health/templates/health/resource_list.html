@@ -68,7 +68,8 @@
         <tbody>
             {% for resource in resource_health_data.resources %}
             <tr class="table-row {{ resource.status_class }}"
-                data-url="{% url 'gaodcore_health:resource_detail' resource.id %}">
+                onclick="window.location.href='{% url 'gaodcore_health:resource_detail' resource.id %}';"
+                style="cursor: pointer;">
                 <td>
                     <span class="item-id">{{ resource.id }}</span>
                 </td>
@@ -142,22 +143,4 @@
     {% endif %}
 </div>
 {% endif %}
-{% endblock %}
-
-{% block extra_js %}
-<script>
-    // Add click handler for resource table rows
-    document.querySelectorAll('.table-row').forEach(row => {
-        row.addEventListener('click', function(e) {
-            // Don't navigate if clicking on a link within the row
-            if (e.target.tagName === 'A') {
-                return;
-            }
-            const url = this.getAttribute('data-url');
-            if (url) {
-                window.location.href = url;
-            }
-        });
-    });
-</script>
 {% endblock %}
