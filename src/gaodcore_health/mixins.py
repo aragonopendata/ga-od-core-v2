@@ -3,6 +3,7 @@ Health status mixins for reusable logic in health monitoring views.
 """
 
 from django.utils import timezone
+from django.db.models import OuterRef, Subquery
 
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from .models import HealthCheckResult, ResourceHealthCheckResult
@@ -24,25 +25,29 @@ class ConnectorHealthMixin:
         Returns:
             dict: Health data with connectors and summary statistics
         """
-        # Get connectors
-        connectors = ConnectorConfig.objects.filter(enabled=True)
+        # Get latest health check data for each connector using subquery to avoid N+1
+        latest_checks = HealthCheckResult.objects.filter(
+            connector=OuterRef('pk')
+        ).order_by('-check_time')
+
+        # Get connectors with annotated health check data in single query
+        connectors = ConnectorConfig.objects.filter(enabled=True).annotate(
+            latest_check_time=Subquery(latest_checks.values('check_time')[:1]),
+            latest_is_healthy=Subquery(latest_checks.values('is_healthy')[:1]),
+            latest_response_time_ms=Subquery(latest_checks.values('response_time_ms')[:1]),
+            latest_error_message=Subquery(latest_checks.values('error_message')[:1]),
+        )
+
         if connector_id:
             connectors = connectors.filter(id=connector_id)
 
         connector_statuses = []
 
         for connector in connectors:
-            latest_check = (
-                HealthCheckResult.objects.filter(connector=connector)
-                .order_by("-check_time")
-                .first()
-            )
-
+            # Use annotated data instead of individual queries
             status_class = (
-                "healthy" if latest_check and latest_check.is_healthy else "unhealthy"
-            )
-            if not latest_check:
-                status_class = "unknown"
+                "healthy" if connector.latest_is_healthy else "unhealthy"
+            ) if connector.latest_is_healthy is not None else "unknown"
 
             connector_statuses.append(
                 {
@@ -50,17 +55,15 @@ class ConnectorHealthMixin:
                     "name": connector.name,
                     "uri": connector.uri,
                     "status": "Healthy"
-                    if latest_check and latest_check.is_healthy
+                    if connector.latest_is_healthy
                     else "Unhealthy"
-                    if latest_check
+                    if connector.latest_is_healthy is not None
                     else "Unknown",
                     "status_class": status_class,
-                    "last_check": latest_check.check_time if latest_check else None,
-                    "response_time_ms": latest_check.response_time_ms
-                    if latest_check
-                    else None,
-                    "error_message": latest_check.error_message
-                    if latest_check and not latest_check.is_healthy
+                    "last_check": connector.latest_check_time,
+                    "response_time_ms": connector.latest_response_time_ms,
+                    "error_message": connector.latest_error_message
+                    if connector.latest_is_healthy is False
                     else None,
                     "enabled": connector.enabled,
                     "object": connector,  # Include the full object for template use
@@ -110,11 +113,23 @@ class ResourceHealthMixin:
         Returns:
             dict: Health data with resources and summary statistics
         """
-        # Get resources - only enabled resources with enabled connectors
+        # Get latest health check data for each resource using subquery to avoid N+1
+        latest_resource_checks = ResourceHealthCheckResult.objects.filter(
+            resource=OuterRef('pk')
+        ).order_by('-check_time')
+
+        # Get resources with annotated health check data in single query
         resources = ResourceConfig.objects.filter(
             enabled=True,
             connector_config__enabled=True
-        ).select_related("connector_config")
+        ).select_related("connector_config").annotate(
+            latest_check_time=Subquery(latest_resource_checks.values('check_time')[:1]),
+            latest_is_healthy=Subquery(latest_resource_checks.values('is_healthy')[:1]),
+            latest_response_time_ms=Subquery(latest_resource_checks.values('response_time_ms')[:1]),
+            latest_error_message=Subquery(latest_resource_checks.values('error_message')[:1]),
+            latest_error_type=Subquery(latest_resource_checks.values('error_type')[:1]),
+        )
+
         if connector_id:
             resources = resources.filter(connector_config_id=connector_id)
         if resource_id:
@@ -123,17 +138,10 @@ class ResourceHealthMixin:
         resource_statuses = []
 
         for resource in resources:
-            latest_check = (
-                ResourceHealthCheckResult.objects.filter(resource=resource)
-                .order_by("-check_time")
-                .first()
-            )
-
+            # Use annotated data instead of individual queries
             status_class = (
-                "healthy" if latest_check and latest_check.is_healthy else "unhealthy"
-            )
-            if not latest_check:
-                status_class = "unknown"
+                "healthy" if resource.latest_is_healthy else "unhealthy"
+            ) if resource.latest_is_healthy is not None else "unknown"
 
             resource_statuses.append(
                 {
@@ -144,20 +152,18 @@ class ResourceHealthMixin:
                     "connector_name": resource.connector_config.name,
                     "connector_uri": resource.connector_config.uri,
                     "status": "Healthy"
-                    if latest_check and latest_check.is_healthy
+                    if resource.latest_is_healthy
                     else "Unhealthy"
-                    if latest_check
+                    if resource.latest_is_healthy is not None
                     else "Unknown",
                     "status_class": status_class,
-                    "last_check": latest_check.check_time if latest_check else None,
-                    "response_time_ms": latest_check.response_time_ms
-                    if latest_check
+                    "last_check": resource.latest_check_time,
+                    "response_time_ms": resource.latest_response_time_ms,
+                    "error_message": resource.latest_error_message
+                    if resource.latest_is_healthy is False
                     else None,
-                    "error_message": latest_check.error_message
-                    if latest_check and not latest_check.is_healthy
-                    else None,
-                    "error_type": latest_check.error_type
-                    if latest_check and not latest_check.is_healthy
+                    "error_type": resource.latest_error_type
+                    if resource.latest_is_healthy is False
                     else None,
                     "enabled": resource.enabled,
                     "object": resource,  # Include the full object for template use
