@@ -68,7 +68,7 @@
         <tbody>
             {% for resource in resource_health_data.resources %}
             <tr class="table-row {{ resource.status_class }}"
-                onclick="window.location.href='{% url 'gaodcore_health:resource_detail' resource.id %}';"">
+                data-url="{% url 'gaodcore_health:resource_detail' resource.id %}">
                 <td>
                     <span class="item-id">{{ resource.id }}</span>
                 </td>
@@ -153,8 +153,10 @@
             if (e.target.tagName === 'A') {
                 return;
             }
-            const url = this.getAttribute('onclick').match(/'([^']+)'/)[1];
-            window.location.href = url;
+            const url = this.getAttribute('data-url');
+            if (url) {
+                window.location.href = url;
+            }
         });
     });
 </script>
