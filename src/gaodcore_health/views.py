@@ -2,7 +2,6 @@
 Views for health monitoring API endpoints.
 """
 
-import asyncio
 from datetime import timedelta
 
 from django.shortcuts import render, redirect
@@ -32,11 +31,11 @@ from .serializers import (
     ResourceHealthDetailSerializer,
 )
 from .health_check import (
-    check_all_connectors_health,
-    check_specific_connector_health,
+    check_all_connectors_health_sync,
+    check_specific_connector_health_sync,
     get_connector_health_summary,
-    check_all_resources_health,
-    check_specific_resource_health,
+    check_all_resources_health_sync,
+    check_specific_resource_health_sync,
     get_resource_health_summary,
 )
 
@@ -177,16 +176,12 @@ class HealthCheckView(APIView):
         try:
             if connector_id:
                 # Check specific connector
-                result = asyncio.run(
-                    check_specific_connector_health(int(connector_id), timeout=timeout)
-                )
+                result = check_specific_connector_health_sync(int(connector_id), timeout=timeout)
                 serializer = HealthCheckResultSerializer(result)
                 return Response(serializer.data)
             else:
                 # Check all connectors
-                results = asyncio.run(
-                    check_all_connectors_health(concurrency, timeout=timeout)
-                )
+                results = check_all_connectors_health_sync(concurrency, timeout=timeout)
                 serializer = HealthCheckResultSerializer(results, many=True)
                 return Response(serializer.data)
 
@@ -849,16 +844,12 @@ class ResourceHealthCheckView(APIView):
         try:
             if resource_id:
                 # Check specific resource
-                result = asyncio.run(
-                    check_specific_resource_health(int(resource_id), timeout=timeout)
-                )
+                result = check_specific_resource_health_sync(int(resource_id), timeout=timeout)
                 serializer = ResourceHealthCheckResultSerializer(result)
                 return Response(serializer.data)
             else:
                 # Check all resources
-                results = asyncio.run(
-                    check_all_resources_health(concurrency, timeout=timeout)
-                )
+                results = check_all_resources_health_sync(concurrency, timeout=timeout)
                 serializer = ResourceHealthCheckResultSerializer(results, many=True)
                 return Response(serializer.data)
 
