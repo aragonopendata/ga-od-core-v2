@@ -53,7 +53,7 @@ class HealthStatusView(APIView):
         description="Returns the latest health check results for all enabled connectors",
         responses={200: HealthStatusSerializer(many=True)},
     )
-    def get(self, request):
+    def get(self, _request):
         """Get current health status of all connectors."""
         connectors = ConnectorConfig.objects.filter(enabled=True)
         status_data = []
@@ -176,7 +176,9 @@ class HealthCheckView(APIView):
         try:
             if connector_id:
                 # Check specific connector
-                result = check_specific_connector_health_sync(int(connector_id), timeout=timeout)
+                result = check_specific_connector_health_sync(
+                    int(connector_id), timeout=timeout
+                )
                 serializer = HealthCheckResultSerializer(result)
                 return Response(serializer.data)
             else:
@@ -439,7 +441,7 @@ def health_dashboard(request):
 # New ListView-based Health Monitoring Views
 
 
-def health_index(request):
+def health_index(_request):
     """
     Redirect /health/ to /health/connectors/
     """
@@ -467,7 +469,7 @@ class ConnectorHealthListView(
         context = self.get_health_context_data(**kwargs)
 
         # Get status filter from query parameters
-        status_filter = self.request.GET.get('status', 'all')
+        status_filter = self.request.GET.get("status", "all")
 
         # Get health data for all connectors
         health_data = self.get_connector_health_data(status_filter=status_filter)
@@ -501,27 +503,120 @@ class ResourceHealthListView(
     current_section = "resources"
 
     def get_queryset(self):
-        """Return enabled resources - ListView will handle pagination."""
-        return (
-            ResourceConfig.objects.filter(enabled=True)
+        """Return enabled resources filtered by health status - ListView will handle pagination."""
+        from django.db.models import OuterRef, Subquery
+        from .models import ResourceHealthCheckResult
+
+        # Get status filter from query parameters
+        status_filter = self.request.GET.get("status", "all")
+
+        # Get latest health check data for each resource using subquery
+        latest_resource_checks = ResourceHealthCheckResult.objects.filter(
+            resource=OuterRef("pk")
+        ).order_by("-check_time")
+
+        # Base queryset with health status annotation
+        queryset = (
+            ResourceConfig.objects.filter(enabled=True, connector_config__enabled=True)
             .select_related("connector_config")
-            .order_by("id")
+            .annotate(
+                latest_is_healthy=Subquery(
+                    latest_resource_checks.values("is_healthy")[:1]
+                ),
+                latest_check_time=Subquery(
+                    latest_resource_checks.values("check_time")[:1]
+                ),
+                latest_response_time_ms=Subquery(
+                    latest_resource_checks.values("response_time_ms")[:1]
+                ),
+                latest_error_message=Subquery(
+                    latest_resource_checks.values("error_message")[:1]
+                ),
+                latest_error_type=Subquery(
+                    latest_resource_checks.values("error_type")[:1]
+                ),
+            )
         )
+
+        # Apply status filter at queryset level
+        if status_filter == "healthy":
+            queryset = queryset.filter(latest_is_healthy=True)
+        elif status_filter == "unhealthy":
+            queryset = queryset.filter(latest_is_healthy=False)
+        elif status_filter == "unknown":
+            queryset = queryset.filter(latest_is_healthy__isnull=True)
+        # 'all' - no additional filter
+
+        return queryset.order_by("id")
 
     def get_context_data(self, **kwargs):
         """Add health data to context."""
         context = self.get_health_context_data(**kwargs)
 
         # Get status filter from query parameters
-        status_filter = self.request.GET.get('status', 'all')
+        status_filter = self.request.GET.get("status", "all")
 
-        # Get health data for all resources
-        health_data = self.get_resource_health_data(status_filter=status_filter)
+        # Get paginated resources from ListView (already annotated with health data)
+        paginated_resources = context["resources"]
+
+        # Build health data for paginated resources using the annotations
+        paginated_health_data = []
+        for resource in paginated_resources:
+            # Use annotated health data directly from queryset
+            latest_is_healthy = resource.latest_is_healthy
+            latest_check_time = resource.latest_check_time
+            latest_response_time_ms = resource.latest_response_time_ms
+            latest_error_message = resource.latest_error_message
+            latest_error_type = resource.latest_error_type
+
+            status_class = (
+                ("healthy" if latest_is_healthy else "unhealthy")
+                if latest_is_healthy is not None
+                else "unknown"
+            )
+
+            resource_data = {
+                "id": resource.id,
+                "name": resource.name,
+                "object_location": resource.object_location,
+                "connector_id": resource.connector_config.id,
+                "connector_name": resource.connector_config.name,
+                "connector_uri": resource.connector_config.uri,
+                "status": "Healthy"
+                if latest_is_healthy
+                else "Unhealthy"
+                if latest_is_healthy is not None
+                else "Unknown",
+                "status_class": status_class,
+                "last_check": latest_check_time,
+                "response_time_ms": latest_response_time_ms,
+                "error_message": latest_error_message
+                if latest_is_healthy is False
+                else None,
+                "error_type": latest_error_type if latest_is_healthy is False else None,
+                "enabled": resource.enabled,
+                "object": resource,
+            }
+            paginated_health_data.append(resource_data)
+
+        # Get health summary for all resources (for stat cards)
+        summary_health_data = self.get_resource_health_data(
+            status_filter="all"
+        )  # Get all for summary
+
+        # Create resource health data structure for template
+        resource_health_data = {
+            "resources": paginated_health_data,
+            "total_count": summary_health_data["total_count"],
+            "healthy_count": summary_health_data["healthy_count"],
+            "unhealthy_count": summary_health_data["unhealthy_count"],
+            "unknown_count": summary_health_data["unknown_count"],
+        }
 
         # Add health data to context
         context.update(
             {
-                "resource_health_data": health_data,
+                "resource_health_data": resource_health_data,
                 "page_title": "Resource Health Monitor",
                 "breadcrumbs": [
                     {"name": "Health", "url": None},
@@ -570,10 +665,12 @@ class ConnectorResourceListView(
             connector = None
 
         # Get status filter from query parameters
-        status_filter = self.request.GET.get('status', 'all')
+        status_filter = self.request.GET.get("status", "all")
 
         # Get health data for resources of this connector
-        health_data = self.get_resource_health_data(connector_id=connector_id, status_filter=status_filter)
+        health_data = self.get_resource_health_data(
+            connector_id=connector_id, status_filter=status_filter
+        )
 
         # Add health data to context
         context.update(
@@ -598,7 +695,11 @@ class ConnectorResourceListView(
 
 
 class ConnectorHealthDetailView(
-    LoginRequiredMixin, ConnectorHealthMixin, ResourceHealthMixin, HealthContextMixin, DetailView
+    LoginRequiredMixin,
+    ConnectorHealthMixin,
+    ResourceHealthMixin,
+    HealthContextMixin,
+    DetailView,
 ):
     """
     Detail view for a specific connector showing info, health data, and resources.
@@ -626,16 +727,18 @@ class ConnectorHealthDetailView(
         resources_health = self.get_resource_health_data(connector_id=connector.id)
 
         # Add breadcrumbs
-        context.update({
-            "connector_health_data": connector_health,
-            "resource_health_data": resources_health,
-            "page_title": f"Connector Details - {connector.name}",
-            "breadcrumbs": [
-                {"name": "Health", "url": None},
-                {"name": "Connectors", "url": "gaodcore_health:connector_list"},
-                {"name": connector.name, "url": None, "active": True},
-            ],
-        })
+        context.update(
+            {
+                "connector_health_data": connector_health,
+                "resource_health_data": resources_health,
+                "page_title": f"Connector Details - {connector.name}",
+                "breadcrumbs": [
+                    {"name": "Health", "url": None},
+                    {"name": "Connectors", "url": "gaodcore_health:connector_list"},
+                    {"name": connector.name, "url": None, "active": True},
+                ],
+            }
+        )
 
         return context
 
@@ -656,8 +759,7 @@ class ResourceHealthDetailView(
     def get_queryset(self):
         """Return enabled resources with enabled connectors only."""
         return ResourceConfig.objects.filter(
-            enabled=True,
-            connector_config__enabled=True
+            enabled=True, connector_config__enabled=True
         ).select_related("connector_config")
 
     def get_context_data(self, **kwargs):
@@ -669,16 +771,22 @@ class ResourceHealthDetailView(
         resource_health = self.get_resource_health_data(resource_id=resource.id)
 
         # Add breadcrumbs
-        context.update({
-            "resource_health_data": resource_health,
-            "page_title": f"Resource Details - {resource.name}",
-            "breadcrumbs": [
-                {"name": "Health", "url": None},
-                {"name": "Connectors", "url": "gaodcore_health:connector_list"},
-                {"name": resource.connector_config.name, "url": "gaodcore_health:connector_detail", "url_kwargs": {"connector_id": resource.connector_config.id}},
-                {"name": resource.name, "url": None, "active": True},
-            ],
-        })
+        context.update(
+            {
+                "resource_health_data": resource_health,
+                "page_title": f"Resource Details - {resource.name}",
+                "breadcrumbs": [
+                    {"name": "Health", "url": None},
+                    {"name": "Connectors", "url": "gaodcore_health:connector_list"},
+                    {
+                        "name": resource.connector_config.name,
+                        "url": "gaodcore_health:connector_detail",
+                        "url_kwargs": {"connector_id": resource.connector_config.id},
+                    },
+                    {"name": resource.name, "url": None, "active": True},
+                ],
+            }
+        )
 
         return context
 
@@ -699,7 +807,7 @@ class ResourceHealthStatusView(APIView):
         description="Returns the latest health check results for all enabled resources",
         responses={200: ResourceHealthStatusSerializer(many=True)},
     )
-    def get(self, request):
+    def get(self, _request):
         """Get current health status of all resources."""
         resources = ResourceConfig.objects.filter(enabled=True).select_related(
             "connector_config"
@@ -844,7 +952,9 @@ class ResourceHealthCheckView(APIView):
         try:
             if resource_id:
                 # Check specific resource
-                result = check_specific_resource_health_sync(int(resource_id), timeout=timeout)
+                result = check_specific_resource_health_sync(
+                    int(resource_id), timeout=timeout
+                )
                 serializer = ResourceHealthCheckResultSerializer(result)
                 return Response(serializer.data)
             else:
