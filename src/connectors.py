@@ -460,7 +460,7 @@ def _get_model(
                 "Oracle reflection failed, trying ALL_TAB_COLUMNS fallback. This is expected with some Oracle views. Table: %s, Schema: %s, Error: %s",
                 object_location,
                 object_location_schema,
-                str(err)[:200],
+                str(err),
                 extra={
                     "fallback_reason": "oracle_reflection_error",
                     "object_location": object_location,
@@ -480,11 +480,11 @@ def _get_model(
                     "Fallback also failed for Oracle table. Table: %s, Schema: %s, Error: %s",
                     object_location,
                     object_location_schema,
-                    str(fallback_err)[:200],
+                    str(fallback_err),
                     extra={
                         "fallback_failed": True,
-                        "original_error": str(err)[:200],
-                        "fallback_error": str(fallback_err)[:200],
+                        "original_error": str(err),
+                        "fallback_error": str(fallback_err),
                     },
                 )
                 raise NoObjectError("Object not available.") from err
@@ -507,7 +507,7 @@ def _get_model(
                 "PostgreSQL reflection failed, using information_schema fallback. This is expected with older PostgreSQL versions (9.x). Table: %s, Schema: %s, Error: %s",
                 object_location,
                 object_location_schema,
-                str(err)[:200],  # Truncate long error messages
+                str(err),
                 extra={
                     "fallback_reason": "postgresql_reflection_error",
                     "object_location": object_location,
@@ -527,11 +527,11 @@ def _get_model(
                     "Fallback also failed for PostgreSQL table. Table: %s, Schema: %s, Error: %s",
                     object_location,
                     object_location_schema,
-                    str(fallback_err)[:200],
+                    str(fallback_err),
                     extra={
                         "fallback_failed": True,
-                        "original_error": str(err)[:200],
-                        "fallback_error": str(fallback_err)[:200],
+                        "original_error": str(err),
+                        "fallback_error": str(fallback_err),
                     },
                 )
                 raise DriverConnectionError("Connection not available.") from err
@@ -540,7 +540,7 @@ def _get_model(
                 "Oracle reflection failed, using ALL_TAB_COLUMNS fallback. This is expected with some Oracle views and tables. Table: %s, Schema: %s, Error: %s",
                 object_location,
                 object_location_schema,
-                str(err)[:200],  # Truncate long error messages
+                str(err),
                 extra={
                     "fallback_reason": "oracle_reflection_error",
                     "object_location": object_location,
@@ -560,11 +560,11 @@ def _get_model(
                     "Fallback also failed for Oracle table. Table: %s, Schema: %s, Error: %s",
                     object_location,
                     object_location_schema,
-                    str(fallback_err)[:200],
+                    str(fallback_err),
                     extra={
                         "fallback_failed": True,
-                        "original_error": str(err)[:200],
-                        "fallback_error": str(fallback_err)[:200],
+                        "original_error": str(err),
+                        "fallback_error": str(fallback_err),
                     },
                 )
                 raise DriverConnectionError("Connection not available.") from err
@@ -1266,7 +1266,7 @@ def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
     except NetworkConnectionError as err:
         # Network connectivity failed - don't attempt database connection
         logger.warning(
-            "Network connectivity check failed for URI: %s... - %s", uri[:50], str(err)[:200]
+            "Network connectivity check failed for URI: %s... - %s", uri[:50], str(err)
         )
         raise DriverConnectionError("Network connectivity failed.") from err
 
@@ -1277,7 +1277,7 @@ def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
     except sqlalchemy.exc.DatabaseError as err:
         # Log connection failure as warning - expected in health checks
         logger.warning(
-            "Connection not available for URI: %s... - %s", uri[:50], str(err)[:200]
+            "Connection not available for URI: %s... - %s", uri[:50], str(err)
         )
         raise DriverConnectionError("Connection not available.") from err
 
