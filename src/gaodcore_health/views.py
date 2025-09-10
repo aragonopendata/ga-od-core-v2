@@ -461,8 +461,38 @@ class ConnectorHealthListView(
     current_section = "connectors"
 
     def get_queryset(self):
-        """Return enabled connectors - ListView will handle pagination."""
-        return ConnectorConfig.objects.filter(enabled=True).order_by("id")
+        """Return enabled connectors filtered by health status - ListView will handle pagination."""
+        from django.db.models import OuterRef, Subquery
+        from .models import HealthCheckResult
+
+        # Get status filter from query parameters
+        status_filter = self.request.GET.get("status", "all")
+
+        # Get latest health check data for each connector using subquery
+        latest_checks = HealthCheckResult.objects.filter(
+            connector=OuterRef("pk")
+        ).order_by("-check_time")
+
+        # Base queryset with health status annotation
+        queryset = ConnectorConfig.objects.filter(enabled=True).annotate(
+            latest_check_time=Subquery(latest_checks.values("check_time")[:1]),
+            latest_is_healthy=Subquery(latest_checks.values("is_healthy")[:1]),
+            latest_response_time_ms=Subquery(
+                latest_checks.values("response_time_ms")[:1]
+            ),
+            latest_error_message=Subquery(latest_checks.values("error_message")[:1]),
+        )
+
+        # Apply status filter at queryset level
+        if status_filter == "healthy":
+            queryset = queryset.filter(latest_is_healthy=True)
+        elif status_filter == "unhealthy":
+            queryset = queryset.filter(latest_is_healthy=False)
+        elif status_filter == "unknown":
+            queryset = queryset.filter(latest_is_healthy__isnull=True)
+        # 'all' - no additional filter
+
+        return queryset.order_by("id")
 
     def get_context_data(self, **kwargs):
         """Add health data to context."""
@@ -471,13 +501,62 @@ class ConnectorHealthListView(
         # Get status filter from query parameters
         status_filter = self.request.GET.get("status", "all")
 
-        # Get health data for all connectors
-        health_data = self.get_connector_health_data(status_filter=status_filter)
+        # Get paginated connectors from ListView (already annotated with health data)
+        paginated_connectors = context["connectors"]
+
+        # Build health data for paginated connectors using the annotations
+        paginated_health_data = []
+        for connector in paginated_connectors:
+            # Use annotated health data directly from queryset
+            latest_is_healthy = connector.latest_is_healthy
+            latest_check_time = connector.latest_check_time
+            latest_response_time_ms = connector.latest_response_time_ms
+            latest_error_message = connector.latest_error_message
+
+            status_class = (
+                ("healthy" if latest_is_healthy else "unhealthy")
+                if latest_is_healthy is not None
+                else "unknown"
+            )
+
+            connector_data = {
+                "id": connector.id,
+                "name": connector.name,
+                "uri": connector.uri,
+                "status": "Healthy"
+                if latest_is_healthy
+                else "Unhealthy"
+                if latest_is_healthy is not None
+                else "Unknown",
+                "status_class": status_class,
+                "last_check": latest_check_time,
+                "response_time_ms": latest_response_time_ms,
+                "error_message": latest_error_message
+                if latest_is_healthy is False
+                else None,
+                "enabled": connector.enabled,
+                "object": connector,  # Include the full object for template use
+            }
+            paginated_health_data.append(connector_data)
+
+        # Get health summary for all connectors (for stat cards)
+        summary_health_data = self.get_connector_health_data(
+            status_filter="all"
+        )  # Get all for summary
+
+        # Create connector health data structure for template
+        connector_health_data = {
+            "connectors": paginated_health_data,
+            "total_count": summary_health_data["total_count"],
+            "healthy_count": summary_health_data["healthy_count"],
+            "unhealthy_count": summary_health_data["unhealthy_count"],
+            "unknown_count": summary_health_data["unknown_count"],
+        }
 
         # Add health data to context
         context.update(
             {
-                "connector_health_data": health_data,
+                "connector_health_data": connector_health_data,
                 "page_title": "Connector Health Monitor",
                 "breadcrumbs": [
                     {"name": "Health", "url": None},
