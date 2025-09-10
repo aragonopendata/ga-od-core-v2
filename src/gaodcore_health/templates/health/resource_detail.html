@@ -6,6 +6,9 @@
 <button class="refresh-button" onclick="window.location.reload()">
     🔄 Refresh Data
 </button>
+<button class="preview-button" onclick="previewResourceData('{{ resource.id }}')">
+    👁️ Preview data
+</button>
 
 <!-- Resource Information -->
 <div class="detail-section">
@@ -130,8 +133,34 @@
 
 {% endblock %}
 
+{% block extra_css %}
+<style>
+    .preview-button {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-bottom: 20px;
+        margin-left: 10px;
+    }
+
+    .preview-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+</style>
+{% endblock %}
+
 {% block extra_js %}
-<script>
-    // No additional JavaScript needed for resource detail
-</script>
+    function previewResourceData(resourceId) {
+        // Build the preview URL with the resource ID and limit=10
+        const previewUrl = `/GA_OD_Core/preview?view_id=${resourceId}&limit=10`;
+
+        // Open in a new window
+        window.open(previewUrl, '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+    }
 {% endblock %}
