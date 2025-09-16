@@ -1089,8 +1089,11 @@ def get_resource_data(
 
     for item in data:
         for column in item:
-            if (
-                (isinstance(column, (decimal.Decimal, uuid.UUID, Promise)))
+            if isinstance(column, uuid.UUID):
+                # Handle UUID objects by converting to string
+                dataTempTuplas.append(str(column))
+            elif (
+                (isinstance(column, (decimal.Decimal, Promise)))
                 or (isinstance(column, float))
                 or (isinstance(column, Numeric))
             ):
