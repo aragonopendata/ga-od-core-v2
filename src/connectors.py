@@ -37,6 +37,7 @@ from sqlalchemy import (
     Time,
     REAL,
     text,
+    quoted_name,
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
@@ -330,7 +331,8 @@ def _create_table_from_oracle_system_views(
             """
 
             result = conn.execute(
-                text(exists_query), {"schema": object_location_schema, "table": object_location}
+                text(exists_query),
+                {"schema": object_location_schema, "table": object_location},
             )
             if not result.fetchone():
                 raise NoObjectError(
@@ -350,7 +352,8 @@ def _create_table_from_oracle_system_views(
             """
 
             result = conn.execute(
-                text(columns_query), {"schema": object_location_schema, "table": object_location}
+                text(columns_query),
+                {"schema": object_location_schema, "table": object_location},
             )
             columns_info = result.fetchall()
 
@@ -366,20 +369,23 @@ def _create_table_from_oracle_system_views(
                 col_type = col_info[1]
                 is_nullable = col_info[2] == "Y"
 
-                # Convert Oracle column names to lowercase for consistency
-                # Oracle returns column names in UPPERCASE by default, but the application
-                # expects lowercase column names (as was the case with cx_Oracle behavior)
-                col_name_lower = col_name.lower()
-
                 # Map Oracle type to SQLAlchemy type
                 sqlalchemy_type = oracle_type_mapping.get(col_type, Text)
-
-                # Handle NUMBER with precision/scale
                 if col_type.startswith("NUMBER"):
                     sqlalchemy_type = REAL
 
-                # Create column with lowercase name
-                column = Column(col_name_lower, sqlalchemy_type, nullable=is_nullable)
+                # Quote column name for Oracle compatibility and create lowercase key for API
+                quoted_col_name = quoted_name(col_name, quote=True)
+                lowercase_name = col_name.lower()
+
+                # Create column with quoted name for Oracle but lowercase key for API
+                column = Column(
+                    quoted_col_name,
+                    sqlalchemy_type,
+                    nullable=is_nullable,
+                    key=lowercase_name,
+                )
+
                 sqlalchemy_columns.append(column)
 
             # Create the table
@@ -595,6 +601,7 @@ def get_resource_columns(
 
     # Convert Oracle column names to lowercase for consistency
     from urllib.parse import urlparse
+
     uri_parsed = urlparse(uri)
     is_oracle = uri_parsed.scheme == "oracle+oracledb" or "oracle" in uri_parsed.scheme
 
@@ -647,10 +654,6 @@ def validate_resource_mssql(
 ) -> Iterable[Dict[str, Any]]:
     """Validate if resource is available . Return data of resource, a iterable of
     dictionaries."""
-
-    fields = []
-    sort = []
-
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
@@ -660,21 +663,21 @@ def validate_resource_mssql(
         object_location_schema=object_location_schema,
     )
 
-    column_dict = {column.name: column for column in model.columns}
-    columns = _get_columns(column_dict, fields)
+    column_dict = {column.key: column for column in model.columns}
+    columns = _get_columns(column_dict, [])
     session = session_maker()
 
     data = (
         session.query(model)
-        .order_by(*_get_sort_methods(column_dict, sort))
-        .with_entities(*[model.c[col.name].label(col.name) for col in model.columns])
+        .order_by(*_get_sort_methods(column_dict, []))
+        .with_entities(*[model.c[col.key].label(col.key) for col in model.columns])
         .all()
     )
 
     session.close()
     engine.dispose()
 
-    return (dict(zip([column.name for column in columns], row)) for row in data)
+    return (dict(zip([column.key for column in columns], row)) for row in data)
 
 
 def validator_max_excel_allowed(
@@ -723,7 +726,7 @@ def _validate_max_rows_allowed(
     session = session_maker()
     try:
         session.query(
-            *[model.c[col.name].label(col.name) for col in model.columns]
+            *[model.c[col.key].label(col.key) for col in model.columns]
         ).count()
     except sqlalchemy.exc.ProgrammingError as err:
         logging.exception("Object not available.")
@@ -796,7 +799,7 @@ def get_resource_data_feature(
         object_location=object_location,
         object_location_schema=object_location_schema,
     )
-    column_dict = {column.name: column for column in model.columns}
+    column_dict = {column.key: column for column in model.columns}
     # columns = _get_columns(column_dict, fields)
     filters_args = _process_like_filter(like, model)
     session = session_maker()
@@ -960,7 +963,7 @@ def get_session_data(
         object_location_schema=object_location_schema,
     )
 
-    column_dict = {column.name: column for column in model.columns}
+    column_dict = {column.key: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
     filters_args = []
     like_filters = _process_like_filter(like, model)
@@ -978,7 +981,7 @@ def get_session_data(
                 session.query(model)
                 .filter_by(**filters)
                 .filter(*filters_args)
-                .with_entities(*[model.c[col.name].label(col.name) for col in columns])
+                .with_entities(*[model.c[col.key].label(col.key) for col in columns])
                 .all()
             )
         except sqlalchemy.exc.ProgrammingError as err:
@@ -993,7 +996,7 @@ def get_session_data(
                 .filter_by(**filters)
                 .filter(*filters_args)
                 .order_by(*_get_sort_methods(column_dict, sort))
-                .with_entities(*[model.c[col.name].label(col.name) for col in columns])
+                .with_entities(*[model.c[col.key].label(col.key) for col in columns])
                 .offset(offset)
                 .limit(limit)
                 .all()
@@ -1081,8 +1084,8 @@ def get_resource_data(
     coerce_to_decimal=False)
     The ``coerce_to_decimal`` flag only impacts the results of plain string SQL statements that are not otherwise
     associated with a :class:`.Numeric` SQLAlchemy type (or a subclass of such).
-    .. versionchanged:: 1.2  The numeric handling system for cx_Oracle has been reworked to take advantage of newer
-    cx_Oracle features as well as better integration of outputtypehandlers. """
+    .. versionchanged:: 1.2  The numeric handling system for Oracle has been reworked to take advantage of newer
+    oracledb features as well as better integration of outputtypehandlers. """
 
     dataTemp = []
     dataTempTuplas = []
@@ -1121,13 +1124,13 @@ def get_resource_data(
         object_location_schema=object_location_schema,
     )
 
-    column_dict = {column.name: column for column in model.columns}
+    column_dict = {column.key: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
     session = session_maker()
     session.close()
     engine.dispose()
 
-    return (dict(zip([column.name for column in columns], row)) for row in data)
+    return (dict(zip([column.key for column in columns], row)) for row in data)
 
 
 def update_resource_size(resource_id, registries, size):
@@ -1214,6 +1217,7 @@ def check_network_connectivity(uri: str, timeout: Optional[int] = None) -> bool:
         # Get timeout from config if available
         try:
             from gaodcore_project.config import Config
+
             config = Config.get_config()
             timeout = config.common_config.health_monitoring.network_timeout_seconds
         except (ImportError, AttributeError):
@@ -1242,12 +1246,12 @@ def check_network_connectivity(uri: str, timeout: Optional[int] = None) -> bool:
     # Set default ports for database schemes
     if port is None:
         port_map = {
-            'postgresql': 5432,
-            'mysql': 3306,
-            'mssql': 1433,
-            'mssql+pyodbc': 1433,
-            'oracle+oracledb': 1521,
-            'oracle': 1521,
+            "postgresql": 5432,
+            "mysql": 3306,
+            "mssql": 1433,
+            "mssql+pyodbc": 1433,
+            "oracle+oracledb": 1521,
+            "oracle": 1521,
         }
         port = port_map.get(uri_parsed.scheme, 5432)
 
@@ -1257,8 +1261,12 @@ def check_network_connectivity(uri: str, timeout: Optional[int] = None) -> bool:
             logger.debug("Network connectivity check passed for %s:%s", host, port)
             return True
     except (socket.timeout, socket.gaierror, ConnectionRefusedError, OSError) as e:
-        logger.warning("Network connectivity check failed for %s:%s - %s", host, port, str(e))
-        raise NetworkConnectionError(f"Network connectivity failed for {host}:{port}: {str(e)}") from e
+        logger.warning(
+            "Network connectivity check failed for %s:%s - %s", host, port, str(e)
+        )
+        raise NetworkConnectionError(
+            f"Network connectivity failed for {host}:{port}: {str(e)}"
+        ) from e
 
 
 def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
