@@ -80,15 +80,18 @@ def get_response_xlsx(data: ReturnList) -> HttpResponse:
     """worksheets and it supports features such as formatting and many more, includin """
 
     output = io.BytesIO()
-    # Enable nan_inf_to_errors to handle NaN and infinity values properly
-    workbook = xlsxwriter.Workbook(output, {'nan_inf_to_errors': True})
+    workbook = xlsxwriter.Workbook(output)
     worksheet = workbook.add_worksheet()
 
     # column header names, you can use your own headers here
 
     for row, item in enumerate(data):
         for col, (key, value) in enumerate(item.items()):
-            worksheet.write(row + 1, col, value)
+            # Write None values as blank cells, not NaN
+            if value is None:
+                worksheet.write_blank(row + 1, col, None)
+            else:
+                worksheet.write(row + 1, col, value)
             if row == 0:
                 worksheet.write(row, col, key)
 
