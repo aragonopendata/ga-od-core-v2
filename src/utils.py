@@ -123,12 +123,11 @@ def _fix_null_values_for_xlsx(data: List[Dict[str, Any]], format_is_xlsx: bool =
     for record in data:
         fixed_record = {}
         for field, value in record.items():
-            if value is None:
-                # Use NaN for numeric fields only when format is XLSX, None otherwise
-                if format_is_xlsx and field_types.get(field) == 'numeric':
-                    fixed_record[field] = float('nan')
-                else:
-                    fixed_record[field] = None
+            # Handle None and NaN values (pandas converts None to NaN)
+            if value is None or (isinstance(value, float) and math.isnan(value)):
+                # Keep None for all formats - xlsxwriter will render as empty cell
+                # Do NOT convert to NaN as it causes #NUM! errors or xlsxwriter exceptions
+                fixed_record[field] = None
             else:
                 # Convert types to match expected XLSX format
                 if format_is_xlsx and field_types.get(field) == 'numeric':
