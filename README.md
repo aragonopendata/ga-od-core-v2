@@ -27,8 +27,22 @@ swagger: [https://opendata.aragon.es/GA_OD_Core/ui/](https://opendata.aragon.es/
 
 ## Despliegue
 
-Es importante poner un timeout generoso 4m ya que si hay alguna peticion no cacheada dara un error. Si se utiliza Apache como proxy revisar timeout https://httpd.apache.org/docs/2.4/mod/mod_proxy.html 
+Es importante poner un timeout generoso 4m ya que si hay alguna peticion no cacheada dara un error. Si se utiliza Apache como proxy revisar timeout https://httpd.apache.org/docs/2.4/mod/mod_proxy.html
 
+## Development
+
+### Code Quality
+
+This project uses pre-commit hooks with Ruff for code linting and quality checks.
+
+#### Setup pre-commit
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+The hooks will automatically run on each commit to ensure code quality standards.
 
 ## Usage
 
@@ -51,7 +65,7 @@ This is util to deal with manager app and integrate other app with GAODCore. For
 #### Validate a new Resource
 
 It is posible to get data without create any configuration to test if data is correct before create any configuration.
-Take care that when you create a `ConnectorConfig` or `ResourceConfig` will check if resource is available. Not availability 
+Take care that when you create a `ConnectorConfig` or `ResourceConfig` will check if resource is available. Not availability
 of a resource will raise an error.
 
 In [/GA_OD_Core_admin/manager/validator/](/GA_OD_Core_admin/manager/validator/) you must send a GET
@@ -75,16 +89,16 @@ URL: [/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_resource-confi
 
 #### Create a new ResourceConfig
 
-Create a `ResourceConfig` is the way to explain what data GAODCore must retrieve. 
+Create a `ResourceConfig` is the way to explain what data GAODCore must retrieve.
 
-In [/GA_OD_Core_admin/manager/resource-config/](/GA_OD_Core_admin/manager/resource-config/) you must send a POST 
+In [/GA_OD_Core_admin/manager/resource-config/](/GA_OD_Core_admin/manager/resource-config/) you must send a POST
 authenticated request with following data:
 
 ![resource config creation](docs/images/swagger/resource-config-creation.png)
 Swagger
 URL: [/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_resource-config_create](/GA_OD_Core/ui/operations-manager-GA_OD_Core_admin_manager_resource-config_create)
 
-### Data retrieval 
+### Data retrieval
 
 To discover all endpoints please check following
 swagger: [GA_OD_Core/ui/](GA_OD_Core/ui/)
@@ -92,7 +106,7 @@ swagger: [GA_OD_Core/ui/](GA_OD_Core/ui/)
 ### Reset login attempts
 
 If we try to access our account unsuccessfully multiple times, our account will be locked an the next message will appear:
-    
+
     Access locked: too many login attempts. Contact an admin to unlock your account.
 
 If we want to reset these attempts, we have to execute one of the next commands (depending on the case) inside the docker container:

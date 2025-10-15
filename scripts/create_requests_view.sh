@@ -8,8 +8,8 @@ psql -h $POSTGRESQL_HOST -p $POSTGRESQL_PORT -d $POSTGRES_DB  -U $POSTGRES_USER 
                         drop materialized view if exists public.v_requests_gaodcore;
                         drop materialized view if exists public.v_requests_gaodcore_t;
                         drop materialized view if exists public.v_id_resourcename;
-                        alter table easyaudit_requestevent ALTER column remote_ip TYPE  VARCHAR (100);		
- 
+                        alter table easyaudit_requestevent ALTER column remote_ip TYPE  VARCHAR (100);
+
 			CREATE MATERIALIZED VIEW public.v_requests_gaodcore
 			TABLESPACE pg_default
 			AS SELECT to_char(ear.datetime, 'YYYY-MM-DD HH24:MI:SS'::text) AS datetime,
@@ -38,29 +38,29 @@ psql -h $POSTGRESQL_HOST -p $POSTGRESQL_PORT -d $POSTGRES_DB  -U $POSTGRES_USER 
 					END AS ip
 			FROM easyaudit_requestevent ear
 			WITH DATA;
-   
+
 CREATE materialized VIEW public.v_resources_count as select resource_name, count(resource_name)  from v_requests_gaodcore vrg group by resource_name;
 CREATE materialized VIEW public.v_ip_count as select ip, count(ip) from v_requests_gaodcore vrg  group by ip  ;
 create materialized view public.v_resources_ip as select resource_name, count(distinct(ip)) as numero_llamadas from v_requests_gaodcore vrg group by resource_name;
- 
+
 GRANT SELECT on v_resources_ip TO gaodcore_read;
 GRANT SELECT on v_requests_gaodcore TO gaodcore_read;
 GRANT SELECT on v_ip_count TO gaodcore_read;
 GRANT SELECT on v_resources_count TO gaodcore_read;
- 
- 
+
+
 -- public.v_id_resourcename source
- 
+
 CREATE MATERIALIZED VIEW public.v_id_resourcename
 TABLESPACE pg_default
 AS SELECT gaodcore_manager_resourceconfig.id,
     gaodcore_manager_resourceconfig.name
    FROM gaodcore_manager_resourceconfig
 WITH DATA;
- 
- 
+
+
 -- public.v_requests_gaodcore_t source
- 
+
 CREATE MATERIALIZED VIEW public.v_requests_gaodcore_t
 TABLESPACE pg_default
 AS SELECT to_char(ear.datetime, 'YYYY-MM-DD HH24:MI:SS'::text) AS datetime,
@@ -89,8 +89,8 @@ AS SELECT to_char(ear.datetime, 'YYYY-MM-DD HH24:MI:SS'::text) AS datetime,
         END AS ip
    FROM easyaudit_requestevent ear
 WITH DATA;
- 
+
 GRANT SELECT on v_id_resourcename TO gaodcore_read;
-GRANT SELECT on v_requests_gaodcore_t TO gaodcore_read; 
+GRANT SELECT on v_requests_gaodcore_t TO gaodcore_read;
 
 "

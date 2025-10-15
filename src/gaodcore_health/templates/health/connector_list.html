@@ -1,0 +1,128 @@
+{% extends 'health/base.html' %}
+{% load i18n %}
+
+{% block title %}{% trans "Connector Health Monitor" %}{% endblock %}
+
+{% block content %}
+<button class="refresh-button" onclick="window.location.reload()">
+    🔄 {% trans "Refresh Data" %}
+</button>
+
+<!-- Filter Controls -->
+<div class="filter-controls">
+    <label>{% trans "Filter by Status:" %}</label>
+    <a href="?status=all" class="filter-button {% if current_status_filter == 'all' %}active{% endif %}">{% trans "All" %}</a>
+    <a href="?status=healthy" class="filter-button {% if current_status_filter == 'healthy' %}active{% endif %}">{% trans "Healthy" %}</a>
+    <a href="?status=unhealthy" class="filter-button {% if current_status_filter == 'unhealthy' %}active{% endif %}">{% trans "Unhealthy" %}</a>
+    <a href="?status=unknown" class="filter-button {% if current_status_filter == 'unknown' %}active{% endif %}">{% trans "Unknown" %}</a>
+</div>
+
+<!-- Summary Cards -->
+<div class="summary-cards">
+    <div class="stat-card total">
+        <div class="stat-number">{{ connector_health_data.total_count }}</div>
+        <div class="stat-label">{% trans "Total Connectors" %}</div>
+    </div>
+    <div class="stat-card healthy">
+        <div class="stat-number">{{ connector_health_data.healthy_count }}</div>
+        <div class="stat-label">{% trans "Healthy" %}</div>
+    </div>
+    <div class="stat-card unhealthy">
+        <div class="stat-number">{{ connector_health_data.unhealthy_count }}</div>
+        <div class="stat-label">{% trans "Unhealthy" %}</div>
+    </div>
+    <div class="stat-card unknown">
+        <div class="stat-number">{{ connector_health_data.unknown_count }}</div>
+        <div class="stat-label">{% trans "Unknown" %}</div>
+    </div>
+</div>
+
+<!-- Connectors Table -->
+{% if connector_health_data.connectors %}
+<div class="health-table">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>{% trans "Name" %}</th>
+                <th>{% trans "Status" %}</th>
+                <th>{% trans "Last Check" %}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for connector in connector_health_data.connectors %}
+            <tr class="table-row {{ connector.status_class }}"
+                onclick="window.location.href='{% url 'gaodcore_health:connector_detail' connector.id %}';">
+                <td>
+                    <span class="item-id">{{ connector.id }}</span>
+                </td>
+                <td>
+                    <span class="item-name">{{ connector.name }}</span>
+                </td>
+                <td>
+                    <span class="status-icon">
+                        {% if connector.status_class == 'healthy' %}
+                            ✅
+                        {% elif connector.status_class == 'unhealthy' %}
+                            ❌
+                        {% else %}
+                            ⚠️
+                        {% endif %}
+                    </span>
+                </td>
+                <td>
+                    <span class="last-check">
+                        {% if connector.last_check %}
+                            {{ connector.last_check|date:"M d, H:i" }}
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if is_paginated %}
+<div class="pagination">
+    <span class="step-links">
+        {% if page_obj.has_previous %}
+            <a href="?page=1{% if current_status_filter != 'all' %}&status={{ current_status_filter }}{% endif %}">&laquo; First</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if current_status_filter != 'all' %}&status={{ current_status_filter }}{% endif %}">Previous</a>
+        {% endif %}
+
+        <span class="current">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </span>
+
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if current_status_filter != 'all' %}&status={{ current_status_filter }}{% endif %}">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% if current_status_filter != 'all' %}&status={{ current_status_filter }}{% endif %}">Last &raquo;</a>
+        {% endif %}
+    </span>
+</div>
+{% endif %}
+
+{% else %}
+<div class="empty-state">
+    <h3>No Connectors Found</h3>
+    <p>No enabled connectors are currently configured for monitoring.</p>
+    <p>Create connectors in the connector management interface.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add click handler for table rows
+    document.querySelectorAll('.table-row').forEach(row => {
+        row.addEventListener('click', function() {
+            const url = this.getAttribute('onclick').match(/'([^']+)'/)[1];
+            window.location.href = url;
+        });
+    });
+</script>
+{% endblock %}
