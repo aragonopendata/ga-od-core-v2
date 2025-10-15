@@ -2,7 +2,7 @@
 
 import os
 from abc import ABCMeta
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
 from urllib.parse import urljoin
 from sys import platform
 import yaml
@@ -86,15 +86,35 @@ class Database(BaseModel):
     USER: Optional[str] = None
     PASSWORD: Optional[str] = None
     HOST: Optional[str] = None
-    PORT: Optional[str] = None
+    PORT: Optional[Union[str, int]] = None
+
+
+class HealthAlertsConfig(BaseModel):
+    enabled: bool = True
+    failure_threshold_minutes: int = 10
+    recovery_notification: bool = True
+    consecutive_failures_threshold: int = 3
+
+
+class HealthMonitoringConfig(BaseModel):
+    enabled: bool = True
+    check_interval_minutes: int = 5
+    timeout_seconds: int = 30
+    network_timeout_seconds: int = 3
+    connector_dependency_window_minutes: int = 5
+    concurrency_limit: int = 5
+    retention_days: int = 30
+    alerts: HealthAlertsConfig = HealthAlertsConfig()
 
 
 class CommonConfig(BaseModel):
     allowed_hosts: List[str]
+    csrf_trusted_origins: Optional[List[str]] = []
     secret_key: str
     debug: bool
     databases: Dict[str, Database]
     cache_ttl: int
+    health_monitoring: HealthMonitoringConfig = HealthMonitoringConfig()
 
 
 class Config(BaseModel):

@@ -1,4 +1,4 @@
-FROM python:3.9-bullseye
+FROM python:3.10-bullseye
 
 ARG GAODCORE_DIR="/opt/gaodcore"
 ARG ORACLE_DIR="/opt/oracle"
@@ -13,16 +13,17 @@ RUN apt install -y wget
 RUN apt clean -y
 
 
-# Install Oracle Instant client
-RUN apt install libaio1 libaio-dev
-RUN mkdir $ORACLE_DIR
+# Install Oracle Instant client (needed for python-oracledb Thick mode)
+# Required for older Oracle databases with unsupported password verifiers
+RUN apt install -y libaio1 libaio-dev unzip
+RUN mkdir -p $ORACLE_DIR
 RUN wget $ORACLE_INSTANT_CLIENT_URL -O $ORACLE_INSTANT_CLIENT_TMP
 RUN unzip $ORACLE_INSTANT_CLIENT_TMP -d $ORACLE_DIR
 RUN rm $ORACLE_INSTANT_CLIENT_TMP
 ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/opt/oracle/instantclient_$ORACLE_INSTANT_CLIENT_VERSION"
 
 
-#install MSSQL Instant 
+#install MSSQL Instant
 RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
 RUN curl https://packages.microsoft.com/config/debian/10/prod.list > /etc/apt/sources.list.d/mssql-release.list
 
@@ -39,9 +40,17 @@ RUN apt install -y wget
 RUN apt-get update
 RUN apt install postgresql-client -y
 
-RUN echo "[FreeTDS]\n\ 
+RUN echo "[FreeTDS]\n\
     Description = FreeTDS unixODBC Driver\n\
-    Driver = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so" >> /etc/odbcinst.ini
+    Driver = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so\n\
+    Setup = /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so" >> /etc/odbcinst.ini
+
+# Configure FreeTDS with proper settings
+RUN echo "[global]\n\
+    tds version = 8.0\n\
+    client charset = UTF-8\n\
+    text size = 64512" > /etc/freetds/freetds.conf
+
 RUN apt clean -y
 RUN cp /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so /usr/local/lib/
 
@@ -57,7 +66,7 @@ RUN pip install -r requirements.txt
 
 COPY ./src .
 COPY ./scripts ./scripts
-RUN chmod +x scripts/create_requests_view.sh 
+RUN chmod +x scripts/create_requests_view.sh
 
 CMD bash -c "python manage.py migrate --noinput \
     && python manage.py collectstatic --noinput \

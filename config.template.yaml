@@ -1,5 +1,10 @@
 common_config:
   secret_key: foo
+  allowed_hosts:
+    - 'your-domain.com'
+    - 'localhost'
+  csrf_trusted_origins:
+    - 'https://your-domain.com'
   debug: true
   databases:
     default:

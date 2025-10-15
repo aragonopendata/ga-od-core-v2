@@ -304,7 +304,7 @@ modules.xml
 # profiling data
 
 # End of https://www.toptal.com/developers/gitignore/api/python,django,pycharm+all
-config-tst.yaml
+
 config.yaml
 src/C\357\200\272\357\201\234AragonODGH\357\201\234ga-od-core-v2\357\201\234db.sqlite3
 src/gaodcore_manager/migrations/0002_auto_20211109_1639.py

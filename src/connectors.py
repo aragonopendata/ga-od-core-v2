@@ -1,12 +1,12 @@
 """Module that deal with external resources."""
 
 import csv
-import datetime
 import decimal
 import json
 import logging
 import math
 import re
+import socket
 import urllib.request
 import uuid
 from collections import OrderedDict
@@ -25,7 +25,20 @@ from django.utils.duration import duration_iso_string
 from django.utils.functional import Promise
 from geoalchemy2 import functions as GeoFunc
 from rest_framework.exceptions import ValidationError
-from sqlalchemy import create_engine, Table, MetaData, Column, Boolean, Text, Integer, DateTime, Time, REAL
+from sqlalchemy import (
+    create_engine,
+    Table,
+    MetaData,
+    Column,
+    Boolean,
+    Text,
+    Integer,
+    DateTime,
+    Time,
+    REAL,
+    text,
+    quoted_name,
+)
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.types import Numeric
@@ -36,22 +49,38 @@ from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
 
 logger = logging.getLogger(__name__)
 
-_DATABASE_SCHEMAS = {'postgresql', 'mysql', 'mssql+pyodbc', 'oracle', 'sqlite'}
-_HTTP_SCHEMAS = {'http', 'https'}
+_DATABASE_SCHEMAS = {
+    "postgresql",
+    "mysql",
+    "mssql",
+    "mssql+pyodbc",
+    "oracle+oracledb",
+    "sqlite",
+}
+_HTTP_SCHEMAS = {"http", "https"}
 _RESOURCE_MAX_ROWS = 1048576
-_TEMPORAL_TABLE_NAME = 'temporal_table'
-_SQLALCHEMY_MAP_TYPE = {bool: Boolean, str: Text, int: Integer, float: REAL, date: Date, datetime: DateTime, time: Time}
+_TEMPORAL_TABLE_NAME = "temporal_table"
+_SQLALCHEMY_MAP_TYPE = {
+    bool: Boolean,
+    str: Text,
+    int: Integer,
+    float: REAL,
+    date: Date,
+    datetime: DateTime,
+    time: Time,
+}
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
 
 
 class MimeType(Enum):
     """Enum with some mimetype and his different values."""
-    CSV = ('text/csv',)
+
+    CSV = ("text/csv",)
     XLSX = (
-        'application/xlsx',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        "application/xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
-    JSON = ('application/json',)
+    JSON = ("application/json",)
 
 
 class NotImplementedSchemaError(Exception):
@@ -80,6 +109,7 @@ class FieldNoExistsError(Exception):
 
 class SortFieldNoExistsError(Exception):
     """Resource does not have a field."""
+
     message = None
 
     def __init__(self, message="Sort field not exists."):
@@ -93,15 +123,320 @@ class MimeTypeError(Exception):
 @dataclass
 class OrderBy:
     """Defines field and is ascending sort. This is used to generate SQL queries."""
+
     field: str
     ascending: bool
 
 
-def _get_model(*, engine: Engine, object_location: str, object_location_schema: str) -> Table:
+def _create_table_from_information_schema(
+    engine: Engine,
+    object_location: str,
+    object_location_schema: str,
+    meta_data: MetaData,
+) -> Table:
+    """
+    Create a SQLAlchemy Table object by querying information_schema instead of using reflection.
+
+    This fallback approach is used when standard SQLAlchemy reflection fails, commonly
+    due to PostgreSQL system catalog issues or custom data types.
+
+    @param engine: SQLAlchemy Engine instance
+    @param object_location: Table/view name
+    @param object_location_schema: Schema name
+    @param meta_data: MetaData object to attach the table to
+
+    @return: SQLAlchemy Table object
+    @raises NoObjectError: If table doesn't exist or no columns found
+    @raises DriverConnectionError: If connection fails
+    """
+
+    schema = object_location_schema or "public"
+
+    # PostgreSQL data type mapping for common types
+    pg_type_mapping = {
+        "integer": Integer,
+        "bigint": Integer,
+        "smallint": Integer,
+        "numeric": Numeric,
+        "real": REAL,
+        "double precision": REAL,
+        "text": Text,
+        "character varying": Text,
+        "character": Text,
+        "varchar": Text,
+        "char": Text,
+        "boolean": Boolean,
+        "date": Date,
+        "timestamp without time zone": DateTime,
+        "timestamp with time zone": DateTime,
+        "time without time zone": Time,
+        "time with time zone": Time,
+        # PostGIS and other custom types default to Text
+        "geometry": Text,
+        "geography": Text,
+        "uuid": Text,
+        "json": Text,
+        "jsonb": Text,
+        "xml": Text,
+        "inet": Text,
+        "cidr": Text,
+        "macaddr": Text,
+    }
+
+    try:
+        with engine.connect() as conn:
+            # Check if table/view exists
+            exists_query = """
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = :schema AND table_name = :table
+            UNION ALL
+            SELECT 1 FROM information_schema.views
+            WHERE table_schema = :schema AND table_name = :table
+            """
+
+            result = conn.execute(
+                text(exists_query), {"schema": schema, "table": object_location}
+            )
+            if not result.fetchone():
+                raise NoObjectError(
+                    f"Table/view {schema}.{object_location} does not exist"
+                )
+
+            # Get column information
+            columns_query = """
+            SELECT
+                column_name,
+                data_type,
+                is_nullable,
+                column_default,
+                ordinal_position
+            FROM information_schema.columns
+            WHERE table_schema = :schema AND table_name = :table
+            ORDER BY ordinal_position
+            """
+
+            result = conn.execute(
+                text(columns_query), {"schema": schema, "table": object_location}
+            )
+            columns_info = result.fetchall()
+
+            if not columns_info:
+                raise NoObjectError(
+                    f"No columns found for table {schema}.{object_location}"
+                )
+
+            # Create SQLAlchemy columns
+            sqlalchemy_columns = []
+            for col_info in columns_info:
+                col_name = col_info[0]
+                col_type = col_info[1].lower()
+                is_nullable = col_info[2] == "YES"
+
+                # Map PostgreSQL type to SQLAlchemy type
+                sqlalchemy_type = pg_type_mapping.get(col_type, Text)
+
+                # Create column
+                column = Column(col_name, sqlalchemy_type, nullable=is_nullable)
+                sqlalchemy_columns.append(column)
+
+            # Create the table
+            table = Table(
+                object_location,
+                meta_data,
+                *sqlalchemy_columns,
+                schema=object_location_schema,
+            )
+
+            logger.info(
+                "Successfully created table using information_schema fallback. Table: %s, Schema: %s, Columns: %d",
+                object_location,
+                object_location_schema,
+                len(sqlalchemy_columns),
+                extra={
+                    "fallback_success": True,
+                    "object_location": object_location,
+                    "object_location_schema": object_location_schema,
+                    "column_count": len(sqlalchemy_columns),
+                    "column_names": [col.name for col in sqlalchemy_columns],
+                },
+            )
+
+            return table
+
+    except sqlalchemy.exc.NoSuchTableError as err:
+        raise NoObjectError("Object not available.") from err
+    except (
+        sqlalchemy.exc.OperationalError,
+        sqlalchemy.exc.DatabaseError,
+        sqlalchemy.exc.ProgrammingError,
+    ) as err:
+        raise DriverConnectionError("Connection not available.") from err
+
+
+def _create_table_from_oracle_system_views(
+    engine: Engine,
+    object_location: str,
+    object_location_schema: str,
+    meta_data: MetaData,
+) -> Table:
+    """
+    Create a SQLAlchemy Table object by querying Oracle system views instead of using reflection.
+
+    This fallback approach is used when standard SQLAlchemy reflection fails with Oracle views
+    or tables that cannot be introspected properly.
+
+    @param engine: SQLAlchemy Engine instance
+    @param object_location: Table/view name
+    @param object_location_schema: Schema name
+    @param meta_data: MetaData object to attach the table to
+
+    @return: SQLAlchemy Table object
+    @raises NoObjectError: If table doesn't exist or no columns found
+    @raises DriverConnectionError: If connection fails
+    """
+
+    # Oracle data type mapping for common types
+    oracle_type_mapping = {
+        "VARCHAR2": Text,
+        "CHAR": Text,
+        "NVARCHAR2": Text,
+        "NCHAR": Text,
+        "CLOB": Text,
+        "NCLOB": Text,
+        "NUMBER": REAL,
+        "BINARY_FLOAT": REAL,
+        "BINARY_DOUBLE": REAL,
+        "DATE": DateTime,
+        "TIMESTAMP": DateTime,
+        "TIMESTAMP(6)": DateTime,
+        "BLOB": Text,  # For simplicity
+        "RAW": Text,
+        "LONG": Text,
+        "LONG RAW": Text,
+        # PostGIS and spatial types
+        "SDO_GEOMETRY": Text,
+        "GEOMETRY": Text,
+        "GEOGRAPHY": Text,
+    }
+
+    try:
+        with engine.connect() as conn:
+            # Check if table/view exists in Oracle system views
+            exists_query = """
+            SELECT 1 FROM all_tables
+            WHERE UPPER(owner) = UPPER(:schema) AND UPPER(table_name) = UPPER(:table)
+            UNION ALL
+            SELECT 1 FROM all_views
+            WHERE UPPER(owner) = UPPER(:schema) AND UPPER(view_name) = UPPER(:table)
+            """
+
+            result = conn.execute(
+                text(exists_query),
+                {"schema": object_location_schema, "table": object_location},
+            )
+            if not result.fetchone():
+                raise NoObjectError(
+                    f"Table/view {object_location_schema}.{object_location} does not exist"
+                )
+
+            # Get column information from Oracle system views
+            columns_query = """
+            SELECT
+                column_name,
+                data_type,
+                nullable,
+                column_id
+            FROM all_tab_columns
+            WHERE UPPER(owner) = UPPER(:schema) AND UPPER(table_name) = UPPER(:table)
+            ORDER BY column_id
+            """
+
+            result = conn.execute(
+                text(columns_query),
+                {"schema": object_location_schema, "table": object_location},
+            )
+            columns_info = result.fetchall()
+
+            if not columns_info:
+                raise NoObjectError(
+                    f"No columns found for table {object_location_schema}.{object_location}"
+                )
+
+            # Create SQLAlchemy columns
+            sqlalchemy_columns = []
+            for col_info in columns_info:
+                col_name = col_info[0]
+                col_type = col_info[1]
+                is_nullable = col_info[2] == "Y"
+
+                # Map Oracle type to SQLAlchemy type
+                sqlalchemy_type = oracle_type_mapping.get(col_type, Text)
+                if col_type.startswith("NUMBER"):
+                    sqlalchemy_type = REAL
+
+                # Quote column name for Oracle compatibility and create lowercase key for API
+                quoted_col_name = quoted_name(col_name, quote=True)
+                lowercase_name = col_name.lower()
+
+                # Create column with quoted name for Oracle but lowercase key for API
+                column = Column(
+                    quoted_col_name,
+                    sqlalchemy_type,
+                    nullable=is_nullable,
+                    key=lowercase_name,
+                )
+
+                sqlalchemy_columns.append(column)
+
+            # Create the table
+            table = Table(
+                object_location,
+                meta_data,
+                *sqlalchemy_columns,
+                schema=object_location_schema,
+            )
+
+            logger.info(
+                "Successfully created Oracle table using ALL_TAB_COLUMNS fallback. Table: %s, Schema: %s, Columns: %d",
+                object_location,
+                object_location_schema,
+                len(sqlalchemy_columns),
+                extra={
+                    "fallback_success": True,
+                    "object_location": object_location,
+                    "object_location_schema": object_location_schema,
+                    "column_count": len(sqlalchemy_columns),
+                    "column_names": [col.name for col in sqlalchemy_columns],
+                },
+            )
+
+            return table
+
+    except sqlalchemy.exc.NoSuchTableError as err:
+        raise NoObjectError("Object not available.") from err
+    except (
+        sqlalchemy.exc.OperationalError,
+        sqlalchemy.exc.DatabaseError,
+        sqlalchemy.exc.ProgrammingError,
+    ) as err:
+        raise DriverConnectionError("Connection not available.") from err
+
+
+def _get_model(
+    *, engine: Engine, object_location: str, object_location_schema: str
+) -> Table:
     """
     Get SQLAlchemy model from object_location and object_location_schema.
-    # Note: if object_location is None meaning that original data is not in a database so is writen in a temporarily
-    #  table.
+
+    This function implements a graceful fallback approach to handle PostgreSQL reflection
+    issues. It first attempts standard SQLAlchemy reflection, then falls back to manual
+    table creation using information_schema queries if reflection fails.
+
+    Common reflection failures include:
+    - PostgreSQL "failed to find conversion function from unknown to text" errors
+    - Custom data types (PostGIS, enums) that confuse SQLAlchemy
+    - Version compatibility issues between SQLAlchemy and PostgreSQL
+    - System catalog permission or corruption issues
 
     @param engine: SQLAlchemy Engine instance to connect to the database.
     @param object_location: The name of the table or object location.
@@ -114,20 +449,141 @@ def _get_model(*, engine: Engine, object_location: str, object_location_schema: 
     """
 
     object_location = object_location or _TEMPORAL_TABLE_NAME
-    meta_data = MetaData(bind=engine)
+    meta_data = MetaData()
+
+    # Strategy 1: Try standard SQLAlchemy reflection
     try:
-        return Table(object_location, meta_data, autoload=True, autoload_with=engine, schema=object_location_schema)
+        return Table(
+            object_location,
+            meta_data,
+            autoload_with=engine,
+            schema=object_location_schema,
+        )
     except sqlalchemy.exc.NoSuchTableError as err:
-        logging.warning("Table does not exist. Table: %s, Schema: %s, Url: %s", object_location, object_location_schema,
-                        engine.url)
-        raise NoObjectError("Object not available.") from err
-    except (sqlalchemy.exc.OperationalError, sqlalchemy.exc.DatabaseError, sqlalchemy.exc.ProgrammingError) as err:
-        logging.warning("Connection not available. Url: %s, Error: %s", engine.url, err)
-        raise DriverConnectionError("Connection not available.") from err
+        # Check if this is Oracle and try fallback
+        if "oracle" in str(engine.url).lower():
+            logger.info(
+                "Oracle reflection failed, trying ALL_TAB_COLUMNS fallback. This is expected with some Oracle views. Table: %s, Schema: %s, Error: %s",
+                object_location,
+                object_location_schema,
+                str(err),
+                extra={
+                    "fallback_reason": "oracle_reflection_error",
+                    "object_location": object_location,
+                    "object_location_schema": object_location_schema,
+                    "engine_url": str(engine.url)[:50] + "...",
+                    "error_type": type(err).__name__,
+                },
+            )
+
+            # Strategy 2: Try fallback approach for Oracle
+            try:
+                return _create_table_from_oracle_system_views(
+                    engine, object_location, object_location_schema, meta_data
+                )
+            except Exception as fallback_err:
+                logger.error(
+                    "Fallback also failed for Oracle table. Table: %s, Schema: %s, Error: %s",
+                    object_location,
+                    object_location_schema,
+                    str(fallback_err),
+                    extra={
+                        "fallback_failed": True,
+                        "original_error": str(err),
+                        "fallback_error": str(fallback_err),
+                    },
+                )
+                raise NoObjectError("Object not available.") from err
+        else:
+            logger.warning(
+                "Table does not exist. Table: %s, Schema: %s, Url: %s",
+                object_location,
+                object_location_schema,
+                engine.url,
+            )
+            raise NoObjectError("Object not available.") from err
+    except (
+        sqlalchemy.exc.OperationalError,
+        sqlalchemy.exc.DatabaseError,
+        sqlalchemy.exc.ProgrammingError,
+    ) as err:
+        # Log reflection failure and attempt fallback for PostgreSQL and Oracle
+        if "postgresql" in str(engine.url).lower():
+            logger.info(
+                "PostgreSQL reflection failed, using information_schema fallback. This is expected with older PostgreSQL versions (9.x). Table: %s, Schema: %s, Error: %s",
+                object_location,
+                object_location_schema,
+                str(err),
+                extra={
+                    "fallback_reason": "postgresql_reflection_error",
+                    "object_location": object_location,
+                    "object_location_schema": object_location_schema,
+                    "engine_url": str(engine.url)[:50] + "...",
+                    "error_type": type(err).__name__,
+                },
+            )
+
+            # Strategy 2: Try fallback approach for PostgreSQL
+            try:
+                return _create_table_from_information_schema(
+                    engine, object_location, object_location_schema, meta_data
+                )
+            except Exception as fallback_err:
+                logger.error(
+                    "Fallback also failed for PostgreSQL table. Table: %s, Schema: %s, Error: %s",
+                    object_location,
+                    object_location_schema,
+                    str(fallback_err),
+                    extra={
+                        "fallback_failed": True,
+                        "original_error": str(err),
+                        "fallback_error": str(fallback_err),
+                    },
+                )
+                raise DriverConnectionError("Connection not available.") from err
+        elif "oracle" in str(engine.url).lower():
+            logger.info(
+                "Oracle reflection failed, using ALL_TAB_COLUMNS fallback. This is expected with some Oracle views and tables. Table: %s, Schema: %s, Error: %s",
+                object_location,
+                object_location_schema,
+                str(err),
+                extra={
+                    "fallback_reason": "oracle_reflection_error",
+                    "object_location": object_location,
+                    "object_location_schema": object_location_schema,
+                    "engine_url": str(engine.url)[:50] + "...",
+                    "error_type": type(err).__name__,
+                },
+            )
+
+            # Strategy 2: Try fallback approach for Oracle
+            try:
+                return _create_table_from_oracle_system_views(
+                    engine, object_location, object_location_schema, meta_data
+                )
+            except Exception as fallback_err:
+                logger.error(
+                    "Fallback also failed for Oracle table. Table: %s, Schema: %s, Error: %s",
+                    object_location,
+                    object_location_schema,
+                    str(fallback_err),
+                    extra={
+                        "fallback_failed": True,
+                        "original_error": str(err),
+                        "fallback_error": str(fallback_err),
+                    },
+                )
+                raise DriverConnectionError("Connection not available.") from err
+        else:
+            logging.warning(
+                "Connection not available. Url: %s, Error: %s", engine.url, err
+            )
+            raise DriverConnectionError("Connection not available.") from err
 
 
-def get_resource_columns(uri: str, object_location: Optional[str],
-                         object_location_schema: Optional[str]) -> Iterable[Dict[str, str]]:
+def get_resource_columns(
+    uri: str, object_location: Optional[str], object_location_schema: Optional[str]
+) -> Iterable[Dict[str, str]]:
     """From resource get a list of dictionaries with column name and data type.
 
     @param cache: if not exists connection save on cache.
@@ -135,79 +591,143 @@ def get_resource_columns(uri: str, object_location: Optional[str],
     """
     engine = _get_engine(uri)
     try:
-        model = _get_model(engine=engine, object_location=object_location,
-                           object_location_schema=object_location_schema)
+        model = _get_model(
+            engine=engine,
+            object_location=object_location,
+            object_location_schema=object_location_schema,
+        )
     finally:
         engine.dispose()
-    data = ({"COLUMN_NAME": column.description, "DATA_TYPE": str(column.type)} for column in model.columns)
+
+    # Convert Oracle column names to lowercase for consistency
+    from urllib.parse import urlparse
+
+    uri_parsed = urlparse(uri)
+    is_oracle = uri_parsed.scheme == "oracle+oracledb" or "oracle" in uri_parsed.scheme
+
+    data = []
+    for column in model.columns:
+        column_name = column.name
+        # For Oracle databases, convert column names to lowercase
+        if is_oracle:
+            column_name = column_name.lower()
+
+        data.append({"COLUMN_NAME": column_name, "DATA_TYPE": str(column.type)})
+
     return data
 
 
-def validate_resource(*, uri: str, object_location: Optional[str],
-                      object_location_schema: Optional[str]) -> Iterable[Dict[str, Any]]:
+def validate_resource(
+    *,
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int] = None,
+) -> Iterable[Dict[str, Any]]:
     """Validate if resource is available . Return data of resource, a iterable of
     dictionaries."""
-    _validate_max_rows_allowed(uri, object_location, object_location_schema=object_location_schema)
-    return get_resource_data(uri=uri,
-                             object_location=object_location,
-                             object_location_schema=object_location_schema,
-                             filters={},
-                             like="",
-                             fields=[],
-                             sort=[])
+
+    def _validate_resource_internal():
+        _validate_max_rows_allowed(
+            uri,
+            object_location,
+            object_location_schema=object_location_schema,
+            timeout=timeout,
+        )
+        return get_resource_data(
+            uri=uri,
+            object_location=object_location,
+            object_location_schema=object_location_schema,
+            filters={},
+            like="",
+            fields=[],
+            sort=[],
+            timeout=timeout,
+        )
+
+    # For Oracle connections, timeout is handled at the connection level
+    return _validate_resource_internal()
 
 
-def validate_resource_mssql(*, uri: str, object_location: Optional[str],
-                            object_location_schema: Optional[str]) -> Iterable[Dict[str, Any]]:
+def validate_resource_mssql(
+    *, uri: str, object_location: Optional[str], object_location_schema: Optional[str]
+) -> Iterable[Dict[str, Any]]:
     """Validate if resource is available . Return data of resource, a iterable of
-   dictionaries."""
-
-    fields = []
-    sort = []
-
+    dictionaries."""
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
-    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    model = _get_model(
+        engine=engine,
+        object_location=object_location,
+        object_location_schema=object_location_schema,
+    )
 
-    column_dict = {column.name: column for column in model.columns}
-    columns = _get_columns(column_dict, fields)
+    column_dict = {column.key: column for column in model.columns}
+    columns = _get_columns(column_dict, [])
     session = session_maker()
 
-    data = session.query(model).order_by(*_get_sort_methods(column_dict, sort)).with_entities(
-        *[model.c[col.name].label(col.name) for col in model.columns]).all()
+    data = (
+        session.query(model)
+        .order_by(*_get_sort_methods(column_dict, []))
+        .with_entities(*[model.c[col.key].label(col.key) for col in model.columns])
+        .all()
+    )
 
     session.close()
     engine.dispose()
 
-    return (dict(zip([column.name for column in columns], row)) for row in data)
+    return (dict(zip([column.key for column in columns], row)) for row in data)
 
 
-def validator_max_excel_allowed(uri: str,
-                                object_location: Optional[str],
-                                object_location_schema: Optional[str],
-                                filters: Dict[str, str],
-                                like: str,
-                                fields: List[str],
-                                sort: List[OrderBy],
-                                limit: Optional[int] = None,
-                                offset: int = 0):
+def validator_max_excel_allowed(
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    filters: Dict[str, str],
+    like: str,
+    fields: List[str],
+    sort: List[OrderBy],
+    limit: Optional[int] = None,
+    offset: int = 0,
+):
     """Validate if resource  have less rows than allowed."""
 
-    data = get_session_data(uri, object_location, object_location_schema, filters, like, fields, sort, limit, offset)
+    data = get_session_data(
+        uri,
+        object_location,
+        object_location_schema,
+        filters,
+        like,
+        fields,
+        sort,
+        limit,
+        offset,
+    )
     return len(data) <= _RESOURCE_MAX_ROWS_EXCEL
 
 
-def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_location_schema: Optional[str]):
+def _validate_max_rows_allowed(
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int] = None,
+):
     """Validate if resource is aviable."""
-    engine = _get_engine(uri)
+    engine = _get_engine(uri, timeout=timeout)
     session_maker = sessionmaker(bind=engine)
 
-    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    model = _get_model(
+        engine=engine,
+        object_location=object_location,
+        object_location_schema=object_location_schema,
+    )
 
     session = session_maker()
     try:
-        num_rows = session.query(*[model.c[col.name].label(col.name) for col in model.columns]).count()
+        session.query(
+            *[model.c[col.key].label(col.key) for col in model.columns]
+        ).count()
     except sqlalchemy.exc.ProgrammingError as err:
         logging.exception("Object not available.")
         raise NoObjectError("Object not available.") from err
@@ -218,45 +738,54 @@ def _validate_max_rows_allowed(uri: str, object_location: Optional[str], object_
 
 # Add feature to sanitize text include control characters
 def sanitize_control_charcters(text):
-    if re.search(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]', str(text)):
-        text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]', "", text)
+    if re.search(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]", str(text)):
+        text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]", "", text)
     try:
-        text = text.decode('utf-8')
-    except:
+        text = text.decode("utf-8")
+    except Exception:
         pass
     if isinstance(text, str):
         text = text.strip()
     return text
 
 
-def get_GeoJson_resource(uri: str, object_location: Optional[str],
-                         object_location_schema: Optional[str]) -> Boolean:
+def get_GeoJson_resource(
+    uri: str, object_location: Optional[str], object_location_schema: Optional[str]
+) -> Boolean:
     """From resource return if is GeoJson resource
 
     @param cache: if not exists connection save on cache.
     @return: True or False GeoJosn Resource
     """
     engine = _get_engine(uri)
-    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    model = _get_model(
+        engine=engine,
+        object_location=object_location,
+        object_location_schema=object_location_schema,
+    )
     geoJson = False
 
     for column in model.columns:
-        if str(column.type).startswith("geometry") or str(column.type).startswith("geography"):
+        if str(column.type).startswith("geometry") or str(column.type).startswith(
+            "geography"
+        ):
             geoJson = True
 
     engine.dispose()
-    return (geoJson)
+    return geoJson
 
 
-def get_resource_data_feature(uri: str,
-                              object_location: Optional[str],
-                              object_location_schema: Optional[str],
-                              filters: Dict[str, str],
-                              like: str,
-                              fields: List[str],
-                              sort: List[OrderBy],
-                              limit: Optional[int] = None,
-                              offset: int = 0):
+def get_resource_data_feature(
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    filters: Dict[str, str],
+    like: str,
+    fields: List[str],
+    sort: List[OrderBy],
+    limit: Optional[int] = None,
+    offset: int = 0,
+):
     """data like GeoJSON .Encoding data a variety of geographic data structures."""
     """Data like Feature_Collection_"""
 
@@ -265,9 +794,13 @@ def get_resource_data_feature(uri: str,
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
 
-    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
-    column_dict = {column.name: column for column in model.columns}
-    columns = _get_columns(column_dict, fields)
+    model = _get_model(
+        engine=engine,
+        object_location=object_location,
+        object_location_schema=object_location_schema,
+    )
+    column_dict = {column.key: column for column in model.columns}
+    # columns = _get_columns(column_dict, fields)
     filters_args = _process_like_filter(like, model)
     session = session_maker()
 
@@ -279,30 +812,47 @@ def get_resource_data_feature(uri: str,
     propertiesField = []
 
     for i, col in enumerate(model.columns):
-        if str(col.type).startswith("geography") or str(col.type).startswith("geometry"):
+        if str(col.type).startswith("geography") or str(col.type).startswith(
+            "geometry"
+        ):
             Geom = model.c[col.name].label(col.name)
         else:
             propertiesField.append(col.name)
             propertiesCol.append(model.c[col.name].label(col.name))
 
-    # Get A JSon Properties ( not possible json_build_object PostgreSQL 9.2.24 on x86_64-unknown-linux-gnu, compiled by gcc (GCC) 4.8.5 20150623 (Red Hat 4.8.5-16), 64-bit
-    # version of Postgress not allowed _ Postgres and A GeoJson  only _ https://www.postgresql.org/docs/9.2/functions-json.html" 
+    # Get A JSon Properties ( not possible json_build_object PostgreSQL 9.2.24 on x86_64-unknown-linux-gnu,
+    # compiled by gcc (GCC) 4.8.5 20150623 (Red Hat 4.8.5-16), 64-bit
+    # version of Postgress not allowed _ Postgres and A GeoJson  only _
+    # https://www.postgresql.org/docs/9.2/functions-json.html"
     # https://www.postgresql.org/docs/current/functions-json.html -> to convert columns to a json in a query
     try:
-        if parsed.scheme in ['mssql+pyodbc']:
-            data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(
-                **filters).filter(*filters_args).all()
+        if parsed.scheme in ["mssql+pyodbc"]:
+            data = (
+                session.query(
+                    *propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")
+                )
+                .filter_by(**filters)
+                .filter(*filters_args)
+                .all()
+            )
         else:
-            data = session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")).filter_by(
-                **filters).filter(*filters_args).order_by(*_get_sort_methods(column_dict, sort)).offset(offset).limit(
-                limit).all()
+            data = (
+                session.query(
+                    *propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")
+                )
+                .filter_by(**filters)
+                .filter(*filters_args)
+                .order_by(*_get_sort_methods(column_dict, sort))
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
     except sqlalchemy.exc.ProgrammingError as err:
         raise NoObjectError("Object not available.") from err
     columnsProperties = _get_columns(column_dict, propertiesField)
 
     # Serializar Feature Collection
     featuresTot = []
-    re_decimal = r"\.0*$"  # allow e.g. '1.0000000000' as an int, but not '1.2
     for item in data:
         item = list(item)
         geometry = item.pop()
@@ -329,8 +879,8 @@ def get_resource_data_feature(uri: str,
                 r = column.isoformat()
                 if column.microsecond:
                     r = r[:23] + r[26:]
-                if r.endswith('+00:00'):
-                    r = r[:-6] + 'Z'
+                if r.endswith("+00:00"):
+                    r = r[:-6] + "Z"
                 item[i] = r
             elif isinstance(column, date):
                 item[i] = column.isoformat()
@@ -349,9 +899,10 @@ def get_resource_data_feature(uri: str,
 
         # create feature
         featureType = {
-            'type': 'Feature',
-            'geometry': json.loads(geometry),
-            'properties': properties}
+            "type": "Feature",
+            "geometry": json.loads(geometry),
+            "properties": properties,
+        }
         featuresTot.append(featureType)
 
     wrapped = {"type": "FeatureCollection", "features": featuresTot}
@@ -362,15 +913,18 @@ def get_resource_data_feature(uri: str,
     return wrapped
 
 
-def get_session_data(uri: str,
-                     object_location: Optional[str],
-                     object_location_schema: Optional[str],
-                     filters: Dict[str, Union[str, dict]],
-                     like: str,
-                     fields: List[str],
-                     sort: List[OrderBy],
-                     limit: Optional[int] = None,
-                     offset: int = 0):
+def get_session_data(
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    filters: Dict[str, Union[str, dict]],
+    like: str,
+    fields: List[str],
+    sort: List[OrderBy],
+    limit: Optional[int] = None,
+    offset: int = 0,
+    timeout: Optional[int] = None,
+):
     """
     Retrieve data from a resource based on the provided parameters.
 
@@ -381,7 +935,8 @@ def get_session_data(uri: str,
     @param uri: The URI of the resource.
     @param object_location: The name of the table or object location.
     @param object_location_schema: The schema of the object location.
-    @param filters: A dictionary of filters to apply to the query. Each key is a field name, and the value can be a string or a dictionary specifying an operator and value.
+    @param filters: A dictionary of filters to apply to the query. Each key is a field name, and the value can be
+                   a string or a dictionary specifying an operator and value.
     @param like: A string for LIKE-based filtering.
     @param fields: A list of field names to include in the result.
     @param sort: A list of OrderBy objects to sort the result.
@@ -394,31 +949,41 @@ def get_session_data(uri: str,
     @raises sqlalchemy.exc.ProgrammingError: If there is a programming error in the query.
     """
     # sqlalchemy.exc.CompileError: MSSQL requires an order_by when using an OFFSET or a non-simple LIMIT clause
-    # (pyodbc.ProgrammingError) ('42000', '[42000] [FreeTDS][SQL Server]The text, ntext, and image data types cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')
+    # (pyodbc.ProgrammingError) ('42000', '[42000] [FreeTDS][SQL Server]The text, ntext, and image data types
+    # cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')
     # mssql no order no limit no offset
 
-    engine = _get_engine(uri)
+    engine = _get_engine(uri, timeout=timeout)
     session_maker = sessionmaker(bind=engine)
     parsed = urlparse(uri)
 
-    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    model = _get_model(
+        engine=engine,
+        object_location=object_location,
+        object_location_schema=object_location_schema,
+    )
 
-    column_dict = {column.name: column for column in model.columns}
+    column_dict = {column.key: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
     filters_args = []
     like_filters = _process_like_filter(like, model)
     filters, filters_args = _get_filter_operators(filters, filters_args)
-    if 'oracle' in parsed.scheme:
+    if "oracle" in parsed.scheme:
         filters = _process_filters_oracle_dates(filters)
     filters_args = process_filters_args(filters_args, parsed.scheme)
     filters_args.extend(like_filters)
 
     session = session_maker()
 
-    if parsed.scheme in ['mssql+pyodbc']:
+    if parsed.scheme in ["mssql+pyodbc"]:
         try:
-            data = session.query(model).filter_by(**filters).filter(*filters_args).with_entities(
-                *[model.c[col.name].label(col.name) for col in columns]).all()
+            data = (
+                session.query(model)
+                .filter_by(**filters)
+                .filter(*filters_args)
+                .with_entities(*[model.c[col.key].label(col.key) for col in columns])
+                .all()
+            )
         except sqlalchemy.exc.ProgrammingError as err:
             raise NoObjectError("Object not available.") from err
         finally:
@@ -426,9 +991,16 @@ def get_session_data(uri: str,
             engine.dispose()
     else:
         try:
-            data = session.query(model).filter_by(**filters).filter(*filters_args).order_by(
-                *_get_sort_methods(column_dict, sort)).with_entities(
-                *[model.c[col.name].label(col.name) for col in columns]).offset(offset).limit(limit).all()
+            data = (
+                session.query(model)
+                .filter_by(**filters)
+                .filter(*filters_args)
+                .order_by(*_get_sort_methods(column_dict, sort))
+                .with_entities(*[model.c[col.key].label(col.key) for col in columns])
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
         except sqlalchemy.exc.ProgrammingError as err:
             logger.warning("Object not available. - %s ", err)
             raise ValidationError("Object not available.") from err
@@ -445,7 +1017,7 @@ def get_session_data(uri: str,
             session.close()
             engine.dispose()
 
-    return (data)
+    return data
 
 
 def _process_filters_oracle_dates(filters):
@@ -461,8 +1033,11 @@ def _process_filters_oracle_dates(filters):
     return filters
 
 
-def _get_filter_operators(filters: Dict[str, Union[str, dict]], filters_args: list) -> Tuple[dict, list]:
-    """Takes operator clauses from filters. If it has a dict or a list, it adds it to result and removes it from filters."""
+def _get_filter_operators(
+    filters: Dict[str, Union[str, dict]], filters_args: list
+) -> Tuple[dict, list]:
+    """Takes operator clauses from filters. If it has a dict or a list, it adds it to result and removes it from
+    filters."""
     changed_filters = []
     for field in filters:
         if isinstance(filters[field], dict) or isinstance(filters[field], list):
@@ -472,44 +1047,64 @@ def _get_filter_operators(filters: Dict[str, Union[str, dict]], filters_args: li
         filters.pop(field)
     return filters, filters_args
 
-def get_resource_data(*,
-                      uri: str,
-                      object_location: Optional[str],
-                      object_location_schema: Optional[str],
-                      filters: Dict[str, Union[str, dict]],
-                      like: str,
-                      fields: List[str],
-                      sort: List[OrderBy],
-                      limit: Optional[int] = None,
-                      offset: int = 0) -> Iterable[Dict[str, Any]]:
+
+def get_resource_data(
+    *,
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    filters: Dict[str, Union[str, dict]],
+    like: str,
+    fields: List[str],
+    sort: List[OrderBy],
+    limit: Optional[int] = None,
+    offset: int = 0,
+    timeout: Optional[int] = None,
+) -> Iterable[Dict[str, Any]]:
     """Return a iterable of dictionaries with data of resource."""
 
-    re_decimal = r"\.0\s*$"  # allow e.g. '1.0' as an int, but not '1.2
-    data = get_session_data(uri, object_location, object_location_schema, filters, like, fields, sort, limit, offset)
+    data = get_session_data(
+        uri,
+        object_location,
+        object_location_schema,
+        filters,
+        like,
+        fields,
+        sort,
+        limit,
+        offset,
+        timeout,
+    )
 
-    """" When no typing objects are present, as when executing plain SQL strings, adefault "outputtypehandler" is present which will generally return numeric
-    values which specify precision and scale as Python ``Decimal`` objects default "outputtypehandler" is present which will generally return numeric
-    values which specify precision and scale as Python ``Decimal`` objects.  To disable this coercion to decimal for performance reasons, pass the flag
-    ``coerce_to_decimal=False`` to :func:`_sa.create_engine`:: engine = create_engine("oracle+cx_oracle://dsn", coerce_to_decimal=False)
-    The ``coerce_to_decimal`` flag only impacts the results of plain string SQL statements that are not otherwise associated with a :class:`.Numeric`
-    SQLAlchemy type (or a subclass of such).
-    .. versionchanged:: 1.2  The numeric handling system for cx_Oracle has been reworked to take advantage of newer cx_Oracle features as well 
-    as better integration of outputtypehandlers. """
+    """ When no typing objects are present, as when executing plain SQL strings, adefault "outputtypehandler" is
+    present which will generally return numeric values which specify precision and scale as Python ``Decimal`` objects
+    default "outputtypehandler" is present which will generally return numeric values which specify precision and scale
+    as Python ``Decimal`` objects.  To disable this coercion to decimal for performance reasons, pass the flag
+    ``coerce_to_decimal=False`` to :func:`_sa.create_engine`:: engine = create_engine("oracle+cx_oracle://dsn",
+    coerce_to_decimal=False)
+    The ``coerce_to_decimal`` flag only impacts the results of plain string SQL statements that are not otherwise
+    associated with a :class:`.Numeric` SQLAlchemy type (or a subclass of such).
+    .. versionchanged:: 1.2  The numeric handling system for Oracle has been reworked to take advantage of newer
+    oracledb features as well as better integration of outputtypehandlers. """
 
     dataTemp = []
     dataTempTuplas = []
 
     for item in data:
         for column in item:
-            if (isinstance(column, (decimal.Decimal, uuid.UUID, Promise))) or (isinstance(column, float)) or (
-                    isinstance(column, Numeric)):
-                parte_decimal, parte_entera = math.modf(column)
+            if isinstance(column, uuid.UUID):
+                # Handle UUID objects by converting to string
+                dataTempTuplas.append(str(column))
+            elif (
+                (isinstance(column, (decimal.Decimal, Promise)))
+                or (isinstance(column, float))
+                or (isinstance(column, Numeric))
+            ):
+                parte_decimal, _ = math.modf(column)
                 if (parte_decimal) == 0.0:
                     dataTempTuplas.append(int(column))
                 else:
                     dataTempTuplas.append(sanitize_control_charcters(column))
-
-
 
             else:
                 dataTempTuplas.append(sanitize_control_charcters(column))
@@ -523,21 +1118,26 @@ def get_resource_data(*,
 
     engine = _get_engine(uri)
     session_maker = sessionmaker(bind=engine)
-    model = _get_model(engine=engine, object_location=object_location, object_location_schema=object_location_schema)
+    model = _get_model(
+        engine=engine,
+        object_location=object_location,
+        object_location_schema=object_location_schema,
+    )
 
-    column_dict = {column.name: column for column in model.columns}
+    column_dict = {column.key: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
     session = session_maker()
     session.close()
     engine.dispose()
 
-    return (dict(zip([column.name for column in columns], row)) for row in data)
+    return (dict(zip([column.key for column in columns], row)) for row in data)
 
 
 def update_resource_size(resource_id, registries, size):
     try:
-        resource = ResourceConfig.objects.select_related().get(id=resource_id, enabled=True,
-                                                               connector_config__enabled=True)
+        resource = ResourceConfig.objects.select_related().get(
+            id=resource_id, enabled=True, connector_config__enabled=True
+        )
     except ResourceConfig.DoesNotExist as err:
         raise ValidationError("Resource not exists or is not available", 400) from err
 
@@ -546,13 +1146,15 @@ def update_resource_size(resource_id, registries, size):
     rsc.save()
 
 
-def _get_columns(columns_dict: Dict[str, Column], column_names: List[str]) -> Iterable[Column]:
+def _get_columns(
+    columns_dict: Dict[str, Column], column_names: List[str]
+) -> Iterable[Column]:
     """Get SQLAlchemy column instances from column names."""
     if column_names:
         try:
             return [columns_dict[column_name] for column_name in column_names]
         except KeyError as err:
-            raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
+            raise FieldNoExistsError(f"Field: {err.args[0]} not exists.") from err
     else:
         return columns_dict.values()
 
@@ -564,7 +1166,9 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
         try:
             column = column_dict[item.field]
         except KeyError as err:
-            raise SortFieldNoExistsError(message=f'Sort field: {err.args[0]} not exists.') from err
+            raise SortFieldNoExistsError(
+                message=f"Sort field: {err.args[0]} not exists."
+            ) from err
         if item.ascending:
             sort_methods.append(column)
         else:
@@ -580,25 +1184,112 @@ def _process_like_filter(args: str, model: Table) -> list:
         try:
             list_args = args.split(",")
             for value in list_args:
-                if re.search(r'[{/}]', (value)):
-                    value = re.sub(r'[{/}]', " ", (value))
-                if re.search(r'[:]', (value)):
-                    value = re.sub(r'[:]', ",", (value))
+                if re.search(r"[{/}]", (value)):
+                    value = re.sub(r"[{/}]", " ", (value))
+                if re.search(r"[:]", (value)):
+                    value = re.sub(r"[:]", ",", (value))
                 key = eval(value)[0]
-                filters.append(model.columns[key].ilike(f'%{eval(value)[1]}%'))
+                filters.append(model.columns[key].ilike(f"%{eval(value)[1]}%"))
         except KeyError as err:
-            raise FieldNoExistsError(f'Field: {err.args[0]} not exists.') from err
+            raise FieldNoExistsError(f"Field: {err.args[0]} not exists.") from err
     return filters
 
 
-def validate_uri(uri: str) -> None:
+class NetworkConnectionError(Exception):
+    """Network connectivity check failed."""
+
+
+def check_network_connectivity(uri: str, timeout: Optional[int] = None) -> bool:
+    """
+    Perform a fast TCP connectivity check before attempting database connection.
+
+    Args:
+        uri: The database URI to check
+        timeout: Timeout in seconds for network check (uses config default if None)
+
+    Returns:
+        bool: True if network is reachable, False otherwise
+
+    Raises:
+        NetworkConnectionError: If network connectivity fails
+    """
+    if timeout is None:
+        # Get timeout from config if available
+        try:
+            from gaodcore_project.config import Config
+
+            config = Config.get_config()
+            timeout = config.common_config.health_monitoring.network_timeout_seconds
+        except (ImportError, AttributeError):
+            timeout = 3  # Fallback default
+
+    uri_parsed = urlparse(uri)
+
+    # Handle different URI schemes
+    if uri_parsed.scheme in _HTTP_SCHEMAS:
+        # For HTTP/HTTPS APIs, the network check is essentially the same as the full check
+        # so we skip the network pre-check for APIs
+        return True
+
+    if uri_parsed.scheme not in _DATABASE_SCHEMAS:
+        # Unknown scheme, skip network check
+        return True
+
+    # Extract host and port from database URI
+    host = uri_parsed.hostname
+    port = uri_parsed.port
+
+    if not host:
+        # No host specified (e.g., SQLite), skip network check
+        return True
+
+    # Set default ports for database schemes
+    if port is None:
+        port_map = {
+            "postgresql": 5432,
+            "mysql": 3306,
+            "mssql": 1433,
+            "mssql+pyodbc": 1433,
+            "oracle+oracledb": 1521,
+            "oracle": 1521,
+        }
+        port = port_map.get(uri_parsed.scheme, 5432)
+
+    try:
+        # Attempt TCP connection
+        with socket.create_connection((host, port), timeout=timeout):
+            logger.debug("Network connectivity check passed for %s:%s", host, port)
+            return True
+    except (socket.timeout, socket.gaierror, ConnectionRefusedError, OSError) as e:
+        logger.warning(
+            "Network connectivity check failed for %s:%s - %s", host, port, str(e)
+        )
+        raise NetworkConnectionError(
+            f"Network connectivity failed for {host}:{port}: {str(e)}"
+        ) from e
+
+
+def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
     """Validate if URI is available as resource."""
-    engine = _get_engine(uri)
+    # Perform network connectivity pre-check for database URIs
+    try:
+        check_network_connectivity(uri)
+    except NetworkConnectionError as err:
+        # Network connectivity failed - don't attempt database connection
+        logger.warning(
+            "Network connectivity check failed for URI: %s... - %s", uri[:50], str(err)
+        )
+        raise DriverConnectionError("Network connectivity failed.") from err
+
+    engine = _get_engine(uri, timeout=timeout)
     try:
         with engine.connect() as _:
             pass
     except sqlalchemy.exc.DatabaseError as err:
-        logging.exception("Connection not available.")
+        # Log connection failure as warning - expected in health checks
+        logger.warning(
+            "Connection not available for URI: %s... - %s", uri[:50], str(err)
+        )
         raise DriverConnectionError("Connection not available.") from err
 
 
@@ -606,12 +1297,12 @@ def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
     if not charset:
         # charset = cchardet.detect(data)['encoding']
         # pasamos a charset 8 porque sino identifica como gb18030 - o ISO15 que no es capaz de decodificar
-        charset = 'utf-8'
+        charset = "utf-8"
     print(charset)
     try:
-        data = data.decode(charset, 'ignore')
+        data = data.decode(charset, "ignore")
     except UnicodeDecodeError:
-        data = data.decode('utf-8', 'ignore')
+        data = data.decode("utf-8", "ignore")
     if data:
         dialect = csv.Sniffer().sniff(data)
     else:
@@ -620,16 +1311,22 @@ def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
     return list(csv.DictReader(StringIO(data), dialect=dialect))
 
 
-def _get_table_from_dict(data: List[Dict[str, Any]], engine: Engine, meta_data: MetaData) -> Table:
+def _get_table_from_dict(
+    data: List[Dict[str, Any]], engine: Engine, meta_data: MetaData
+) -> Table:
     fields_to_check = list(data[0].keys())
     fields_checked = []
 
-    field_types = OrderedDict([(field, Column(field, Text)) for field in fields_to_check])
+    field_types = OrderedDict(
+        [(field, Column(field, Text)) for field in fields_to_check]
+    )
     for row in data:
         for field_to_check in fields_to_check:
             value = row.get(field_to_check)
             if value and field_to_check not in fields_checked:
-                field_types[field_to_check] = Column(field_to_check, _SQLALCHEMY_MAP_TYPE[type(value)])
+                field_types[field_to_check] = Column(
+                    field_to_check, _SQLALCHEMY_MAP_TYPE[type(value)]
+                )
                 fields_checked.append(field_to_check)
         for field_checked in fields_checked:
             fields_to_check.remove(field_checked)
@@ -637,19 +1334,21 @@ def _get_table_from_dict(data: List[Dict[str, Any]], engine: Engine, meta_data: 
         if not fields_to_check:
             break
 
-    table = Table(_TEMPORAL_TABLE_NAME, meta_data, *field_types.values(), prefixes=['TEMPORARY'])
+    table = Table(
+        _TEMPORAL_TABLE_NAME, meta_data, *field_types.values(), prefixes=["TEMPORARY"]
+    )
     meta_data.create_all(engine)
     return table
 
 
-def _get_engine_from_api(uri: str) -> Engine:
+def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
     try:
-        with urllib.request.urlopen(uri) as response:
+        with urllib.request.urlopen(uri, timeout=timeout) as response:
             if response.getcode() == HTTPStatus.OK:
-                split_content_type = response.info()['Content-Type'].split(';')
+                split_content_type = response.info()["Content-Type"].split(";")
                 mime_type = split_content_type[0]
                 if len(split_content_type) > 1:
-                    charset = split_content_type[1].split('=')[1]
+                    charset = split_content_type[1].split("=")[1]
                 else:
                     charset = None
 
@@ -660,21 +1359,26 @@ def _get_engine_from_api(uri: str) -> Engine:
                 else:
                     raise MimeTypeError()
             else:
-                raise DriverConnectionError('The url could not be reached.')
+                raise DriverConnectionError("The url could not be reached.")
     except (HTTPError, URLError) as err:
-        raise DriverConnectionError('The url could not be reached.') from err
+        raise DriverConnectionError("The url could not be reached.") from err
     if data:
         max_key = max(data, key=len).keys()
         for item in data:
             if len(max_key) > len(item.keys()):
                 for k in max_key:
                     item.setdefault(k, None)
-    engine = create_engine("sqlite:///:memory:", echo=True, future=True)
+    engine = create_engine("sqlite:///:memory:", echo=False, future=True)
     metadata = MetaData()
     if data:
         table = _get_table_from_dict(data, engine, metadata)
     else:
-        table = Table(_TEMPORAL_TABLE_NAME, metadata, Column('id', Integer, primary_key=True), prefixes=['TEMPORARY'])
+        table = Table(
+            _TEMPORAL_TABLE_NAME,
+            metadata,
+            Column("id", Integer, primary_key=True),
+            prefixes=["TEMPORARY"],
+        )
         metadata.create_all(engine)
     if data:
         session_maker = sessionmaker(bind=engine)
@@ -685,10 +1389,56 @@ def _get_engine_from_api(uri: str) -> Engine:
     return engine
 
 
-def _get_engine(uri: str) -> Engine:
+# Global flag to track Oracle client initialization
+_oracle_client_initialized = False
+
+
+def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
+    global _oracle_client_initialized
     uri_parsed = urlparse(uri)
+
+    # Handle Oracle URI conversion from oracle:// to oracle+oracledb://
+    if uri_parsed.scheme == "oracle":
+        # Convert oracle:// to oracle+oracledb:// for the new oracledb package
+        uri = uri.replace("oracle://", "oracle+oracledb://", 1)
+        uri_parsed = urlparse(uri)
+
+    # Handle MSSQL URI conversion from mssql:// to mssql+pyodbc://
+    if uri_parsed.scheme == "mssql":
+        # Convert mssql:// to mssql+pyodbc:// for pyodbc driver compatibility
+        uri = uri.replace("mssql://", "mssql+pyodbc://", 1)
+        uri_parsed = urlparse(uri)
+
     if uri_parsed.scheme in _DATABASE_SCHEMAS:
-        return create_engine(uri, max_identifier_length=128)
+        # Special handling for Oracle to enable thick mode for older password verifiers
+        if uri_parsed.scheme == "oracle+oracledb" and not _oracle_client_initialized:
+            try:
+                import oracledb
+
+                # Initialize thick mode for compatibility with older Oracle versions
+                oracledb.init_oracle_client()
+                _oracle_client_initialized = True
+                logger.info("Oracle thick mode initialized successfully")
+            except Exception as e:
+                logger.warning(f"Could not initialize Oracle thick mode: {e}")
+                # Fall back to thin mode (default behavior)
+
+        # Configure database-specific timeout parameters
+        connect_args = {}
+        if timeout is not None:
+            if uri_parsed.scheme in ["postgresql", "mysql"]:
+                connect_args["connect_timeout"] = timeout
+            elif uri_parsed.scheme == "oracle+oracledb":
+                # Oracle oracledb driver doesn't support timeout in connect_args
+                # Timeout is typically handled at the TNS level
+                pass
+            elif uri_parsed.scheme in ["mssql+pyodbc", "mssql"]:
+                connect_args["timeout"] = timeout
+            # SQLite doesn't support timeout parameter - file operations are typically fast
+
+        return create_engine(uri, max_identifier_length=128, connect_args=connect_args)
     if uri_parsed.scheme in _HTTP_SCHEMAS:
-        return _get_engine_from_api(uri)
-    raise NotImplementedSchemaError(f'Schema: "{uri_parsed.scheme}" is not implemented.')
+        return _get_engine_from_api(uri, timeout=timeout)
+    raise NotImplementedSchemaError(
+        f'Schema: "{uri_parsed.scheme}" is not implemented.'
+    )

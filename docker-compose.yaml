@@ -13,8 +13,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-gaodcore}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-gaodcore}
       - POSTGRES_DB=${POSTGRES_DB:-ga_od_core}
-      - "API_BASE_URL=https://desopendata.aragon.es/GA_OD_Core"
       - "DJANGO_LOG_LEVEL=${DJANGO_LOG_LEVEL:-INFO}"
+      # API_BASE_URL removed - using automatic server detection
     configs:
       - source: gaodcore-config
         target: /etc/gaodcore/config.yaml
@@ -35,8 +35,8 @@ services:
       dockerfile: Dockerfile
     container_name: postgres-gaodcore
     restart: always
-#    ports:
-#      - "5432:5432"
+    #ports:
+    #  - "5432:5432"
     volumes:
       - postgres_storage:/var/lib/postgresql/data
     environment:

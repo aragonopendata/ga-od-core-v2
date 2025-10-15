@@ -1,0 +1,1143 @@
+"""
+Health check logic for GA-OD-Core-v2.
+
+This module provides functions to check the health of connectors and resources
+by reusing existing validation logic and implementing async health checks.
+"""
+
+import asyncio
+import logging
+import time
+from datetime import timedelta
+from typing import List, Optional
+
+from django.utils import timezone
+from django.db import transaction
+from django.db import models
+
+from connectors import (
+    validate_uri,
+    get_resource_data,
+    DriverConnectionError,
+    NoObjectError,
+)
+from gaodcore_manager.models import ConnectorConfig, ResourceConfig
+from gaodcore_project.config import Config
+from utils import gather_limited
+from .models import HealthCheckResult, HealthCheckAlert, ResourceHealthCheckResult
+
+
+logger = logging.getLogger(__name__)
+
+
+def check_connector_health_sync(
+    connector: ConnectorConfig, timeout: Optional[int] = None
+) -> HealthCheckResult:
+    """
+    Perform health check on a single connector (synchronous version).
+
+    Args:
+        connector: The ConnectorConfig instance to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        HealthCheckResult: The result of the health check
+    """
+    logger.info("Starting health check for connector: %s", connector.name)
+    start_time = time.time()
+
+    # Get timeout from config if not provided
+    if timeout is None:
+        config = Config.get_config()
+        timeout = config.common_config.health_monitoring.timeout_seconds
+
+    try:
+        # Run validation synchronously
+        validate_uri(connector.uri, timeout=timeout)
+
+        response_time = int((time.time() - start_time) * 1000)
+
+        result = HealthCheckResult(
+            connector=connector, is_healthy=True, response_time_ms=response_time
+        )
+
+        logger.info(
+            "Health check passed for connector: %s (%sms)",
+            connector.name,
+            response_time,
+        )
+        return result
+
+    except DriverConnectionError as e:
+        response_time = int((time.time() - start_time) * 1000)
+
+        # Distinguish between network and database connection errors
+        error_type = "connection_error"
+        if "Network connectivity failed" in str(e):
+            error_type = "network_error"
+
+        result = HealthCheckResult(
+            connector=connector,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type=error_type,
+        )
+        logger.warning(
+            "Health check failed for connector: %s - %s", connector.name, str(e)
+        )
+        return result
+
+    except NoObjectError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = HealthCheckResult(
+            connector=connector,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type="object_error",
+        )
+        logger.warning(
+            "Health check failed for connector: %s - %s", connector.name, str(e)
+        )
+        return result
+
+    except Exception as e:
+        response_time = int((time.time() - start_time) * 1000)
+
+        # Categorize timeout errors
+        error_type = "unknown_error"
+        if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+            error_type = "timeout"
+
+        result = HealthCheckResult(
+            connector=connector,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type=error_type,
+        )
+        logger.warning(
+            "Health check failed for connector: %s - %s", connector.name, str(e)
+        )
+        return result
+
+
+def check_all_connectors_health_sync(
+    concurrency_limit: Optional[int] = None, timeout: Optional[int] = None
+) -> List[HealthCheckResult]:
+    """
+    Perform health checks on all enabled connectors (synchronous version).
+
+    Args:
+        concurrency_limit: Maximum number of concurrent health checks (ignored in sync version)
+        timeout: Timeout in seconds for health checks (uses config default if None)
+
+    Returns:
+        List[HealthCheckResult]: List of health check results
+    """
+    # Get concurrency limit and timeout from config if not provided
+    if concurrency_limit is None or timeout is None:
+        config = Config.get_config()
+        if concurrency_limit is None:
+            concurrency_limit = config.common_config.health_monitoring.concurrency_limit
+        if timeout is None:
+            timeout = config.common_config.health_monitoring.timeout_seconds
+
+    connectors = ConnectorConfig.objects.filter(enabled=True)
+
+    if not connectors.exists():
+        logger.info("No enabled connectors found for health check")
+        return []
+
+    logger.info("Starting health checks for %s connectors", connectors.count())
+
+    # Run health checks synchronously and save immediately
+    results = []
+    for connector in connectors:
+        result = check_connector_health_sync(connector, timeout=timeout)
+        # Save result immediately after each check completes
+        result.save()
+        results.append(result)
+        logger.info(
+            "Saved health check result for connector: %s (%s)",
+            connector.name,
+            "healthy" if result.is_healthy else "unhealthy",
+        )
+
+    # Log summary
+    healthy_count = sum(1 for result in results if result.is_healthy)
+    unhealthy_count = len(results) - healthy_count
+
+    logger.info(
+        "Health check completed: %s healthy, %s unhealthy",
+        healthy_count,
+        unhealthy_count,
+    )
+
+    return results
+
+
+def check_specific_connector_health_sync(
+    connector_id: int, timeout: Optional[int] = None
+) -> HealthCheckResult:
+    """
+    Check health of a specific connector by ID (synchronous version).
+
+    Args:
+        connector_id: ID of the connector to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        HealthCheckResult: The health check result
+
+    Raises:
+        ConnectorConfig.DoesNotExist: If connector not found
+    """
+    connector = ConnectorConfig.objects.get(id=connector_id)
+    result = check_connector_health_sync(connector, timeout=timeout)
+
+    # Save individual result
+    result.save()
+
+    return result
+
+
+async def check_connector_health(
+    connector: ConnectorConfig, timeout: Optional[int] = None
+) -> HealthCheckResult:
+    """
+    Perform health check on a single connector.
+
+    Args:
+        connector: The ConnectorConfig instance to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        HealthCheckResult: The result of the health check
+    """
+    logger.info("Starting health check for connector: %s", connector.name)
+    start_time = time.time()
+
+    # Get timeout from config if not provided
+    if timeout is None:
+        config = Config.get_config()
+        timeout = config.common_config.health_monitoring.timeout_seconds
+
+    try:
+        # Run validation in a thread to avoid blocking the event loop
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, validate_uri, connector.uri, timeout)
+        except RuntimeError:
+            # No event loop running, run directly
+            validate_uri(connector.uri, timeout=timeout)
+
+        response_time = int((time.time() - start_time) * 1000)
+
+        result = HealthCheckResult(
+            connector=connector, is_healthy=True, response_time_ms=response_time
+        )
+
+        logger.info(
+            "Health check passed for connector: %s (%sms)",
+            connector.name,
+            response_time,
+        )
+        return result
+
+    except DriverConnectionError as e:
+        response_time = int((time.time() - start_time) * 1000)
+
+        # Distinguish between network and database connection errors
+        error_type = "connection_error"
+        if "Network connectivity failed" in str(e):
+            error_type = "network_error"
+
+        result = HealthCheckResult(
+            connector=connector,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type=error_type,
+        )
+        logger.warning(
+            "Health check failed for connector: %s - %s", connector.name, str(e)
+        )
+        return result
+
+    except NoObjectError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = HealthCheckResult(
+            connector=connector,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type="object_error",
+        )
+        logger.warning(
+            "Health check failed for connector: %s - %s", connector.name, str(e)
+        )
+        return result
+
+    except Exception as e:
+        response_time = int((time.time() - start_time) * 1000)
+
+        # Categorize timeout errors
+        error_type = "unknown_error"
+        if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+            error_type = "timeout"
+
+        result = HealthCheckResult(
+            connector=connector,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type=error_type,
+        )
+        logger.warning(
+            "Health check failed for connector: %s - %s", connector.name, str(e)
+        )
+        return result
+
+
+async def check_all_connectors_health(
+    concurrency_limit: Optional[int] = None, timeout: Optional[int] = None
+) -> List[HealthCheckResult]:
+    """
+    Perform health checks on all enabled connectors.
+
+    Args:
+        concurrency_limit: Maximum number of concurrent health checks (defaults to config)
+        timeout: Timeout in seconds for health checks (uses config default if None)
+
+    Returns:
+        List[HealthCheckResult]: List of health check results
+    """
+    # Get concurrency limit and timeout from config if not provided
+    if concurrency_limit is None or timeout is None:
+        config = Config.get_config()
+        if concurrency_limit is None:
+            concurrency_limit = config.common_config.health_monitoring.concurrency_limit
+        if timeout is None:
+            timeout = config.common_config.health_monitoring.timeout_seconds
+
+    connectors = ConnectorConfig.objects.filter(enabled=True)
+
+    if not connectors.exists():
+        logger.info("No enabled connectors found for health check")
+        return []
+
+    logger.info(
+        "Starting health checks for %s connectors with concurrency limit %s",
+        connectors.count(),
+        concurrency_limit,
+    )
+
+    # Create health check tasks
+    tasks = [
+        check_connector_health(connector, timeout=timeout) for connector in connectors
+    ]
+
+    # Use existing gather_limited for concurrency control
+    results = await gather_limited(concurrency_limit, tasks)
+
+    # Bulk save results to database
+    with transaction.atomic():
+        HealthCheckResult.objects.bulk_create(results)
+
+    # Log summary
+    healthy_count = sum(1 for result in results if result.is_healthy)
+    unhealthy_count = len(results) - healthy_count
+
+    logger.info(
+        "Health check completed: %s healthy, %s unhealthy",
+        healthy_count,
+        unhealthy_count,
+    )
+
+    return results
+
+
+async def check_specific_connector_health(
+    connector_id: int, timeout: Optional[int] = None
+) -> HealthCheckResult:
+    """
+    Check health of a specific connector by ID.
+
+    Args:
+        connector_id: ID of the connector to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        HealthCheckResult: The health check result
+
+    Raises:
+        ConnectorConfig.DoesNotExist: If connector not found
+    """
+    connector = ConnectorConfig.objects.get(id=connector_id)
+    result = await check_connector_health(connector, timeout=timeout)
+
+    # Save individual result
+    result.save()
+
+    return result
+
+
+def check_and_send_alerts():
+    """
+    Check for failing connectors and send alerts based on configured thresholds.
+
+    This function checks recent health check results and sends alerts
+    for connectors that have failed according to their alert configurations.
+    """
+    logger.info("Checking for health check alerts")
+
+    alerts = HealthCheckAlert.objects.filter(is_active=True).select_related("connector")
+
+    for alert in alerts:
+        connector = alert.connector
+
+        # Get recent health check results for this connector
+        recent_results = HealthCheckResult.objects.filter(
+            connector=connector,
+            check_time__gte=timezone.now() - timedelta(minutes=alert.threshold_minutes),
+        ).order_by("-check_time")
+
+        if not recent_results.exists():
+            continue
+
+        # Check for consecutive failures
+        if alert.alert_type == "consecutive_failures":
+            consecutive_failures = 0
+            for result in recent_results:
+                if not result.is_healthy:
+                    consecutive_failures += 1
+                else:
+                    break
+
+            if consecutive_failures >= alert.consecutive_failures_threshold:
+                if alert.should_send_alert():
+                    send_alert(
+                        alert,
+                        f"Connector {connector.name} has {consecutive_failures} consecutive failures",
+                    )
+                    alert.mark_alert_sent()
+
+        # Check for general failures
+        elif alert.alert_type == "failure":
+            latest_result = recent_results.first()
+            if latest_result and not latest_result.is_healthy:
+                if alert.should_send_alert():
+                    send_alert(
+                        alert,
+                        f"Connector {connector.name} health check failed: {latest_result.error_message}",
+                    )
+                    alert.mark_alert_sent()
+
+        # Check for recovery
+        elif alert.alert_type == "recovery":
+            if recent_results.count() >= 2:
+                latest_result = recent_results.first()
+                previous_result = recent_results[1]
+
+                if latest_result.is_healthy and not previous_result.is_healthy:
+                    if alert.should_send_alert():
+                        send_alert(alert, f"Connector {connector.name} has recovered")
+                        alert.mark_alert_sent()
+
+
+def send_alert(alert: HealthCheckAlert, message: str):
+    """
+    Send an alert notification.
+
+    Args:
+        alert: The HealthCheckAlert configuration
+        message: The alert message to send
+    """
+    logger.warning("HEALTH ALERT: %s", message)
+
+    # TODO: Implement actual alert sending (email, webhook, etc.)
+    # For now, just log the alert
+    print(f"HEALTH ALERT [{alert.alert_type}]: {message}")
+
+
+def cleanup_old_health_results(retention_days: Optional[int] = None):
+    """
+    Clean up old health check results to prevent database bloat.
+
+    Args:
+        retention_days: Number of days to retain health check results (defaults to config)
+    """
+    # Get retention days from config if not provided
+    if retention_days is None:
+        config = Config.get_config()
+        retention_days = config.common_config.health_monitoring.retention_days
+
+    cutoff_date = timezone.now() - timedelta(days=retention_days)
+
+    deleted_count = HealthCheckResult.objects.filter(
+        check_time__lt=cutoff_date
+    ).delete()[0]
+
+    logger.info(
+        "Cleaned up %s old health check results (retention: %s days)",
+        deleted_count,
+        retention_days,
+    )
+
+
+def get_connector_health_summary(
+    connector_id: Optional[int] = None, hours: int = 24
+) -> dict:
+    """
+    Get health summary for connectors.
+
+    Args:
+        connector_id: Optional specific connector ID to get summary for
+        hours: Number of hours to look back
+
+    Returns:
+        dict: Health summary data
+    """
+    since = timezone.now() - timedelta(hours=hours)
+
+    results_query = HealthCheckResult.objects.filter(check_time__gte=since)
+
+    if connector_id:
+        results_query = results_query.filter(connector_id=connector_id)
+
+    results = results_query.select_related("connector")
+
+    if not results.exists():
+        return {
+            "period": f"Last {hours} hours",
+            "total_checks": 0,
+            "healthy_checks": 0,
+            "unhealthy_checks": 0,
+            "connectors": {},
+        }
+
+    summary = {
+        "period": f"Last {hours} hours",
+        "total_checks": results.count(),
+        "healthy_checks": results.filter(is_healthy=True).count(),
+        "unhealthy_checks": results.filter(is_healthy=False).count(),
+        "connectors": {},
+    }
+
+    # Group by connector
+    connectors = ConnectorConfig.objects.filter(enabled=True)
+    if connector_id:
+        connectors = connectors.filter(id=connector_id)
+
+    for connector in connectors:
+        connector_results = results.filter(connector=connector)
+
+        if connector_results.exists():
+            healthy_count = connector_results.filter(is_healthy=True).count()
+            total_count = connector_results.count()
+
+            # Calculate average response time for healthy checks
+            healthy_results = connector_results.filter(
+                is_healthy=True, response_time_ms__isnull=False
+            )
+            avg_response_time = None
+            if healthy_results.exists():
+                avg_response_time = healthy_results.aggregate(
+                    avg=models.Avg("response_time_ms")
+                )["avg"]
+
+            summary["connectors"][connector.name] = {
+                "connector_id": connector.id,
+                "total_checks": total_count,
+                "healthy_checks": healthy_count,
+                "unhealthy_checks": total_count - healthy_count,
+                "success_rate": (healthy_count / total_count * 100)
+                if total_count > 0
+                else 0,
+                "avg_response_time_ms": round(avg_response_time)
+                if avg_response_time
+                else None,
+                "latest_check": connector_results.first().check_time,
+                "is_currently_healthy": connector_results.first().is_healthy,
+            }
+
+    return summary
+
+
+# Resource Health Check Functions
+
+
+def validate_resource_health(
+    *,
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int] = None,
+) -> bool:
+    """
+    Lightweight resource validation for health checks.
+
+    Only fetches a small sample (limit=10) to verify the resource is accessible
+    without downloading the full dataset.
+
+    Args:
+        uri: The database URI to check
+        object_location: The table/view/function name
+        object_location_schema: The schema name (optional)
+        timeout: Timeout in seconds for the check
+
+    Returns:
+        bool: True if resource is accessible, False otherwise
+
+    Raises:
+        DriverConnectionError: If connection fails
+        NoObjectError: If resource doesn't exist
+    """
+    try:
+        # Get just a small sample to verify resource is accessible
+        result = get_resource_data(
+            uri=uri,
+            object_location=object_location,
+            object_location_schema=object_location_schema,
+            filters={},
+            like="",
+            fields=[],
+            sort=[],
+            limit=10,  # Only fetch 10 rows for health check
+            timeout=timeout,
+        )
+
+        # Just verify we can iterate the result (don't consume it all)
+        try:
+            next(iter(result))
+            return True
+        except StopIteration:
+            # Empty result is still a successful connection
+            return True
+    except (DriverConnectionError, NoObjectError):
+        # Re-raise these specific exceptions for proper error categorization
+        raise
+    except Exception as e:
+        # Convert any other exception to DriverConnectionError for consistency
+        raise DriverConnectionError(f"Resource validation failed: {str(e)}") from e
+
+
+def get_recent_connector_status(
+    connector_id: int, window_minutes: Optional[int] = None
+) -> Optional[HealthCheckResult]:
+    """
+    Get the most recent health check result for a connector within the specified time window.
+
+    Args:
+        connector_id: ID of the connector to check
+        window_minutes: Time window in minutes to look back (uses config default if None)
+
+    Returns:
+        HealthCheckResult: Most recent health check result if found, None otherwise
+    """
+    if window_minutes is None:
+        # Get dependency window from config
+        config = Config.get_config()
+        window_minutes = config.common_config.health_monitoring.connector_dependency_window_minutes
+
+    cutoff_time = timezone.now() - timedelta(minutes=window_minutes)
+
+    try:
+        return HealthCheckResult.objects.filter(
+            connector_id=connector_id,
+            check_time__gte=cutoff_time
+        ).order_by('-check_time').first()
+    except HealthCheckResult.DoesNotExist:
+        return None
+
+
+def check_resource_health_sync(
+    resource: ResourceConfig, timeout: Optional[int] = None
+) -> ResourceHealthCheckResult:
+    """
+    Perform health check on a single resource (synchronous version).
+
+    Args:
+        resource: The ResourceConfig instance to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        ResourceHealthCheckResult: The result of the health check
+    """
+    logger.info("Starting resource health check for resource: %s", resource.name)
+    start_time = time.time()
+
+    # Get timeout from config if not provided
+    if timeout is None:
+        config = Config.get_config()
+        timeout = config.common_config.health_monitoring.timeout_seconds
+
+    try:
+        # Run lightweight resource health validation (limit=10)
+        validate_resource_health(
+            uri=resource.connector_config.uri,
+            object_location=resource.object_location,
+            object_location_schema=resource.object_location_schema,
+            timeout=timeout,
+        )
+
+        response_time = int((time.time() - start_time) * 1000)
+
+        result = ResourceHealthCheckResult(
+            resource=resource, is_healthy=True, response_time_ms=response_time
+        )
+
+        logger.info(
+            "Resource health check passed for resource: %s (%sms)",
+            resource.name,
+            response_time,
+        )
+        return result
+
+    except DriverConnectionError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type="connection_error",
+        )
+        logger.warning(
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
+        )
+        return result
+
+    except NoObjectError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type="object_error",
+        )
+        logger.warning(
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
+        )
+        return result
+
+    except TimeoutError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type="timeout",
+        )
+        logger.warning(
+            "Resource health check timed out for resource: %s - %s",
+            resource.name,
+            str(e),
+        )
+        return result
+
+    except Exception as e:
+        response_time = int((time.time() - start_time) * 1000)
+
+        # Categorize timeout errors
+        error_type = "unknown_error"
+        if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+            error_type = "timeout"
+
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type=error_type,
+        )
+        logger.warning(
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
+        )
+        return result
+
+
+def check_all_resources_health_sync(
+    concurrency_limit: Optional[int] = None, timeout: Optional[int] = None
+) -> List[ResourceHealthCheckResult]:
+    """
+    Perform health checks on all enabled resources (synchronous version).
+
+    Args:
+        concurrency_limit: Maximum number of concurrent health checks (ignored in sync version)
+        timeout: Timeout in seconds for health checks (uses config default if None)
+
+    Returns:
+        List[ResourceHealthCheckResult]: List of health check results
+    """
+    # Get concurrency limit and timeout from config if not provided
+    if concurrency_limit is None or timeout is None:
+        config = Config.get_config()
+        if concurrency_limit is None:
+            concurrency_limit = config.common_config.health_monitoring.concurrency_limit
+        if timeout is None:
+            timeout = config.common_config.health_monitoring.timeout_seconds
+
+    resources = ResourceConfig.objects.filter(
+        enabled=True, connector_config__enabled=True
+    ).select_related("connector_config")
+
+    if not resources.exists():
+        logger.info("No enabled resources found for health check")
+        return []
+
+    logger.info("Starting resource health checks for %s resources", resources.count())
+
+    # Cache connector health status to avoid repeated queries
+    connector_health_cache = {}
+
+    # Run health checks synchronously and save immediately
+    results = []
+    for resource in resources:
+        connector_id = resource.connector_config.id
+
+        # Check if we've already looked up this connector's status
+        if connector_id not in connector_health_cache:
+            connector_health_cache[connector_id] = get_recent_connector_status(connector_id)
+
+        recent_connector_result = connector_health_cache[connector_id]
+
+        # Skip resource check if connector recently failed
+        if recent_connector_result and not recent_connector_result.is_healthy:
+            # Create a result indicating the connector failed
+            result = ResourceHealthCheckResult(
+                resource=resource,
+                is_healthy=False,
+                response_time_ms=0,
+                error_message=f"Connector '{resource.connector_config.name}' failed recently: {recent_connector_result.error_message}",
+                error_type="connector_failed",
+            )
+            logger.info(
+                "Skipped resource health check for %s - connector failed recently",
+                resource.name,
+            )
+        else:
+            # Perform actual health check
+            result = check_resource_health_sync(resource, timeout=timeout)
+
+        # Save result immediately after each check completes
+        result.save()
+        results.append(result)
+        logger.info(
+            "Saved resource health check result for resource: %s (%s)",
+            resource.name,
+            "healthy" if result.is_healthy else "unhealthy",
+        )
+
+    # Log summary
+    healthy_count = sum(1 for result in results if result.is_healthy)
+    unhealthy_count = len(results) - healthy_count
+
+    logger.info(
+        "Resource health check completed: %s healthy, %s unhealthy",
+        healthy_count,
+        unhealthy_count,
+    )
+
+    return results
+
+
+def check_specific_resource_health_sync(
+    resource_id: int, timeout: Optional[int] = None
+) -> ResourceHealthCheckResult:
+    """
+    Check health of a specific resource by ID (synchronous version).
+
+    Args:
+        resource_id: ID of the resource to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        ResourceHealthCheckResult: The health check result
+
+    Raises:
+        ResourceConfig.DoesNotExist: If resource not found
+    """
+    resource = ResourceConfig.objects.get(id=resource_id)
+    result = check_resource_health_sync(resource, timeout=timeout)
+
+    # Save individual result
+    result.save()
+
+    return result
+
+
+async def check_resource_health(
+    resource: ResourceConfig, timeout: Optional[int] = None
+) -> ResourceHealthCheckResult:
+    """
+    Perform health check on a single resource.
+
+    Args:
+        resource: The ResourceConfig instance to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        ResourceHealthCheckResult: The result of the health check
+    """
+    logger.info("Starting resource health check for resource: %s", resource.name)
+    start_time = time.time()
+
+    # Get timeout from config if not provided
+    if timeout is None:
+        config = Config.get_config()
+        timeout = config.common_config.health_monitoring.timeout_seconds
+
+    try:
+        # Run lightweight validation in a thread to avoid blocking the event loop
+        def validate_resource_health_with_timeout():
+            return validate_resource_health(
+                uri=resource.connector_config.uri,
+                object_location=resource.object_location,
+                object_location_schema=resource.object_location_schema,
+                timeout=timeout,
+            )
+
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, validate_resource_health_with_timeout)
+        except RuntimeError:
+            # No event loop running, run directly
+            validate_resource_health_with_timeout()
+
+        response_time = int((time.time() - start_time) * 1000)
+
+        result = ResourceHealthCheckResult(
+            resource=resource, is_healthy=True, response_time_ms=response_time
+        )
+
+        logger.info(
+            "Resource health check passed for resource: %s (%sms)",
+            resource.name,
+            response_time,
+        )
+        return result
+
+    except DriverConnectionError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type="connection_error",
+        )
+        logger.warning(
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
+        )
+        return result
+
+    except NoObjectError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type="object_error",
+        )
+        logger.warning(
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
+        )
+        return result
+
+    except TimeoutError as e:
+        response_time = int((time.time() - start_time) * 1000)
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type="timeout",
+        )
+        logger.warning(
+            "Resource health check timed out for resource: %s - %s",
+            resource.name,
+            str(e),
+        )
+        return result
+
+    except Exception as e:
+        response_time = int((time.time() - start_time) * 1000)
+
+        # Categorize timeout errors
+        error_type = "unknown_error"
+        if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+            error_type = "timeout"
+
+        result = ResourceHealthCheckResult(
+            resource=resource,
+            is_healthy=False,
+            response_time_ms=response_time,
+            error_message=str(e),
+            error_type=error_type,
+        )
+        logger.warning(
+            "Resource health check failed for resource: %s - %s", resource.name, str(e)
+        )
+        return result
+
+
+async def check_all_resources_health(
+    concurrency_limit: Optional[int] = None, timeout: Optional[int] = None
+) -> List[ResourceHealthCheckResult]:
+    """
+    Perform health checks on all enabled resources.
+
+    Args:
+        concurrency_limit: Maximum number of concurrent health checks (defaults to config)
+        timeout: Timeout in seconds for health checks (uses config default if None)
+
+    Returns:
+        List[ResourceHealthCheckResult]: List of health check results
+    """
+    # Get concurrency limit and timeout from config if not provided
+    if concurrency_limit is None or timeout is None:
+        config = Config.get_config()
+        if concurrency_limit is None:
+            concurrency_limit = config.common_config.health_monitoring.concurrency_limit
+        if timeout is None:
+            timeout = config.common_config.health_monitoring.timeout_seconds
+
+    resources = ResourceConfig.objects.filter(
+        enabled=True, connector_config__enabled=True
+    ).select_related("connector_config")
+
+    if not resources.exists():
+        logger.info("No enabled resources found for health check")
+        return []
+
+    logger.info(
+        "Starting resource health checks for %s resources with concurrency limit %s",
+        resources.count(),
+        concurrency_limit,
+    )
+
+    # Create health check tasks
+    tasks = [check_resource_health(resource, timeout=timeout) for resource in resources]
+
+    # Use existing gather_limited for concurrency control
+    results = await gather_limited(concurrency_limit, tasks)
+
+    # Bulk save results to database
+    with transaction.atomic():
+        ResourceHealthCheckResult.objects.bulk_create(results)
+
+    # Log summary
+    healthy_count = sum(1 for result in results if result.is_healthy)
+    unhealthy_count = len(results) - healthy_count
+
+    logger.info(
+        "Resource health check completed: %s healthy, %s unhealthy",
+        healthy_count,
+        unhealthy_count,
+    )
+
+    return results
+
+
+async def check_specific_resource_health(
+    resource_id: int, timeout: Optional[int] = None
+) -> ResourceHealthCheckResult:
+    """
+    Check health of a specific resource by ID.
+
+    Args:
+        resource_id: ID of the resource to check
+        timeout: Timeout in seconds for the health check (uses config default if None)
+
+    Returns:
+        ResourceHealthCheckResult: The health check result
+
+    Raises:
+        ResourceConfig.DoesNotExist: If resource not found
+    """
+    resource = ResourceConfig.objects.get(id=resource_id)
+    result = await check_resource_health(resource, timeout=timeout)
+
+    # Save individual result
+    result.save()
+
+    return result
+
+
+def get_resource_health_summary(
+    resource_id: Optional[int] = None, hours: int = 24
+) -> dict:
+    """
+    Get health summary for resources.
+
+    Args:
+        resource_id: Optional specific resource ID to get summary for
+        hours: Number of hours to look back
+
+    Returns:
+        dict: Health summary data
+    """
+    since = timezone.now() - timedelta(hours=hours)
+
+    results_query = ResourceHealthCheckResult.objects.filter(check_time__gte=since)
+
+    if resource_id:
+        results_query = results_query.filter(resource_id=resource_id)
+
+    results = results_query.select_related("resource")
+
+    if not results.exists():
+        return {
+            "period": f"Last {hours} hours",
+            "total_checks": 0,
+            "healthy_checks": 0,
+            "unhealthy_checks": 0,
+            "resources": {},
+        }
+
+    summary = {
+        "period": f"Last {hours} hours",
+        "total_checks": results.count(),
+        "healthy_checks": results.filter(is_healthy=True).count(),
+        "unhealthy_checks": results.filter(is_healthy=False).count(),
+        "resources": {},
+    }
+
+    # Get per-resource summary
+    for resource in ResourceConfig.objects.filter(enabled=True):
+        resource_results = results.filter(resource=resource).order_by("-check_time")
+
+        if resource_results.exists():
+            total_count = resource_results.count()
+            healthy_count = resource_results.filter(is_healthy=True).count()
+
+            # Calculate average response time for healthy checks
+            healthy_results = resource_results.filter(is_healthy=True)
+            avg_response_time = None
+            if healthy_results.exists():
+                avg_response_time = healthy_results.aggregate(
+                    avg=models.Avg("response_time_ms")
+                )["avg"]
+
+            summary["resources"][resource.name] = {
+                "resource_id": resource.id,
+                "total_checks": total_count,
+                "healthy_checks": healthy_count,
+                "unhealthy_checks": total_count - healthy_count,
+                "success_rate": (healthy_count / total_count * 100)
+                if total_count > 0
+                else 0,
+                "avg_response_time_ms": round(avg_response_time)
+                if avg_response_time
+                else None,
+                "latest_check": resource_results.first().check_time,
+                "is_currently_healthy": resource_results.first().is_healthy,
+            }
+
+    return summary
