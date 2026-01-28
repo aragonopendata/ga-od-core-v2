@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 def is_datetime(value):
+    if not isinstance(value, str):
+        return False
     try:
         datetime.fromisoformat(value)
         return True
