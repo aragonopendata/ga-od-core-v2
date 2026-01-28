@@ -21,5 +21,20 @@ class DictSerializer(serializers.Serializer):
         super().__init__(*args, **kwargs)
 
     def get_fields(self):
-        fields = {field for row in self._data for field in row.keys()}
+        """Extract field names safely from mixed data types.
+
+        Handles ErrorDetail objects and other non-dictionary data gracefully,
+        returning fields only from valid dictionary-like objects.
+        """
+        fields = set()
+        if not self._data:
+            return {}
+        for row in self._data:
+            # Only process objects that have keys() method and are callable
+            if hasattr(row, 'keys') and callable(getattr(row, 'keys')):
+                try:
+                    fields.update(row.keys())
+                except Exception:
+                    # Skip problematic rows silently
+                    continue
         return {field: Field(label=field) for field in fields}
