@@ -39,6 +39,7 @@ from sqlalchemy import (
     text,
     quoted_name,
 )
+import warnings
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.types import Numeric
@@ -453,12 +454,15 @@ def _get_model(
 
     # Strategy 1: Try standard SQLAlchemy reflection
     try:
-        return Table(
-            object_location,
-            meta_data,
-            autoload_with=engine,
-            schema=object_location_schema,
-        )
+        # Suppress SQLAlchemy warnings about unknown types
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message="Did not recognize type", category=sqlalchemy.exc.SAWarning)
+            return Table(
+                object_location,
+                meta_data,
+                autoload_with=engine,
+                schema=object_location_schema,
+            )
     except sqlalchemy.exc.NoSuchTableError as err:
         # Check if this is Oracle and try fallback
         if "oracle" in str(engine.url).lower():
@@ -507,6 +511,39 @@ def _get_model(
         sqlalchemy.exc.DatabaseError,
         sqlalchemy.exc.ProgrammingError,
     ) as err:
+        # Check if this is a connection error (not a reflection error)
+        error_str = str(err).lower()
+        is_connection_error = any(
+            keyword in error_str
+            for keyword in [
+                "ora-12514",  # TNS:listener does not know of service
+                "ora-12541",  # TNS:no listener
+                "ora-12170",  # TNS:connect timeout
+                "ora-01017",  # invalid username/password
+                "connection refused",
+                "connection timeout",
+                "network error",
+                "could not connect",
+            ]
+        )
+
+        if is_connection_error:
+            logger.error(
+                "Database connection error (not a reflection issue). Table: %s, Schema: %s, Error: %s",
+                object_location,
+                object_location_schema,
+                str(err),
+                extra={
+                    "connection_error": True,
+                    "object_location": object_location,
+                    "object_location_schema": object_location_schema,
+                    "engine_url": str(engine.url)[:50] + "...",
+                    "error_type": type(err).__name__,
+                    "original_error": str(err)[:200],
+                },
+            )
+            raise DriverConnectionError(f"Connection not available: {str(err)[:200]}") from err
+
         # Log reflection failure and attempt fallback for PostgreSQL and Oracle
         if "postgresql" in str(engine.url).lower():
             logger.info(
