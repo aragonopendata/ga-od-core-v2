@@ -10,6 +10,7 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
+
 import os
 import sys
 
@@ -42,88 +43,98 @@ CSRF_TRUSTED_ORIGINS = CONFIG.common_config.csrf_trusted_origins
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin', 'django.contrib.auth', 'django.contrib.contenttypes', 'django.contrib.sessions',
-    'django.contrib.messages', 'django.contrib.staticfiles', 'gaodcore', 'gaodcore_manager', 'gaodcore_health',
-    'drf_spectacular', 'rest_framework', 'axes', 'easyaudit',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "gaodcore",
+    "gaodcore_manager",
+    "gaodcore_health",
+    "drf_spectacular",
+    "rest_framework",
+    "axes",
+    "easyaudit",
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.locale.LocaleMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'axes.middleware.AxesMiddleware',
-    'easyaudit.middleware.easyaudit.EasyAuditMiddleware',
-
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.locale.LocaleMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "axes.middleware.AxesMiddleware",
+    "easyaudit.middleware.easyaudit.EasyAuditMiddleware",
 ]
 
 AUTHENTICATION_BACKENDS = [
     # AxesBackend should be the first backend in the AUTHENTICATION_BACKENDS list.
-    'axes.backends.AxesBackend',
-
+    "axes.backends.AxesBackend",
     # Django ModelBackend is the default authentication backend.
-    'django.contrib.auth.backends.ModelBackend',
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
-ROOT_URLCONF = 'gaodcore_project.urls'
+ROOT_URLCONF = "gaodcore_project.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'gaodcore_project.wsgi.application'
+WSGI_APPLICATION = "gaodcore_project.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {key: database.dict() for key, database in CONFIG.common_config.databases.items()}
+DATABASES = {
+    key: database.dict() for key, database in CONFIG.common_config.databases.items()
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-LANGUAGE_CODE = 'es-ES'
+LANGUAGE_CODE = "es-ES"
 
 LANGUAGES = [
-    ('es', 'Español'),
-    ('en', 'English'),
+    ("es", "Español"),
+    ("en", "English"),
 ]
 
-TIME_ZONE = 'Europe/Madrid'
+TIME_ZONE = "Europe/Madrid"
 
 USE_I18N = True
 
@@ -132,7 +143,7 @@ USE_L10N = True
 USE_TZ = True
 
 LOCALE_PATHS = [
-    BASE_DIR / 'locale',
+    BASE_DIR / "locale",
 ]
 
 # Default primary key field type
@@ -142,48 +153,52 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = '/GA_OD_Core/images/'
+STATIC_URL = "/GA_OD_Core/images/"
 
 # Django REST framework Settings
 # https://www.django-rest-framework.org/api-guide/settings/
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.BasicAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework.authentication.BasicAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
     ),
-    'DEFAULT_PARSER_CLASSES': ['rest_framework.parsers.FormParser', 'rest_framework.parsers.MultiPartParser'],
-    'DEFAULT_RENDERER_CLASSES': (
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
-        'rest_framework_yaml.renderers.YAMLRenderer',
-        'rest_framework_xml.renderers.XMLRenderer',
-        'custom_renderers.BackwardCompatibleXLSXRenderer',
-        'rest_framework_csv.renderers.CSVRenderer',
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.FormParser",
+        "rest_framework.parsers.MultiPartParser",
+    ],
+    "DEFAULT_RENDERER_CLASSES": (
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
+        "rest_framework_yaml.renderers.YAMLRenderer",
+        "rest_framework_xml.renderers.XMLRenderer",
+        "custom_renderers.BackwardCompatibleXLSXRenderer",
+        "rest_framework_csv.renderers.CSVRenderer",
     ),
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "gaodcore.exception_handlers.custom_exception_handler",
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'GA OD Core API',
-    'DESCRIPTION': 'GA OD Core API Swagger',
-    'VERSION': 'v2',
-    'SERVE_INCLUDE_SCHEMA': False,
-    'COMPONENT_SPLIT_REQUEST': True,
-    'SORT_OPERATIONS': False,
-    'AUTHENTICATION_WHITELIST': [
-        'rest_framework.authentication.BasicAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+    "TITLE": "GA OD Core API",
+    "DESCRIPTION": "GA OD Core API Swagger",
+    "VERSION": "v2",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SORT_OPERATIONS": False,
+    "AUTHENTICATION_WHITELIST": [
+        "rest_framework.authentication.BasicAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
     ],
-    'CONTACT': {
-        'email': 'opendata@aragon.es',
+    "CONTACT": {
+        "email": "opendata@aragon.es",
     },
-    'LICENSE': {
-        'name': 'EUPL License',
+    "LICENSE": {
+        "name": "EUPL License",
     },
-    'TERMS_OF_SERVICE': 'https://opendata.aragon.es/informacion/terminos-de-uso-licencias',
-    'POSTPROCESSING_HOOKS': [
-        'gaodcore_project.spectacular_hooks.parameter_order_hook',
+    "TERMS_OF_SERVICE": "https://opendata.aragon.es/informacion/terminos-de-uso-licencias",
+    "POSTPROCESSING_HOOKS": [
+        "gaodcore_project.spectacular_hooks.parameter_order_hook",
     ],
 }
 
@@ -191,64 +206,63 @@ SPECTACULAR_SETTINGS = {
 # The /GA_OD_Core path is handled by Django URL patterns
 
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{asctime} {levelname} {module} {name} - {message}',
-            'style': '{',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{asctime} {levelname} {module} {name} - {message}",
+            "style": "{",
         },
-        'simple': {
-            'format': '{levelname} {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
-            'level': os.getenv('DJANGO_LOG_LEVEL', 'WARNING'),
+        "simple": {
+            "format": "{levelname} {message}",
+            "style": "{",
         },
     },
-    'root': {
-        'handlers': ['console'],
-        'level':  os.getenv('DJANGO_LOG_LEVEL', 'WARNING'),
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+            "level": os.getenv("DJANGO_LOG_LEVEL", "WARNING"),
+        },
     },
-    'loggers': {
-
-        'django': {
-            'handlers': ['console'],
-            'level':  os.getenv('DJANGO_LOG_LEVEL', 'WARNING'),
-            'propagate': False,
+    "root": {
+        "handlers": ["console"],
+        "level": os.getenv("DJANGO_LOG_LEVEL", "WARNING"),
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": os.getenv("DJANGO_LOG_LEVEL", "WARNING"),
+            "propagate": False,
         },
-        'django.request': {
-            'handlers': ['console'],
-            'level': 'ERROR',
-            'propagate': False,
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
         },
-        'sqlalchemy': {
-            'handlers': ['console'],
-            'level': 'ERROR',
-            'propagate': False,
+        "sqlalchemy": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
         },
-        'sqlalchemy.engine': {
-            'handlers': ['console'],
-            'level': 'ERROR',
-            'propagate': False,
+        "sqlalchemy.engine": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
         },
     },
 }
 
 CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
-        'LOCATION': 'django_cache',
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache",
     }
 }
 
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Enhanced security settings for Django 4.2
 # Use secure cookies in production
@@ -263,20 +277,22 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # CSRF_COOKIE_SECURE = not DEBUG
 
 # Django Easy Audit Configuration
-DJANGO_EASY_AUDIT_REGISTERED_URLS = [r'^/GA_OD_Core/views',
-                                     r'^/GA_OD_Core/preview',
-                                     r'^/GA_OD_Core/show_columns',
-                                     r'/GA_OD_Core/download',
-                                     r'/GA_OD_Core_admin/manager/connector-config',
-                                     r'/GA_OD_Core_admin/manager/resource-config']
-DJANGO_EASY_AUDIT_REMOTE_ADDR_HEADER = 'HTTP_X_FORWARDED_FOR'
+DJANGO_EASY_AUDIT_REGISTERED_URLS = [
+    r"^/GA_OD_Core/views",
+    r"^/GA_OD_Core/preview",
+    r"^/GA_OD_Core/show_columns",
+    r"/GA_OD_Core/download",
+    r"/GA_OD_Core_admin/manager/connector-config",
+    r"/GA_OD_Core_admin/manager/resource-config",
+]
+DJANGO_EASY_AUDIT_REMOTE_ADDR_HEADER = "HTTP_X_FORWARDED_FOR"
 
 # Fix for Django 4.2 compatibility - provide fallback for remote_ip when header is missing
 # This ensures that tests don't fail due to null remote_ip constraint
 DJANGO_EASY_AUDIT_USE_REMOTE_ADDR_FALLBACK = True
 
 # During testing, disable audit logging to avoid database constraint issues
-if 'test' in sys.argv or 'pytest' in sys.modules:
+if "test" in sys.argv or "pytest" in sys.modules:
     DJANGO_EASY_AUDIT_WATCH_REQUEST_EVENTS = False
     DJANGO_EASY_AUDIT_WATCH_MODEL_EVENTS = False
 

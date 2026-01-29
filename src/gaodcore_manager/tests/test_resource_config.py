@@ -136,7 +136,7 @@ def test_resource_with_invalid_connector_error(
         HTTP_ACCEPT=accept_error,
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 503
     validate_error(
         response.content,
         "Connection is not available.",

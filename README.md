@@ -60,6 +60,32 @@ This is util to show **manager** app in swagger. You can authenticate graphicall
 This is util to deal with manager app and integrate other app with GAODCore. For more information:
 [https://en.wikipedia.org/wiki/Basic_access_authentication](https://en.wikipedia.org/wiki/Basic_access_authentication)
 
+### API Error Responses
+
+The API uses standard HTTP status codes to indicate error types:
+
+| Status | Exception | Meaning |
+|--------|-----------|---------|
+| 400 | `ValidationError` | Client error - invalid input or request |
+| 502 | `BadGateway` | External API or service failure |
+| 503 | `ServiceUnavailable` | Database or connector unavailable |
+
+Error responses include structured information for programmatic handling:
+
+```json
+{
+  "detail": "Connection is not available.",
+  "error_code": "CONNECTION_UNAVAILABLE",
+  "status": 503
+}
+```
+
+**Error codes:**
+- `CONNECTION_UNAVAILABLE` - Database/connector connection failed
+- `OBJECT_UNAVAILABLE` - Table, view, or function doesn't exist
+- `QUERY_ERROR` - Query execution failed
+- `SCHEMA_NOT_IMPLEMENTED` - Requested schema type not supported
+
 ### Create a new resource
 
 #### Validate a new Resource

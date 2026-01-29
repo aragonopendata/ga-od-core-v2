@@ -12,6 +12,8 @@ from drf_excel.mixins import XLSXFileMixin
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 from rest_framework.exceptions import ValidationError
+
+from exceptions import ServiceUnavailable, ErrorCodes
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.utils.serializer_helpers import ReturnList
@@ -48,16 +50,22 @@ def _get_data_public_error(func: Callable, *args, **kwargs) -> List[Dict[str, An
     except (FieldNoExistsError, SortFieldNoExistsError) as err:
         raise ValidationError(err, 400) from err
     except NoObjectError as err:
-        raise ValidationError("Object is not available.", 500) from err
+        raise ServiceUnavailable(
+            "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
+        ) from err
     except DriverConnectionError as err:
-        raise ValidationError("Connection is not available.", 500) from err
+        raise ServiceUnavailable(
+            "Connection is not available.", code=ErrorCodes.CONNECTION_UNAVAILABLE
+        ) from err
     except NotImplementedSchemaError as err:
-        raise ValidationError(
-            "Unexpected error: schema is not implemented.", 500
+        raise ServiceUnavailable(
+            "Unexpected error: schema is not implemented.",
+            code=ErrorCodes.SCHEMA_NOT_IMPLEMENTED,
         ) from err
     except MimeTypeError as err:
-        raise ValidationError(
-            "Unexpected error: mimetype of input file is not implemented.", 500
+        raise ServiceUnavailable(
+            "Unexpected error: mimetype of input file is not implemented.",
+            code=ErrorCodes.SCHEMA_NOT_IMPLEMENTED,
         ) from err
 
 
@@ -150,7 +158,7 @@ class DownloadView(APIViewMixin):
             OpenApiParameter(
                 "filters",
                 description="Matching conditions to select, e.g {'key1': 'a', 'key2': 'b'}.",
-                type={'type': 'object'},
+                type={"type": "object"},
             ),
             OpenApiParameter(
                 "offset",
@@ -165,22 +173,22 @@ class DownloadView(APIViewMixin):
             OpenApiParameter(
                 "fields",
                 description="Fields to return. Default: all fields in original order.",
-                type={'type': 'array', 'items': {'type': 'string'}},
+                type={"type": "array", "items": {"type": "string"}},
             ),
             OpenApiParameter(
                 "like",
                 description="Matching conditions to select, e.g {'key1': 'a', 'key2': 'b'}.",
-                type={'type': 'object'},
+                type={"type": "object"},
             ),
             OpenApiParameter(
                 "columns",
                 description="Alias of fields.",
-                type={'type': 'array', 'items': {'type': 'string'}},
+                type={"type": "array", "items": {"type": "string"}},
             ),
             OpenApiParameter(
                 "sort",
                 description="Comma separated field names with ordering e.g: 'fieldname1, fieldname2 desc'.",
-                type={'type': 'array', 'items': {'type': 'string'}},
+                type={"type": "array", "items": {"type": "string"}},
             ),
             OpenApiParameter(
                 "formato",
@@ -210,48 +218,36 @@ class DownloadView(APIViewMixin):
         ],
         responses={
             200: {
-                'description': 'Successful response with data in the requested format',
-                'content': {
-                    'application/json': {
-                        'schema': {
-                            'type': 'array',
-                            'items': {
-                                'type': 'object',
-                                'additionalProperties': True
-                            }
+                "description": "Successful response with data in the requested format",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "array",
+                            "items": {"type": "object", "additionalProperties": True},
                         },
-                        'example': [
+                        "example": [
                             {"id": 1, "name": "Example", "value": 100},
-                            {"id": 2, "name": "Sample", "value": 200}
-                        ]
+                            {"id": 2, "name": "Sample", "value": 200},
+                        ],
                     },
-                    'application/xml': {
-                        'schema': {
-                            'type': 'string'
-                        },
-                        'example': '<?xml version="1.0" encoding="utf-8"?>\n<root><list-item><id>1</id><name>Example</name></list-item></root>'
+                    "application/xml": {
+                        "schema": {"type": "string"},
+                        "example": '<?xml version="1.0" encoding="utf-8"?>\n<root><list-item><id>1</id><name>Example</name></list-item></root>',
                     },
-                    'text/csv': {
-                        'schema': {
-                            'type': 'string'
-                        },
-                        'example': 'id,name,value\n1,Example,100\n2,Sample,200'
+                    "text/csv": {
+                        "schema": {"type": "string"},
+                        "example": "id,name,value\n1,Example,100\n2,Sample,200",
                     },
-                    'application/yaml': {
-                        'schema': {
-                            'type': 'string'
-                        },
-                        'example': '- id: 1\n  name: Example\n  value: 100\n- id: 2\n  name: Sample\n  value: 200'
+                    "application/yaml": {
+                        "schema": {"type": "string"},
+                        "example": "- id: 1\n  name: Example\n  value: 100\n- id: 2\n  name: Sample\n  value: 200",
                     },
-                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
-                        'schema': {
-                            'type': 'string',
-                            'format': 'binary'
-                        }
-                    }
-                }
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                        "schema": {"type": "string", "format": "binary"}
+                    },
+                },
             }
-        }
+        },
     )
     def get(self, request: Request, **_kwargs) -> Response:
         """Este metodo permite acceder a los datos publicos de las bases de datos o APIs del Gobierno de Aragón.
@@ -295,7 +291,9 @@ class DownloadView(APIViewMixin):
                         407,
                     ) from TooManyRowsErrorExcel
             except DriverConnectionError as err:
-                logger.warning("Connection is not available during Excel validation: %s", err)
+                logger.warning(
+                    "Connection is not available during Excel validation: %s", err
+                )
                 logger.warning(
                     "Resource: %s, Uri: %s - Location: %s - Schema: %s",
                     resource_id,
@@ -303,9 +301,14 @@ class DownloadView(APIViewMixin):
                     resource_config.object_location,
                     resource_config.object_location_schema,
                 )
-                raise ValidationError("Connection is not available.", 500) from err
+                raise ServiceUnavailable(
+                    "Connection is not available.",
+                    code=ErrorCodes.CONNECTION_UNAVAILABLE,
+                ) from err
             except NoObjectError as err:
-                logger.warning("Object is not available during Excel validation: %s", err)
+                logger.warning(
+                    "Object is not available during Excel validation: %s", err
+                )
                 logger.warning(
                     "Resource: %s, Uri: %s - Location: %s - Schema: %s",
                     resource_id,
@@ -313,7 +316,9 @@ class DownloadView(APIViewMixin):
                     resource_config.object_location,
                     resource_config.object_location_schema,
                 )
-                raise ValidationError("Object is not available.", 500) from err
+                raise ServiceUnavailable(
+                    "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
+                ) from err
         #    raise ValidationError({'error' : 'An xlsx cannot be generated with so many lines, please request
         #    it in another format'})
 
@@ -332,7 +337,9 @@ class DownloadView(APIViewMixin):
                 resource_config.object_location,
                 resource_config.object_location_schema,
             )
-            raise ValidationError("Connection is not available.", 500) from err
+            raise ServiceUnavailable(
+                "Connection is not available.", code=ErrorCodes.CONNECTION_UNAVAILABLE
+            ) from err
         except NoObjectError as err:
             logger.warning("Object is not available. : %s", err)
             logger.warning(
@@ -342,7 +349,9 @@ class DownloadView(APIViewMixin):
                 resource_config.object_location,
                 resource_config.object_location_schema,
             )
-            raise ValidationError("Object is not available.", 500) from err
+            raise ServiceUnavailable(
+                "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
+            ) from err
         if reourceGeojon and format == "json":
             featureCollection = True
         else:
@@ -382,7 +391,9 @@ class DownloadView(APIViewMixin):
             update_resource_size(
                 resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
             )
-            response = get_response_xlsx(modify_header(data, columns, format_is_xlsx=True))
+            response = get_response_xlsx(
+                modify_header(data, columns, format_is_xlsx=True)
+            )
         elif format == "csv":
             data = get_return_list(data, format_is_xlsx=False)
             update_resource_size(
