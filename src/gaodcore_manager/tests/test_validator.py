@@ -37,7 +37,7 @@ def test_validator_invalid_uri_error(auth_client, accept_error):
         {"object_location": "fail", "uri": "postgresql://test/adsf"},
         HTTP_ACCEPT=accept_error,
     )
-    assert response.status_code == 400
+    assert response.status_code == 503
     validate_error(response.content, "Connection is not available.", accept_error)
 
 
@@ -143,7 +143,7 @@ def test_validator_config_path_error(
         "/GA_OD_Core_admin/manager/validator", data, HTTP_ACCEPT=accept_error
     )
 
-    assert download_response.status_code == 400
+    assert download_response.status_code == 503
     validate_error(
         download_response.content, "Connection is not available.", accept_error
     )
@@ -195,7 +195,7 @@ def test_validator_credentials_error(
         {"object_location": "fail", "uri": parsed.geturl()},
         HTTP_ACCEPT=accept_error,
     )
-    assert response.status_code == 400
+    assert response.status_code == 503
     if parsed.scheme == "postgresql":
         assert (
             'FATAL:  password authentication failed for user "invalid_username"'

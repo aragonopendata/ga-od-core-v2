@@ -25,6 +25,8 @@ from django.utils.duration import duration_iso_string
 from django.utils.functional import Promise
 from geoalchemy2 import functions as GeoFunc
 from rest_framework.exceptions import ValidationError
+
+from exceptions import ServiceUnavailable, ErrorCodes
 from sqlalchemy import (
     create_engine,
     Table,
@@ -456,7 +458,11 @@ def _get_model(
     try:
         # Suppress SQLAlchemy warnings about unknown types
         with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', message="Did not recognize type", category=sqlalchemy.exc.SAWarning)
+            warnings.filterwarnings(
+                "ignore",
+                message="Did not recognize type",
+                category=sqlalchemy.exc.SAWarning,
+            )
             return Table(
                 object_location,
                 meta_data,
@@ -542,7 +548,9 @@ def _get_model(
                     "original_error": str(err)[:200],
                 },
             )
-            raise DriverConnectionError(f"Connection not available: {str(err)[:200]}") from err
+            raise DriverConnectionError(
+                f"Connection not available: {str(err)[:200]}"
+            ) from err
 
         # Log reflection failure and attempt fallback for PostgreSQL and Oracle
         if "postgresql" in str(engine.url).lower():
@@ -1040,16 +1048,22 @@ def get_session_data(
             )
         except sqlalchemy.exc.ProgrammingError as err:
             logger.warning("Object not available. - %s ", err)
-            raise ValidationError("Object not available.") from err
+            raise ServiceUnavailable(
+                "Object not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
+            ) from err
         except sqlalchemy.exc.InvalidRequestError as err:
             logger.warning("Invalid Request Error. - %s ", err)
-            raise ValidationError("Invalid Request Error.") from err
+            raise ServiceUnavailable(
+                "Invalid Request Error.", code=ErrorCodes.QUERY_ERROR
+            ) from err
         except SortFieldNoExistsError as err:
             logger.warning("Sort Field No Exists Error. - %s ", err)
             raise ValidationError(err.message) from err
         except Exception as err:
             logger.warning("Problem in resource query: %s", err)
-            raise ValidationError("Query error") from err
+            raise ServiceUnavailable(
+                "Query error", code=ErrorCodes.QUERY_ERROR
+            ) from err
         finally:
             session.close()
             engine.dispose()

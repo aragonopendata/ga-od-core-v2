@@ -41,7 +41,7 @@ def test_connector_config_path_error(
         {"name": request.node.name, "uri": connector_uri},
         HTTP_ACCEPT=accept_error,
     )
-    assert response.status_code == 400
+    assert response.status_code == 503
     validate_error(
         response.content, "Connection is not available.", accept_error, "uri"
     )
@@ -72,7 +72,7 @@ def test_connector_credentials_error(
         {"name": request.node.name, "uri": parsed.geturl()},
         HTTP_ACCEPT=accept_error,
     )
-    assert response.status_code == 400
+    assert response.status_code == 503
     if parsed.scheme == "postgresql":
         assert (
             'FATAL:  password authentication failed for user "invalid_username"'

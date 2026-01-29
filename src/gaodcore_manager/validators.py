@@ -3,6 +3,8 @@ from urllib.parse import urlparse
 
 from rest_framework.exceptions import ValidationError
 
+from exceptions import ServiceUnavailable, ErrorCodes
+
 from connectors import (
     validate_resource,
     NoObjectError,
@@ -28,7 +30,9 @@ def uri_validator(uri):
             "Mimetype of content-type is not allowed. Only allowed: JSON mimetypes."
         ) from err
     except DriverConnectionError as err:
-        raise ValidationError("Connection is not available.", 503) from err
+        raise ServiceUnavailable(
+            "Connection is not available.", code=ErrorCodes.CONNECTION_UNAVAILABLE
+        ) from err
 
 
 def resource_validator(
@@ -76,4 +80,6 @@ def resource_validator(
             "Resource is not available. Table, view, function, etc... not exists."
         ) from err
     except DriverConnectionError as err:
-        raise ValidationError("Connection is not available.", 400) from err
+        raise ServiceUnavailable(
+            "Connection is not available.", code=ErrorCodes.CONNECTION_UNAVAILABLE
+        ) from err
