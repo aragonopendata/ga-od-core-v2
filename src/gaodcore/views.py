@@ -278,21 +278,42 @@ class DownloadView(APIViewMixin):
 
         if format == "xlsx":
             logger.info("Downloading resource in xlsx format: %s", resource_config)
-            if not validator_max_excel_allowed(
-                uri=resource_config.connector_config.uri,
-                object_location=resource_config.object_location,
-                object_location_schema=resource_config.object_location_schema,
-                filters=filters,
-                like=like,
-                limit=limit,
-                offset=offset,
-                fields=fields,
-                sort=sort,
-            ):
-                raise ValidationError(
-                    "An xlsx cannot be generated with so many lines, please request it in another format",
-                    407,
-                ) from TooManyRowsErrorExcel
+            try:
+                if not validator_max_excel_allowed(
+                    uri=resource_config.connector_config.uri,
+                    object_location=resource_config.object_location,
+                    object_location_schema=resource_config.object_location_schema,
+                    filters=filters,
+                    like=like,
+                    limit=limit,
+                    offset=offset,
+                    fields=fields,
+                    sort=sort,
+                ):
+                    raise ValidationError(
+                        "An xlsx cannot be generated with so many lines, please request it in another format",
+                        407,
+                    ) from TooManyRowsErrorExcel
+            except DriverConnectionError as err:
+                logger.warning("Connection is not available during Excel validation: %s", err)
+                logger.warning(
+                    "Resource: %s, Uri: %s - Location: %s - Schema: %s",
+                    resource_id,
+                    resource_config.connector_config.uri,
+                    resource_config.object_location,
+                    resource_config.object_location_schema,
+                )
+                raise ValidationError("Connection is not available.", 500) from err
+            except NoObjectError as err:
+                logger.warning("Object is not available during Excel validation: %s", err)
+                logger.warning(
+                    "Resource: %s, Uri: %s - Location: %s - Schema: %s",
+                    resource_id,
+                    resource_config.connector_config.uri,
+                    resource_config.object_location,
+                    resource_config.object_location_schema,
+                )
+                raise ValidationError("Object is not available.", 500) from err
         #    raise ValidationError({'error' : 'An xlsx cannot be generated with so many lines, please request
         #    it in another format'})
 
