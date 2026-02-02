@@ -1,6 +1,10 @@
 """Custom exception handlers for consistent error response format."""
 
+import logging
+
 from rest_framework.views import exception_handler
+
+logger = logging.getLogger(__name__)
 
 
 def custom_exception_handler(exc, context):
@@ -41,5 +45,23 @@ def custom_exception_handler(exc, context):
 
         response.data["error_code"] = error_code
         response.data["status"] = response.status_code
+
+        # Log server errors (5xx) with context for easier debugging
+        if response.status_code >= 500:
+            request = context.get("request")
+            resource_id = None
+            path = "unknown"
+            if request:
+                resource_id = request.query_params.get("resource_id")
+                path = request.path
+
+            logger.error(
+                "%s: %s - resource_id=%s, error_code=%s, detail=%s",
+                response.status_code,
+                path,
+                resource_id,
+                error_code,
+                exc.detail if hasattr(exc, "detail") else str(exc),
+            )
 
     return response
