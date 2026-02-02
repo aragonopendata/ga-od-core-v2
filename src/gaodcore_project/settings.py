@@ -250,6 +250,11 @@ LOGGING = {
             "level": "ERROR",
             "propagate": False,
         },
+        "gaodcore": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
     },
 }
 
