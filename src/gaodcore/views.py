@@ -295,9 +295,8 @@ class DownloadView(APIViewMixin):
                     "Connection is not available during Excel validation: %s", err
                 )
                 logger.warning(
-                    "Resource: %s, Uri: %s - Location: %s - Schema: %s",
+                    "Resource: %s - Location: %s - Schema: %s",
                     resource_id,
-                    resource_config.connector_config.uri,
                     resource_config.object_location,
                     resource_config.object_location_schema,
                 )
@@ -310,9 +309,8 @@ class DownloadView(APIViewMixin):
                     "Object is not available during Excel validation: %s", err
                 )
                 logger.warning(
-                    "Resource: %s, Uri: %s - Location: %s - Schema: %s",
+                    "Resource: %s - Location: %s - Schema: %s",
                     resource_id,
-                    resource_config.connector_config.uri,
                     resource_config.object_location,
                     resource_config.object_location_schema,
                 )
@@ -331,9 +329,8 @@ class DownloadView(APIViewMixin):
         except DriverConnectionError as err:
             logger.warning("Connection is not available. : %s", err)
             logger.warning(
-                "Resource: %s, Uri: %s - Location: %s - Schema: %s",
+                "Resource: %s - Location: %s - Schema: %s",
                 resource_id,
-                resource_config.connector_config.uri,
                 resource_config.object_location,
                 resource_config.object_location_schema,
             )
@@ -343,9 +340,8 @@ class DownloadView(APIViewMixin):
         except NoObjectError as err:
             logger.warning("Object is not available. : %s", err)
             logger.warning(
-                "Resource: %s, Uri: %s - Location: %s - Schema: %s",
+                "Resource: %s - Location: %s - Schema: %s",
                 resource_id,
-                resource_config.connector_config.uri,
                 resource_config.object_location,
                 resource_config.object_location_schema,
             )
