@@ -273,6 +273,10 @@ def _create_table_from_information_schema(
         sqlalchemy.exc.DatabaseError,
         sqlalchemy.exc.ProgrammingError,
     ) as err:
+        logger.error(
+            "Database connection error in information_schema fallback: %s",
+            str(err),
+        )
         raise DriverConnectionError("Connection not available.") from err
 
 
@@ -422,6 +426,10 @@ def _create_table_from_oracle_system_views(
         sqlalchemy.exc.DatabaseError,
         sqlalchemy.exc.ProgrammingError,
     ) as err:
+        logger.error(
+            "Database connection error in Oracle system views fallback: %s",
+            str(err),
+        )
         raise DriverConnectionError("Connection not available.") from err
 
 
@@ -608,9 +616,10 @@ def _get_model(
                 )
             except Exception as fallback_err:
                 logger.error(
-                    "Fallback also failed for Oracle table. Table: %s, Schema: %s, Error: %s",
+                    "Fallback also failed for Oracle table. Table: %s, Schema: %s, Original error: %s, Fallback error: %s",
                     object_location,
                     object_location_schema,
+                    str(err),
                     str(fallback_err),
                     extra={
                         "fallback_failed": True,
@@ -620,8 +629,8 @@ def _get_model(
                 )
                 raise DriverConnectionError("Connection not available.") from err
         else:
-            logging.warning(
-                "Connection not available. Url: %s, Error: %s", engine.url, err
+            logger.error(
+                "Database connection error. Url: %s, Error: %s", engine.url, err
             )
             raise DriverConnectionError("Connection not available.") from err
 
