@@ -235,6 +235,11 @@ LOGGING = {
             "level": os.getenv("DJANGO_LOG_LEVEL", "WARNING"),
             "propagate": False,
         },
+        "django.template": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
         "django.request": {
             "handlers": ["console"],
             "level": os.getenv("DJANGO_LOG_LEVEL", "WARNING"),
