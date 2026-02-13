@@ -52,6 +52,26 @@ services:
     networks:
       - infraestructura_opendata
 
+  create-views:
+    image: postgres:17
+    restart: "no"
+    environment:
+      - POSTGRESQL_HOST=postgres-gaodcore
+      - POSTGRESQL_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-gaodcore}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-gaodcore}
+      - POSTGRES_DB=${POSTGRES_DB:-ga_od_core}
+    volumes:
+      - ./scripts/create_requests_view.sh:/scripts/create_requests_view.sh:ro
+    depends_on:
+      django:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    entrypoint: ["bash", "/scripts/create_requests_view.sh"]
+    networks:
+      - infraestructura_opendata
+
 configs:
   gaodcore-config:
     file: config.yaml
