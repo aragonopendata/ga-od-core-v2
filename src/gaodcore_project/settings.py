@@ -237,22 +237,22 @@ LOGGING = {
         },
         "django.request": {
             "handlers": ["console"],
-            "level": "ERROR",
+            "level": os.getenv("DJANGO_LOG_LEVEL", "WARNING"),
             "propagate": False,
         },
         "sqlalchemy": {
             "handlers": ["console"],
-            "level": "ERROR",
+            "level": os.getenv("SQLALCHEMY_LOG_LEVEL", "ERROR"),
             "propagate": False,
         },
         "sqlalchemy.engine": {
             "handlers": ["console"],
-            "level": "ERROR",
+            "level": os.getenv("SQLALCHEMY_LOG_LEVEL", "ERROR"),
             "propagate": False,
         },
         "gaodcore": {
             "handlers": ["console"],
-            "level": "ERROR",
+            "level": os.getenv("DJANGO_LOG_LEVEL", "WARNING"),
             "propagate": False,
         },
     },

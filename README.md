@@ -29,6 +29,14 @@ swagger: [https://opendata.aragon.es/GA_OD_Core/ui/](https://opendata.aragon.es/
 
 Es importante poner un timeout generoso 4m ya que si hay alguna peticion no cacheada dara un error. Si se utiliza Apache como proxy revisar timeout https://httpd.apache.org/docs/2.4/mod/mod_proxy.html
 
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CONFIG_PATH` | Path to the external YAML configuration file | — |
+| `DJANGO_LOG_LEVEL` | Logging level for the application (Django, gaodcore) | `WARNING` |
+| `SQLALCHEMY_LOG_LEVEL` | Logging level for SQLAlchemy (database engine logs) | `ERROR` |
+
 ## Development
 
 ### Code Quality
