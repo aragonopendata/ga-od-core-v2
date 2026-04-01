@@ -381,16 +381,15 @@ def _create_table_from_oracle_system_views(
                 if col_type.startswith("NUMBER"):
                     sqlalchemy_type = REAL
 
-                # Quote column name for Oracle compatibility and create lowercase key for API
+                # Quote column name for Oracle compatibility and preserve exact case for API
                 quoted_col_name = quoted_name(col_name, quote=True)
-                lowercase_name = col_name.lower()
 
-                # Create column with quoted name for Oracle but lowercase key for API
+                # Create column with quoted name for Oracle and exact case for API
                 column = Column(
                     quoted_col_name,
                     sqlalchemy_type,
                     nullable=is_nullable,
-                    key=lowercase_name,
+                    key=col_name,  # Use exact case from Oracle
                 )
 
                 sqlalchemy_columns.append(column)
@@ -653,18 +652,11 @@ def get_resource_columns(
     finally:
         engine.dispose()
 
-    # Convert Oracle column names to lowercase for consistency
-    from urllib.parse import urlparse
-
-    uri_parsed = urlparse(uri)
-    is_oracle = uri_parsed.scheme == "oracle+oracledb" or "oracle" in uri_parsed.scheme
-
+    # Return column names as they are stored in the database
     data = []
     for column in model.columns:
-        column_name = column.name
-        # For Oracle databases, convert column names to lowercase
-        if is_oracle:
-            column_name = column_name.lower()
+        # Use the key attribute which preserves the exact case from the database
+        column_name = column.key
 
         data.append({"COLUMN_NAME": column_name, "DATA_TYPE": str(column.type)})
 
