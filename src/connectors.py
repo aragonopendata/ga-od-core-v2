@@ -470,6 +470,10 @@ def _get_model(
                 message="Did not recognize type",
                 category=sqlalchemy.exc.SAWarning,
             )
+            if "oracle" in str(engine.url).lower():
+                # Force fallback to ALL_TAB_COLUMNS for Oracle to preserve exact column casing
+                raise sqlalchemy.exc.NoSuchTableError("Force fallback for oracle to preserve column cases")
+
             return Table(
                 object_location,
                 meta_data,
