@@ -381,15 +381,16 @@ def _create_table_from_oracle_system_views(
                 if col_type.startswith("NUMBER"):
                     sqlalchemy_type = REAL
 
-                # Quote column name for Oracle compatibility and preserve exact case for API
+                # Quote column name for Oracle compatibility and create lowercase key for API
                 quoted_col_name = quoted_name(col_name, quote=True)
+                lowercase_name = col_name.lower()
 
-                # Create column with quoted name for Oracle and exact case for API
+                # Create column with quoted name for Oracle but lowercase key for API
                 column = Column(
                     quoted_col_name,
                     sqlalchemy_type,
                     nullable=is_nullable,
-                    key=col_name,  # Use exact case from Oracle
+                    key=lowercase_name,
                 )
 
                 sqlalchemy_columns.append(column)
@@ -470,10 +471,6 @@ def _get_model(
                 message="Did not recognize type",
                 category=sqlalchemy.exc.SAWarning,
             )
-            if "oracle" in str(engine.url).lower():
-                # Force fallback to ALL_TAB_COLUMNS for Oracle to preserve exact column casing
-                raise sqlalchemy.exc.NoSuchTableError("Force fallback for oracle to preserve column cases")
-
             return Table(
                 object_location,
                 meta_data,
@@ -656,11 +653,18 @@ def get_resource_columns(
     finally:
         engine.dispose()
 
-    # Return column names as they are stored in the database
+    # Convert Oracle column names to lowercase for consistency
+    from urllib.parse import urlparse
+
+    uri_parsed = urlparse(uri)
+    is_oracle = uri_parsed.scheme == "oracle+oracledb" or "oracle" in uri_parsed.scheme
+
     data = []
     for column in model.columns:
-        # Use the key attribute which preserves the exact case from the database
-        column_name = column.key
+        column_name = column.name
+        # For Oracle databases, convert column names to lowercase
+        if is_oracle:
+            column_name = column_name.lower()
 
         data.append({"COLUMN_NAME": column_name, "DATA_TYPE": str(column.type)})
 
