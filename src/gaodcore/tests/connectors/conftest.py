@@ -1,9 +1,11 @@
+import time
 from datetime import date
 
 import pytest
-from sqlalchemy import Column, Integer, String, Date, create_engine
+from sqlalchemy import Column, Integer, String, Date, create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from testcontainers.postgres import PostgresContainer
+from testcontainers.oracle import OracleDbContainer
 
 from gaodcore_manager.models import ResourceConfig, ConnectorConfig
 
@@ -96,3 +98,95 @@ def configs():
 @pytest.fixture(scope="function", autouse=True)
 def setup_data():
     Car.delete_all()
+
+
+# ---------------------------------------------------------------------------
+# Oracle testcontainers fixtures
+# ---------------------------------------------------------------------------
+
+ORACLE_IMAGE = "gvenzl/oracle-xe:21-slim"
+ORACLE_TEST_TABLE = "TEST_COLUMN_CASES"
+ORACLE_SCHEMA = "SYSTEM"
+
+
+def _wait_for_oracle(engine, timeout=120):
+    for _ in range(timeout // 2):
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1 FROM DUAL"))
+            return
+        except Exception:
+            time.sleep(2)
+    raise RuntimeError(f"Oracle container not ready after {timeout} seconds")
+
+
+@pytest.fixture(scope="module")
+def oracle_container():
+    container = OracleDbContainer(
+        image=ORACLE_IMAGE,
+        oracle_password="test_password",
+    )
+    container.start()
+    yield container
+    container.stop()
+
+
+@pytest.fixture(scope="module")
+def oracle_engine(oracle_container):
+    connection_url = oracle_container.get_connection_url()
+    engine = create_engine(connection_url, max_identifier_length=128)
+    _wait_for_oracle(engine)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(scope="module")
+def oracle_uri(oracle_container):
+    return oracle_container.get_connection_url()
+
+
+@pytest.fixture(scope="module")
+def setup_oracle_tables(oracle_engine):
+    with oracle_engine.connect() as conn:
+        conn.execute(text(f"""
+            BEGIN
+                EXECUTE IMMEDIATE 'DROP TABLE {ORACLE_TEST_TABLE}';
+            EXCEPTION
+                WHEN OTHERS THEN
+                    IF SQLCODE != -942 THEN
+                        RAISE;
+                    END IF;
+            END;
+        """))
+        conn.commit()
+
+        conn.execute(text(f"""
+            CREATE TABLE {ORACLE_TEST_TABLE} (
+                PRODUCTID NUMBER,
+                AÑO NUMBER,
+                "CONTRACT STATUS" VARCHAR2(100),
+                "order_id" NUMBER,
+                "UserId" VARCHAR2(100)
+            )
+        """))
+        conn.commit()
+
+        conn.execute(text(f"""
+            INSERT INTO {ORACLE_TEST_TABLE} VALUES (1, 2024, 'Active', 100, 'user_001')
+        """))
+        conn.commit()
+
+    yield
+
+    with oracle_engine.connect() as conn:
+        conn.execute(text(f"""
+            BEGIN
+                EXECUTE IMMEDIATE 'DROP TABLE {ORACLE_TEST_TABLE}';
+            EXCEPTION
+                WHEN OTHERS THEN
+                    IF SQLCODE != -942 THEN
+                        RAISE;
+                    END IF;
+            END;
+        """))
+        conn.commit()

@@ -144,11 +144,15 @@ def test_download_format_error(endpoint: str, client: Client, full_example):
     )
     assert download_response.status_code == 400
     # Note is normal that all return a JSON due that formato is incorrect. Format is replacement of accept.
-    assert (
-        download_response.content
-        == b"[\"Formato: \\\"dj\\\" is not allowed. Allowed values: ['json', 'api', 'yaml', 'xml', 'xlsx', "
-        b"'csv']\"]"
-    )
+    # New format includes error_code and status fields, with detail as a list
+    response_data = json.loads(download_response.content)
+    assert "error_code" in response_data
+    assert "status" in response_data
+    assert response_data["status"] == 400
+    assert "detail" in response_data
+    assert isinstance(response_data["detail"], list)
+    assert len(response_data["detail"]) == 1
+    assert "Formato: \"dj\" is not allowed. Allowed values: ['json', 'api', 'yaml', 'xml', 'xlsx', 'csv']" in response_data["detail"][0]
 
 
 @pytest.mark.django_db
