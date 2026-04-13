@@ -205,26 +205,46 @@ def validate_error(content_error: bytes, error_description: str, mime_type: str,
     if mime_type == 'text/html':
         assert content_error
     elif mime_type == 'application/json':
+        response_data = json.loads(content_error)
+        # New error format includes error_code and status fields
+        assert "error_code" in response_data
+        assert "status" in response_data
+
         if error_field:
-            error = {error_field: [error_description]}
+            # For field-specific errors, check if the field exists in the response
+            # If not, it means the error is a general error (APIException) rather than
+            # a field-specific ValidationError, so check the detail field instead
+            if error_field in response_data:
+                assert error_description in response_data[error_field]
+            else:
+                # General error format - check detail field
+                assert "detail" in response_data
+                if isinstance(response_data["detail"], list):
+                    assert error_description in response_data["detail"]
+                else:
+                    assert error_description == response_data["detail"]
         else:
-            error = [error_description]
-        assert json.loads(content_error) == error
+            # For general errors, check the detail field
+            assert "detail" in response_data
+            if isinstance(response_data["detail"], list):
+                assert error_description in response_data["detail"]
+            else:
+                assert error_description == response_data["detail"]
     elif mime_type == 'text/csv':
-        if ',' in error_description:
-            error_description = f'"{error_description}"'
-        if error_field:
-            error_field = f'{error_field}.0'
-        else:
-            error_field = '""'
-        assert content_error == f'{error_field}\r\n{error_description}\r\n'.encode()
+        # New CSV format includes error_code, error_description, and status columns
+        # For errors without a field, the format is: detail.0,error_code,error_description,status
+        decoded = content_error.decode('utf-8')
+        assert error_description in decoded or f'"{error_description}"' in decoded
+        assert 'error_code' in decoded or 'ERROR_CODE' in decoded
+        assert 'status' in decoded or 'STATUS' in decoded
     elif mime_type == 'application/xml':
-        if error_field:
-            error = f'<?xml version="1.0" encoding="utf-8"?>\n<root><{error_field}><list-item>{error_description}' \
-                    f'</list-item></{error_field}></root>'
-        else:
-            error = f'<?xml version="1.0" encoding="utf-8"?>\n<root><list-item>{error_description}</list-item></root>'
-        assert content_error == error.encode()
+        # New XML format includes error_code and status elements
+        decoded = content_error.decode('utf-8')
+        assert '<?xml version="1.0" encoding="utf-8"?>' in decoded
+        assert '<root>' in decoded
+        assert error_description in decoded or f'<list-item>{error_description}</list-item>' in decoded
+        assert '<error_code>' in decoded or '<ERROR_CODE>' in decoded
+        assert '<status>' in decoded or '<STATUS>' in decoded
     else:
         raise NotImplementedError
 

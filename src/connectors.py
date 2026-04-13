@@ -381,16 +381,15 @@ def _create_table_from_oracle_system_views(
                 if col_type.startswith("NUMBER"):
                     sqlalchemy_type = REAL
 
-                # Quote column name for Oracle compatibility and create lowercase key for API
+                # Quote column name for Oracle compatibility and preserve exact case
                 quoted_col_name = quoted_name(col_name, quote=True)
-                lowercase_name = col_name.lower()
 
-                # Create column with quoted name for Oracle but lowercase key for API
+                # Create column with quoted name for Oracle and exact case key for API
                 column = Column(
                     quoted_col_name,
                     sqlalchemy_type,
                     nullable=is_nullable,
-                    key=lowercase_name,
+                    key=col_name,
                 )
 
                 sqlalchemy_columns.append(column)
@@ -471,6 +470,10 @@ def _get_model(
                 message="Did not recognize type",
                 category=sqlalchemy.exc.SAWarning,
             )
+            if "oracle" in str(engine.url).lower():
+                # Force fallback to ALL_TAB_COLUMNS for Oracle to preserve exact column casing
+                raise sqlalchemy.exc.NoSuchTableError("Force fallback for Oracle to preserve column cases")
+
             return Table(
                 object_location,
                 meta_data,
@@ -481,16 +484,14 @@ def _get_model(
         # Check if this is Oracle and try fallback
         if "oracle" in str(engine.url).lower():
             logger.info(
-                "Oracle reflection failed, trying ALL_TAB_COLUMNS fallback. This is expected with some Oracle views. Table: %s, Schema: %s, Error: %s",
+                "Using ALL_TAB_COLUMNS fallback for Oracle to preserve exact column casing. Table: %s, Schema: %s",
                 object_location,
                 object_location_schema,
-                str(err),
                 extra={
-                    "fallback_reason": "oracle_reflection_error",
+                    "fallback_reason": "oracle_column_case_preservation",
                     "object_location": object_location,
                     "object_location_schema": object_location_schema,
                     "engine_url": str(engine.url)[:50] + "...",
-                    "error_type": type(err).__name__,
                 },
             )
 
@@ -653,18 +654,9 @@ def get_resource_columns(
     finally:
         engine.dispose()
 
-    # Convert Oracle column names to lowercase for consistency
-    from urllib.parse import urlparse
-
-    uri_parsed = urlparse(uri)
-    is_oracle = uri_parsed.scheme == "oracle+oracledb" or "oracle" in uri_parsed.scheme
-
     data = []
     for column in model.columns:
-        column_name = column.name
-        # For Oracle databases, convert column names to lowercase
-        if is_oracle:
-            column_name = column_name.lower()
+        column_name = column.key
 
         data.append({"COLUMN_NAME": column_name, "DATA_TYPE": str(column.type)})
 
