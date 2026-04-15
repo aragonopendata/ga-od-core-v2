@@ -9,9 +9,9 @@ common_config:
     default:
       ENGINE: 'django.db.backends.postgresql_psycopg2'
       NAME: 'ga_od_core'
-      USER: 'dbo_ga_od_core'
+      USER: 'gaodcore'
       PASSWORD: 'gaodcore'
-      HOST: '127.0.0.1'
+      HOST: 'postgres-gaodcore'
       PORT: 5432
   cache_ttl: 600
   health_monitoring:

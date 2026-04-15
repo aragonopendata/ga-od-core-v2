@@ -174,6 +174,7 @@ REST_FRAMEWORK = {
         "rest_framework_xml.renderers.XMLRenderer",
         "custom_renderers.BackwardCompatibleXLSXRenderer",
         "rest_framework_csv.renderers.CSVRenderer",
+        "custom_renderers.SCSVRenderer",
     ),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "gaodcore.exception_handlers.custom_exception_handler",
