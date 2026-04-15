@@ -7,8 +7,8 @@ services:
     ports:
       - "6001:8000"
     environment:
-      - CONFIG_PATH=/etc/gaodcore/config.yaml
-      - POSTGRESQL_HOST=postgres-gaodcore
+      - CONFIG_PATH=/etc/gaodcore/config2.yaml
+      - POSTGRESQL_HOST=127.0.0.1
       - POSTGRESQL_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-gaodcore}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-gaodcore}
@@ -17,7 +17,7 @@ services:
       # API_BASE_URL removed - using automatic server detection
     configs:
       - source: gaodcore-config
-        target: /etc/gaodcore/config.yaml
+        target: /etc/gaodcore/config2.yaml
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,7 +56,7 @@ services:
     image: postgres:17
     restart: "no"
     environment:
-      - POSTGRESQL_HOST=postgres-gaodcore
+      - POSTGRESQL_HOST=127.0.0.1
       - POSTGRESQL_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER:-gaodcore}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-gaodcore}
@@ -74,11 +74,11 @@ services:
 
 configs:
   gaodcore-config:
-    file: config.yaml
+    file: config2.yaml
 
 volumes:
   postgres_storage:
 
 networks:
   infraestructura_opendata:
-    external: true
+    # external: true

@@ -113,12 +113,12 @@ def get_response_xlsx(data: ReturnList) -> HttpResponse:
     )
 
 
-def get_response_csv(data: ReturnList) -> HttpResponse:
+def get_response_csv(data: ReturnList, delimiter: str = ",") -> HttpResponse:
     """Get resource csv with order column names."""
     """output CSV (Comma Separated Values) dynamically using Django views"""
 
     response = HttpResponse(content_type="text/csv")
-    writer = csv.writer(response)
+    writer = csv.writer(response, delimiter=delimiter)
 
     for row, item in enumerate(data):
         csv_header = []
@@ -244,6 +244,10 @@ class DownloadView(APIViewMixin):
                     },
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
                         "schema": {"type": "string", "format": "binary"}
+                    },
+                    "text/scsv": {
+                        "schema": {"type": "string"},
+                        "example": "id;name;value\n1;Example;100\n2;Sample;200",
                     },
                 },
             }
@@ -390,13 +394,13 @@ class DownloadView(APIViewMixin):
             response = get_response_xlsx(
                 modify_header(data, columns, format_is_xlsx=True)
             )
-        elif format == "csv":
+        elif format in ("csv", "scsv"):
             data = get_return_list(data, format_is_xlsx=False)
             update_resource_size(
                 resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
             )
-
-            response = get_response_csv(modify_header(data, columns))
+            delimiter = ";" if format == "scsv" else ","
+            response = get_response_csv(modify_header(data, columns), delimiter=delimiter)
         elif featureCollection:
             response = Response(data)
         else:
