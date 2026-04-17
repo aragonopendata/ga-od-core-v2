@@ -206,6 +206,11 @@ class DownloadView(APIViewMixin):
                 type=OpenApiTypes.STR,
             ),
             OpenApiParameter(
+                "delimiter",
+                description="Delimiter for CSV format. Use ';' for semicolon-separated values. Default is ','.",
+                type=OpenApiTypes.STR,
+            ),
+            OpenApiParameter(
                 "_page",
                 description="Deprecated. Number of the page.",
                 type=OpenApiTypes.INT,
@@ -399,7 +404,11 @@ class DownloadView(APIViewMixin):
             update_resource_size(
                 resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
             )
-            delimiter = ";" if format == "scsv" else ","
+            separador = request.query_params.get("delimiter", None)
+            if separador:
+                delimiter = separador
+            else:
+                delimiter = ";" if format == "scsv" else ","
             response = get_response_csv(modify_header(data, columns), delimiter=delimiter)
         elif featureCollection:
             response = Response(data)
