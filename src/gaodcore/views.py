@@ -612,7 +612,7 @@ class DownloadView(APIViewMixin):
                     f"Value {value} is not a String, Integer, Float, Bool, Null or None",
                     400,
                 )
-        return request.query_params.get("like")
+        return like
 
     @staticmethod
     def _get_sort(request: Request) -> List[OrderBy]:

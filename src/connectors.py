@@ -4,6 +4,7 @@ import csv
 import decimal
 import json
 import logging
+import ast
 import math
 import re
 import socket
@@ -739,7 +740,7 @@ def validator_max_excel_allowed(
     object_location: Optional[str],
     object_location_schema: Optional[str],
     filters: Dict[str, str],
-    like: str,
+    like: Union[str, Dict],
     fields: List[str],
     sort: List[OrderBy],
     limit: Optional[int] = None,
@@ -834,7 +835,7 @@ def get_resource_data_feature(
     object_location: Optional[str],
     object_location_schema: Optional[str],
     filters: Dict[str, str],
-    like: str,
+    like: Union[str, Dict],
     fields: List[str],
     sort: List[OrderBy],
     limit: Optional[int] = None,
@@ -972,7 +973,7 @@ def get_session_data(
     object_location: Optional[str],
     object_location_schema: Optional[str],
     filters: Dict[str, Union[str, dict]],
-    like: str,
+    like: Union[str, Dict],
     fields: List[str],
     sort: List[OrderBy],
     limit: Optional[int] = None,
@@ -1114,7 +1115,7 @@ def get_resource_data(
     object_location: Optional[str],
     object_location_schema: Optional[str],
     filters: Dict[str, Union[str, dict]],
-    like: str,
+    like: Union[str, Dict],
     fields: List[str],
     sort: List[OrderBy],
     limit: Optional[int] = None,
@@ -1237,21 +1238,38 @@ def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
     return sort_methods
 
 
-def _process_like_filter(args: str, model: Table) -> list:
-    """Create constructor of filter like"""
+def _process_like_filter(args: Union[str, Dict], model: Table) -> list:
+    """Create constructor of filter like.
+
+    Accepts either a dict (preferred, from validated _get_like()) or a string
+    (legacy fallback). Dict input is processed directly without parsing.
+    String input uses ast.literal_eval() instead of eval() to prevent RCE.
+    """
     filters = []
-    if args and len(args) != 2:
+    if not args:
+        return filters
+    if isinstance(args, dict):
         try:
-            list_args = args.split(",")
-            for value in list_args:
-                if re.search(r"[{/}]", (value)):
-                    value = re.sub(r"[{/}]", " ", (value))
-                if re.search(r"[:]", (value)):
-                    value = re.sub(r"[:]", ",", (value))
-                key = eval(value)[0]
-                filters.append(model.columns[key].ilike(f"%{eval(value)[1]}%"))
+            for key, value in args.items():
+                filters.append(model.columns[key].ilike(f"%{value}%"))
         except KeyError as err:
             raise FieldNoExistsError(f"Field: {err.args[0]} not exists.") from err
+    else:
+        if len(args) != 2:
+            try:
+                list_args = args.split(",")
+                for value in list_args:
+                    if re.search(r"[{/}]", (value)):
+                        value = re.sub(r"[{/}]", " ", (value))
+                    if re.search(r"[:]", (value)):
+                        value = re.sub(r"[:]", ",", (value))
+                    parsed = ast.literal_eval(value)
+                    key = parsed[0]
+                    filters.append(model.columns[key].ilike(f"%{parsed[1]}%"))
+            except (ValueError, SyntaxError) as err:
+                raise ValidationError(f"Invalid like filter format: {err}") from err
+            except KeyError as err:
+                raise FieldNoExistsError(f"Field: {err.args[0]} not exists.") from err
     return filters
 
 
