@@ -49,7 +49,8 @@ RUN echo "[FreeTDS]\n\
 RUN echo "[global]\n\
     tds version = 8.0\n\
     client charset = UTF-8\n\
-    text size = 64512" > /etc/freetds/freetds.conf
+    text size = 64512\n\
+    connect timeout = 10" > /etc/freetds/freetds.conf
 
 RUN apt clean -y
 RUN cp /usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so /usr/local/lib/
@@ -71,4 +72,4 @@ RUN chmod +x scripts/create_requests_view.sh
 CMD bash -c "python manage.py migrate --noinput \
     && python manage.py collectstatic --noinput \
     && python manage.py createcachetable \
-    && gunicorn gaodcore_project.wsgi --bind :8000 --workers 9 --timeout 240"
+    && gunicorn gaodcore_project.wsgi --bind :8000 --workers 9 --timeout 240 --max-requests 1000 --max-requests-jitter 100"

@@ -1501,18 +1501,18 @@ def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
                 logger.warning(f"Could not initialize Oracle thick mode: {e}")
                 # Fall back to thin mode (default behavior)
 
-        # Configure database-specific timeout parameters
+        # Configure database-specific connection timeout parameters.
+        # connect_timeout only governs TCP handshake + auth, not query execution time,
+        # so a short default is safe even for long-running queries.
+        _DEFAULT_CONNECT_TIMEOUT = 10
+        connect_timeout = timeout if timeout is not None else _DEFAULT_CONNECT_TIMEOUT
         connect_args = {}
-        if timeout is not None:
-            if uri_parsed.scheme in ["postgresql", "mysql"]:
-                connect_args["connect_timeout"] = timeout
-            elif uri_parsed.scheme == "oracle+oracledb":
-                # Oracle oracledb driver doesn't support timeout in connect_args
-                # Timeout is typically handled at the TNS level
-                pass
-            elif uri_parsed.scheme in ["mssql+pyodbc", "mssql"]:
-                connect_args["timeout"] = timeout
-            # SQLite doesn't support timeout parameter - file operations are typically fast
+        if uri_parsed.scheme in ["postgresql", "mysql"]:
+            connect_args["connect_timeout"] = connect_timeout
+        elif uri_parsed.scheme in ["mssql+pyodbc", "mssql"]:
+            connect_args["timeout"] = connect_timeout
+        # oracle+oracledb: timeout handled at TNS/freetds level, not connect_args
+        # sqlite: file operations are local, no network timeout needed
 
         return create_engine(uri, max_identifier_length=128, connect_args=connect_args)
     if uri_parsed.scheme in _HTTP_SCHEMAS:
