@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import uuid
 from typing import Callable, Any
 
 from rest_framework.exceptions import ValidationError
@@ -6,6 +7,9 @@ from sqlalchemy import text, not_, and_, or_
 import logging
 
 logger = logging.getLogger(__name__)
+
+def _next_bind_name() -> str:
+    return f"val_{uuid.uuid4().hex[:8]}"
 
 
 def is_datetime(value):
@@ -18,73 +22,42 @@ def is_datetime(value):
         return False
 
 
-# def process_filters_args(filters: list[dict]) -> list:
-#     """Process filters and return a list of SQLAlchemy clauses."""
-#     result = []
-#     logger.info("Processing filters: %s", filters)
-#     for filter in filters:
-#         for key in filter:
-#             if isinstance(filter[key], dict):
-#                 if key == "$not":
-#                     not_function = get_function_for_operator(key)
-#                     result.append(not_function(filter[key]))
-#                 else:
-#                     for field in filter[key]:
-#                         filter_function = get_function_for_operator(field)
-#                         result.append(filter_function(key, filter[key]))
-#             elif isinstance(filter[key], list):
-#                 clause_list = []
-#                 for item in filter[key]:
-#                     clause = process_filters_args([item])
-#                     clause_list.extend(clause)
-#                 if key == "$and":
-#                     result.append(and_(*clause_list))
-#                 elif key == "$or":
-#                     result.append(or_(*clause_list))
-#                 else:
-#                     logger.warning("Filter not valid: %s", filter)
-#                     raise ValidationError("Filter not valid: %s", filter)
-#
-#             else:
-#                 logger.warning("Filter not valid: %s", filter)
-#                 raise ValidationError("Filter not valid")
-#
-#     return result
+def _validate_field(field: str, column_names: frozenset):
+    if column_names and field not in column_names:
+        raise ValidationError(f"Unknown field: {field}")
 
 
-def process_filters_args(filters: list[dict], scheme: str = "") -> list:
-    """Process filters and return a list of SQLAlchemy clauses."""
+def process_filters_args(filters: list[dict], scheme: str = "", column_names: frozenset = frozenset()) -> list:
     result = []
     logger.info("Processing filters: %s", filters)
     for filter in filters:
         for key, value in filter.items():
             if isinstance(value, dict):
-                result.extend(process_dict_filter(key, value, scheme))
+                result.extend(process_dict_filter(key, value, scheme, column_names))
             elif isinstance(value, list):
-                result.append(process_list_filter(key, value))
+                result.append(process_list_filter(key, value, column_names))
             else:
                 result.append(process_simple_filter(key, value))
     return result
 
 
-def process_dict_filter(key: str, value: dict, schema: str) -> list:
-    """Process dictionary filters."""
+def process_dict_filter(key: str, value: dict, schema: str, column_names: frozenset = frozenset()) -> list:
     result = []
     if key == "$not":
         not_function = get_function_for_operator(key)
-        result.append(not_function(value))
+        result.append(not_function(value, column_names=column_names))
     else:
+        _validate_field(key, column_names)
         for field, field_value in value.items():
             filter_function = get_function_for_operator(field)
-            result.append(filter_function(key, {field: field_value}, schema))
+            result.append(filter_function(key, {field: field_value}, schema, column_names=column_names))
     return result
 
 
-def process_list_filter(key: str, value: list) -> text:
-    """Process list filters."""
+def process_list_filter(key: str, value: list, column_names: frozenset = frozenset()) -> text:
     clause_list = []
     for item in value:
-        clause_list.extend(process_filters_args([item]))
+        clause_list.extend(process_filters_args([item], column_names=column_names))
     if key == "$and":
         return and_(*clause_list)
     elif key == "$or":
@@ -95,13 +68,11 @@ def process_list_filter(key: str, value: list) -> text:
 
 
 def process_simple_filter(key: str, value: Any) -> text:
-    """Process simple filters."""
     logger.warning("Filter not valid: %s", {key: value})
     raise ValidationError("Filter not valid: %s" % {key: value})
 
 
 def get_function_for_operator(operator: str) -> Callable:
-    """Return the operator function based on the filter type."""
     filter_operators = {
         "$gt": filter_gt,
         "$lt": filter_lt,
@@ -118,111 +89,51 @@ def get_function_for_operator(operator: str) -> Callable:
     return result
 
 
-def format_type(value, schema: str = "") -> str:
-    if isinstance(value, str):
-        if "oracle" in schema and is_datetime(value):
-            the_date = datetime.fromisoformat(value)
-            value = f"TO_DATE('{the_date.isoformat()}', 'YYYY-MM-DD\"T\"HH24:MI:SS')"
-        else:
-            value = f"'{value}'"
+def _build_bind_clause(field: str, op: str, value, schema: str) -> text:
+    bind_name = _next_bind_name()
+    if isinstance(value, str) and "oracle" in schema and is_datetime(value):
+        the_date = datetime.fromisoformat(value)
+        return text(
+            f"{field} {op} TO_DATE(:{bind_name}, 'YYYY-MM-DD\"T\"HH24:MI:SS')"
+        ).bindparams(**{bind_name: the_date.isoformat()})
+    elif isinstance(value, date) and "oracle" in schema:
+        return text(
+            f"{field} {op} TO_DATE(:{bind_name}, 'YYYY-MM-DD\"T\"HH24:MI:SS')"
+        ).bindparams(**{bind_name: value.isoformat()})
     elif isinstance(value, date):
-        if "oracle" in schema:
-            value = f"TO_DATE('{value.isoformat()}', 'YYYY-MM-DD\"T\"HH24:MI:SS')"
-        else:
-            value = f"'{value.isoformat()}'"
-    return value
-
-
-def filter_gt(field: str, filter: dict, schema: str) -> text:
-    """Translate a filter string to a SQL clause.
-    @param field: Field name
-    @param filter: Filter dictionary
-    @return: SQL clause
-    """
-    value = filter["$gt"]
-
-    value = format_type(value, schema)
-
-    return text(f"{field} > {value}")
-
-
-def filter_lt(field: str, filter: dict, schema: str) -> text:
-    """Translate a filter string to a SQL clause.
-    @param field: Field name
-    @param filter: Filter dictionary
-    @return: SQL clause
-    """
-    value = filter["$lt"]
-    value = format_type(value, schema)
-
-    return text(f"{field} < {value}")
-
-
-def filter_eq(field: str, filter: dict, schema: str) -> text:
-    """Translate a filter string to a SQL clause.
-    @param field: Field name
-    @param filter: Filter dictionary
-    @return: SQL clause
-    """
-    value = filter["$eq"]
-    value = format_type(value, schema)
-
-    return text(f"{field} = {value}")
-
-
-def filter_ne(field: str, filter: dict, schema: str) -> text:
-    """Translate a filter string to a SQL clause.
-    @param field: Field name
-    @param filter: Filter dictionary
-    @return: SQL clause
-    """
-    value = filter["$ne"]
-    value = format_type(value, schema)
-
-    return text(f"{field} != {value}")
-
-
-def filter_gte(field: str, filter: dict, schema: str) -> text:
-    """Translate a filter string to a SQL clause.
-    @param field: Field name
-    @param filter: Filter dictionary
-    @return: SQL clause
-    """
-    value = filter["$gte"]
-    value = format_type(value, schema)
-
-    return text(f"{field} >= {value}")
-
-
-def filter_lte(field: str, filter: dict, schema: str) -> text:
-    """Translate a filter string to a SQL clause.
-    @param field: Field name
-    @param filter: Filter dictionary
-    @return: SQL clause
-    """
-    value = filter["$lte"]
-    value = format_type(value, schema)
-
-    return text(f"{field} <= {value}")
-
-
-def filter_not(filter: dict) -> text:
-    """Translate a filter string to a SQL clause.
-    @param field: Field name
-    @param filter: Filter dictionary
-    @return: SQL clause
-    """
-
-    clauses = process_filters_args([filter])
-    # In SQLAlchemy 2.0, we need to wrap TextClause objects properly for NOT operations
-    if len(clauses) == 1:
-        clause = clauses[0]
-        # If it's a TextClause, wrap it in NOT() manually
-        if hasattr(clause, 'text'):
-            return text(f"NOT ({clause.text})")
-        else:
-            return not_(clause)
+        return text(f"{field} {op} :{bind_name}").bindparams(
+            **{bind_name: value.isoformat()}
+        )
     else:
-        # For multiple clauses, combine them with AND first, then negate
-        combined = and_(*clauses)
-        return not_(combined)
+        return text(f"{field} {op} :{bind_name}").bindparams(**{bind_name: value})
+
+
+def filter_gt(field: str, filter: dict, schema: str, column_names: frozenset = frozenset()) -> text:
+    return _build_bind_clause(field, ">", filter["$gt"], schema)
+
+
+def filter_lt(field: str, filter: dict, schema: str, column_names: frozenset = frozenset()) -> text:
+    return _build_bind_clause(field, "<", filter["$lt"], schema)
+
+
+def filter_eq(field: str, filter: dict, schema: str, column_names: frozenset = frozenset()) -> text:
+    return _build_bind_clause(field, "=", filter["$eq"], schema)
+
+
+def filter_ne(field: str, filter: dict, schema: str, column_names: frozenset = frozenset()) -> text:
+    return _build_bind_clause(field, "!=", filter["$ne"], schema)
+
+
+def filter_gte(field: str, filter: dict, schema: str, column_names: frozenset = frozenset()) -> text:
+    return _build_bind_clause(field, ">=", filter["$gte"], schema)
+
+
+def filter_lte(field: str, filter: dict, schema: str, column_names: frozenset = frozenset()) -> text:
+    return _build_bind_clause(field, "<=", filter["$lte"], schema)
+
+
+def filter_not(filter: dict, column_names: frozenset = frozenset()) -> text:
+    clauses = process_filters_args([filter], column_names=column_names)
+    if len(clauses) == 1:
+        return not_(clauses[0])
+    return not_(and_(*clauses))

@@ -1025,7 +1025,7 @@ def get_session_data(
     filters, filters_args = _get_filter_operators(filters, filters_args)
     if "oracle" in parsed.scheme:
         filters = _process_filters_oracle_dates(filters)
-    filters_args = process_filters_args(filters_args, parsed.scheme)
+    filters_args = process_filters_args(filters_args, parsed.scheme, frozenset(column_dict.keys()))
     filters_args.extend(like_filters)
 
     session = session_maker()

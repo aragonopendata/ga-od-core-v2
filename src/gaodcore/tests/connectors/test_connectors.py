@@ -1,3 +1,4 @@
+import re as _re
 from collections.abc import Iterable
 from datetime import date
 
@@ -231,26 +232,31 @@ def test_get_filter_operators2(filters, filters_args, expected):
     assert result_filters_args == expected[1]
 
 
+_VAL = r":val_[0-9a-f]+"
+
+
 @pytest.mark.parametrize(
-    "filters_args, expected",
+    "filters_args, pattern",
     [
         ([], []),
-        ([{"id": {"$gt": 1}}], ["id > 1"]),
-        ([{"id": {"$gt": 1}, "name": {"$gt": "john"}}], ["id > 1", "name > 'john'"]),
+        ([{"id": {"$gt": 1}}], [rf"id > {_VAL}"]),
+        ([{"id": {"$gt": 1}, "name": {"$gt": "john"}}], [rf"id > {_VAL}", rf"name > {_VAL}"]),
         (
             [{"$and": [{"id": {"$gt": 1}}, {"name": {"$gt": "john"}}]}],
-            ["id > 1 AND name > 'john'"],
+            [rf"id > {_VAL} AND name > {_VAL}"],
         ),
         (
             [{"$or": [{"id": {"$gt": 1}}, {"name": {"$gt": "john"}}]}],
-            ["id > 1 OR name > 'john'"],
+            [rf"id > {_VAL} OR name > {_VAL}"],
         ),
     ],
 )
-def test_process_filters_args(filters_args, expected):
-    result = process_filters_args(filters_args)
+def test_process_filters_args(filters_args, pattern):
+    result = process_filters_args(filters_args, column_names=frozenset({"id", "name"}))
     result = [str(r) for r in result]
-    assert result == expected
+    assert len(result) == len(pattern)
+    for actual, pat in zip(result, pattern):
+        assert _re.fullmatch(pat, actual), f"{actual!r} did not match pattern {pat!r}"
 
 
 @pytest.mark.django_db

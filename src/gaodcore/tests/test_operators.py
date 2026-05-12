@@ -1,3 +1,4 @@
+import re
 import pytest
 from django.test import RequestFactory
 from django.test.client import Client
@@ -27,21 +28,21 @@ class TestTranslateFilter:
         filter = filter_field["key1"]
         result = get_function_for_operator("$gt")("key1", filter, "mysql")
         assert isinstance(result, TextClause)
-        assert result.text == "key1 > 10"
+        assert re.match(r"key1 > :val_[0-9a-f]+", result.text)
 
     def test_translate_filter_lt(self):
         filter_field = {"key1": {"$lt": 10}}
         filter = filter_field["key1"]
         result = get_function_for_operator("$lt")("key1", filter, "mysql")
         assert isinstance(result, TextClause)
-        assert result.text == "key1 < 10"
+        assert re.match(r"key1 < :val_[0-9a-f]+", result.text)
 
     def test_translate_filter_eq(self):
         filter_field = {"key1": {"$eq": 10}}
         filter = filter_field["key1"]
         result = get_function_for_operator("$eq")("key1", filter, "mysql")
         assert isinstance(result, TextClause)
-        assert result.text == "key1 = 10"
+        assert re.match(r"key1 = :val_[0-9a-f]+", result.text)
 
 
 class TestGetFilterOperators:
