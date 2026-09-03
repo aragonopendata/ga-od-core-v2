@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "gaodcore_manager",
     "gaodcore_health",
     "drf_spectacular",
+    "drf_spectacular_sidecar",
     "rest_framework",
     "axes",
     "easyaudit",
@@ -201,6 +202,9 @@ SPECTACULAR_SETTINGS = {
     "POSTPROCESSING_HOOKS": [
         "gaodcore_project.spectacular_hooks.parameter_order_hook",
     ],
+    # Serve Swagger UI assets from local static files instead of a CDN
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
 }
 
 # SERVERS configuration removed to use Swagger UI's automatic server detection
