@@ -30,6 +30,9 @@ from serializers import DictSerializer
 
 logger = logging.getLogger(__name__)
 
+# TODO: move to config.yaml per transport project (e.g. projects.transport.zaragoza.timeout_seconds)
+EXTERNAL_SERVICE_TIMEOUT_SECONDS = 10
+
 
 def serializerJsonEncoder(o):
     # See "Date Time String Format" in the ECMA-262 specification.
@@ -204,7 +207,11 @@ def download(
     """Download a resource without asyncio."""
     logger.info("Calling external service: %s", url)
     start = time.monotonic()
-    response = requests.get(url, auth=auth)
+    try:
+        response = requests.get(url, auth=auth, timeout=EXTERNAL_SERVICE_TIMEOUT_SECONDS)
+    except requests.exceptions.Timeout as err:
+        logger.warning("External service timed out after %ss: %s", EXTERNAL_SERVICE_TIMEOUT_SECONDS, url)
+        raise BadGateway() from err
     logger.info(
         "External service responded: %s -> %s (%.0fms)",
         url,
@@ -246,8 +253,15 @@ async def download_async(
     logger.info("Calling external service: %s", url)
     start = time.monotonic()
     try:
-        response = await session.get(url, auth=auth)
+        response = await session.get(
+            url,
+            auth=auth,
+            timeout=aiohttp.ClientTimeout(total=EXTERNAL_SERVICE_TIMEOUT_SECONDS),
+        )
     except aiohttp.client_exceptions.ServerDisconnectedError as err:
+        raise BadGateway() from err
+    except asyncio.TimeoutError as err:
+        logger.warning("External service timed out after %ss: %s", EXTERNAL_SERVICE_TIMEOUT_SECONDS, url)
         raise BadGateway() from err
 
     logger.info(
