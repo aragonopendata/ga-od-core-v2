@@ -1,11 +1,22 @@
 """Module that contains Mixins to improve Django views."""
 
+import logging
+
 from rest_framework.views import APIView
 from serializers import DictSerializer
+
+logger = logging.getLogger(__name__)
 
 
 class APIViewMixin(APIView):
     """Mixin that implements get_serializer due that external resources are provided by SQLAlchemy."""
+
+    def initial(self, request, *args, **kwargs):
+        """Log every incoming request before it reaches the handler (or a cached response short-circuits it)."""
+        logger.info(
+            "%s %s params=%s", request.method, request.path, request.query_params.dict()
+        )
+        super().initial(request, *args, **kwargs)
 
     def get_serializer(self, *args, **kwargs):
         """Function that provides a custom serializer to serialize external resources. Django ModelViewSet implements

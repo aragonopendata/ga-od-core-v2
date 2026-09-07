@@ -4,6 +4,8 @@ import asyncio
 import datetime
 import decimal
 import json
+import logging
+import time
 import uuid
 from json import JSONDecodeError
 from typing import Iterable, List, Dict, Any, Optional, Union, Coroutine
@@ -25,6 +27,8 @@ from rest_framework.utils.serializer_helpers import ReturnList
 from connectors import TooManyRowsErrorExcel
 from exceptions import BadGateway
 from serializers import DictSerializer
+
+logger = logging.getLogger(__name__)
 
 
 def serializerJsonEncoder(o):
@@ -198,7 +202,15 @@ def download(
     url: str, auth: Optional[requests.auth.HTTPBasicAuth] = None
 ) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
     """Download a resource without asyncio."""
+    logger.info("Calling external service: %s", url)
+    start = time.monotonic()
     response = requests.get(url, auth=auth)
+    logger.info(
+        "External service responded: %s -> %s (%.0fms)",
+        url,
+        response.status_code,
+        (time.monotonic() - start) * 1000,
+    )
     download_check(response)
     return response.json()
 
@@ -214,10 +226,16 @@ async def download_async_bulk(
     urls: Iterable[str], auth: Optional[aiohttp.BasicAuth] = None
 ) -> List[Dict[str, Any]]:
     """Download a bulk of resources with asyncio."""
+    urls = list(urls)
+    logger.info("Starting bulk download: %d URLs", len(urls))
+    start = time.monotonic()
     async with aiohttp.ClientSession() as session:
         data = await asyncio.gather(
             *[download_async(session, url, auth) for url in urls]
         )
+    logger.info(
+        "Bulk download finished: %d URLs in %.1fs", len(urls), time.monotonic() - start
+    )
     return data
 
 
@@ -225,11 +243,19 @@ async def download_async(
     session: aiohttp.ClientSession, url: str, auth: Optional[aiohttp.BasicAuth] = None
 ) -> Dict[str, Any]:
     """Download a resource with asyncio."""
+    logger.info("Calling external service: %s", url)
+    start = time.monotonic()
     try:
         response = await session.get(url, auth=auth)
     except aiohttp.client_exceptions.ServerDisconnectedError as err:
         raise BadGateway() from err
 
+    logger.info(
+        "External service responded: %s -> %s (%.0fms)",
+        url,
+        response.status,
+        (time.monotonic() - start) * 1000,
+    )
     download_check(response)
     try:
         data = await response.json()
