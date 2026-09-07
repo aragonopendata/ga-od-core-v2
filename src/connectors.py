@@ -74,6 +74,9 @@ _SQLALCHEMY_MAP_TYPE = {
 }
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
 
+# TODO: move to config.yaml (e.g. common_config.http_connector_timeout_seconds)
+DEFAULT_HTTP_TIMEOUT_SECONDS = 10
+
 
 class MimeType(Enum):
     """Enum with some mimetype and his different values."""
@@ -636,14 +639,17 @@ def _get_model(
 
 
 def get_resource_columns(
-    uri: str, object_location: Optional[str], object_location_schema: Optional[str]
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int] = None,
 ) -> Iterable[Dict[str, str]]:
     """From resource get a list of dictionaries with column name and data type.
 
     @param cache: if not exists connection save on cache.
     @return: list of dictionaries with column name and data type
     """
-    engine = _get_engine(uri)
+    engine = _get_engine(uri, timeout=timeout)
     try:
         model = _get_model(
             engine=engine,
@@ -804,14 +810,17 @@ def sanitize_control_charcters(text):
 
 
 def get_GeoJson_resource(
-    uri: str, object_location: Optional[str], object_location_schema: Optional[str]
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int] = None,
 ) -> Boolean:
     """From resource return if is GeoJson resource
 
     @param cache: if not exists connection save on cache.
     @return: True or False GeoJosn Resource
     """
-    engine = _get_engine(uri)
+    engine = _get_engine(uri, timeout=timeout)
     model = _get_model(
         engine=engine,
         object_location=object_location,
@@ -839,13 +848,14 @@ def get_resource_data_feature(
     sort: List[OrderBy],
     limit: Optional[int] = None,
     offset: int = 0,
+    timeout: Optional[int] = None,
 ):
     """data like GeoJSON .Encoding data a variety of geographic data structures."""
     """Data like Feature_Collection_"""
 
     """Not posible to implement GeoFunc.ST_AsGeoJSON(rows) with model, postgis version  is < 3.0 """
 
-    engine = _get_engine(uri)
+    engine = _get_engine(uri, timeout=timeout)
     session_maker = sessionmaker(bind=engine)
 
     model = _get_model(
@@ -1176,7 +1186,7 @@ def get_resource_data(
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
 
-    engine = _get_engine(uri)
+    engine = _get_engine(uri, timeout=timeout)
     session_maker = sessionmaker(bind=engine)
     model = _get_model(
         engine=engine,
@@ -1402,6 +1412,20 @@ def _get_table_from_dict(
 
 
 def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
+    """Fetch a resource served over HTTP(S) and load it into an in-memory SQLite
+    engine so the rest of the connector code can treat it like a database.
+
+    Timeout semantics: `timeout` bounds each individual blocking socket
+    operation performed by urlopen() - the connect, and separately each read()
+    call while downloading the response body - not the total request duration.
+    A slow origin that keeps trickling bytes (or a client reading a very large
+    body) could still take much longer than `timeout` in wall-clock time. This
+    is why `timeout` is never left as None on the ordinary call path (see
+    DEFAULT_HTTP_TIMEOUT_SECONDS below): a None timeout means urlopen() blocks
+    indefinitely on both connect and each read.
+    """
+    if timeout is None:
+        timeout = DEFAULT_HTTP_TIMEOUT_SECONDS
     try:
         with urllib.request.urlopen(uri, timeout=timeout) as response:
             if response.getcode() == HTTPStatus.OK:
@@ -1420,7 +1444,28 @@ def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
                     raise MimeTypeError()
             else:
                 raise DriverConnectionError("The url could not be reached.")
-    except (HTTPError, URLError) as err:
+    except HTTPError as err:
+        # Raised immediately once the status line/headers are read, before any
+        # body bytes are fetched - a non-2xx origin response is rejected without
+        # waiting on a slow/large error body.
+        logger.warning(
+            "HTTP connector received error status %s from %s", err.code, uri
+        )
+        err.close()
+        raise DriverConnectionError("The url could not be reached.") from err
+    except URLError as err:
+        # Connection-level failures (DNS, refused, TLS, connect-phase timeout).
+        logger.warning("HTTP connector failed to reach %s: %s", uri, err.reason)
+        raise DriverConnectionError("The url could not be reached.") from err
+    except TimeoutError as err:
+        # A 200 response whose body then stalls mid-read raises a bare
+        # TimeoutError (aliased to socket.timeout on Python 3.10+), which
+        # urllib does NOT wrap as URLError - it must be caught separately.
+        logger.warning(
+            "HTTP connector timed out after %ss while reading response: %s",
+            timeout,
+            uri,
+        )
         raise DriverConnectionError("The url could not be reached.") from err
     if data:
         max_key = max(data, key=len).keys()

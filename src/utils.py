@@ -31,6 +31,17 @@ from serializers import DictSerializer
 logger = logging.getLogger(__name__)
 
 # TODO: move to config.yaml per transport project (e.g. projects.transport.zaragoza.timeout_seconds)
+#
+# Timeout semantics differ between the sync and async clients below:
+# - download() uses requests' `timeout`, which bounds each individual connect/read
+#   socket operation, not the total request duration - a origin that keeps
+#   trickling bytes could still take much longer than this value in wall-clock
+#   time. That's why it also uses stream=True: the response status/headers are
+#   read (and checked) before any body bytes are pulled, so a slow-bodied error
+#   response is rejected without waiting on the body at all.
+# - download_async() uses aiohttp's `ClientTimeout(total=...)`, which genuinely
+#   caps the whole request+response-read lifecycle as one timer, so it is a real
+#   total-duration budget.
 EXTERNAL_SERVICE_TIMEOUT_SECONDS = 10
 
 
@@ -204,22 +215,41 @@ def download_check(
 def download(
     url: str, auth: Optional[requests.auth.HTTPBasicAuth] = None
 ) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
-    """Download a resource without asyncio."""
+    """Download a resource without asyncio.
+
+    Uses stream=True so the response status/headers are available without
+    downloading the body first: a failed response (e.g. 503) is rejected via
+    download_check() before any body bytes are read, even if that body is slow
+    or never finishes.
+    """
     logger.info("Calling external service: %s", url)
     start = time.monotonic()
     try:
-        response = requests.get(url, auth=auth, timeout=EXTERNAL_SERVICE_TIMEOUT_SECONDS)
+        with requests.get(
+            url, auth=auth, timeout=EXTERNAL_SERVICE_TIMEOUT_SECONDS, stream=True
+        ) as response:
+            logger.info(
+                "External service responded: %s -> %s (%.0fms)",
+                url,
+                response.status_code,
+                (time.monotonic() - start) * 1000,
+            )
+            download_check(response)
+            return response.json()
     except requests.exceptions.Timeout as err:
-        logger.warning("External service timed out after %ss: %s", EXTERNAL_SERVICE_TIMEOUT_SECONDS, url)
+        # Covers ConnectTimeout/ReadTimeout raised by the initial get() call
+        # (connect or header read). A timeout while reading the body during
+        # response.json() - verified empirically - surfaces as ConnectionError
+        # instead (requests/urllib3 map a read timeout past the initial response
+        # to ConnectionError), which is why that is caught separately below.
+        logger.warning(
+            "External service timed out after %ss: %s", EXTERNAL_SERVICE_TIMEOUT_SECONDS, url
+        )
         raise BadGateway() from err
-    logger.info(
-        "External service responded: %s -> %s (%.0fms)",
-        url,
-        response.status_code,
-        (time.monotonic() - start) * 1000,
-    )
-    download_check(response)
-    return response.json()
+    except requests.exceptions.ConnectionError as err:
+        # Covers both refused/reset connections and body-read timeouts (see above).
+        logger.warning("External service connection failed: %s - %s", url, err)
+        raise BadGateway() from err
 
 
 def download_bulk(
@@ -249,34 +279,48 @@ async def download_async_bulk(
 async def download_async(
     session: aiohttp.ClientSession, url: str, auth: Optional[aiohttp.BasicAuth] = None
 ) -> Dict[str, Any]:
-    """Download a resource with asyncio."""
+    """Download a resource with asyncio.
+
+    Uses `async with session.get(...)` so the response is always released/closed
+    on the way out, whether that's success, a failed status, a timeout while
+    reading the body, or cancellation. aiohttp's ClientTimeout(total=...) keeps a
+    single timer running across connect and the whole response read, so this is
+    a genuine total-duration budget (unlike requests' per-operation timeout
+    above): a timeout can fire either while awaiting session.get() or later
+    while awaiting response.json(), which is why both are covered by the same
+    try/except below.
+    """
     logger.info("Calling external service: %s", url)
     start = time.monotonic()
     try:
-        response = await session.get(
+        async with session.get(
             url,
             auth=auth,
             timeout=aiohttp.ClientTimeout(total=EXTERNAL_SERVICE_TIMEOUT_SECONDS),
-        )
-    except aiohttp.client_exceptions.ServerDisconnectedError as err:
-        raise BadGateway() from err
+        ) as response:
+            logger.info(
+                "External service responded: %s -> %s (%.0fms)",
+                url,
+                response.status,
+                (time.monotonic() - start) * 1000,
+            )
+            download_check(response)
+            try:
+                return await response.json()
+            except JSONDecodeError:
+                # Unexpectedly 200
+                return {}
     except asyncio.TimeoutError as err:
-        logger.warning("External service timed out after %ss: %s", EXTERNAL_SERVICE_TIMEOUT_SECONDS, url)
+        logger.warning(
+            "External service timed out after %ss: %s", EXTERNAL_SERVICE_TIMEOUT_SECONDS, url
+        )
         raise BadGateway() from err
-
-    logger.info(
-        "External service responded: %s -> %s (%.0fms)",
-        url,
-        response.status,
-        (time.monotonic() - start) * 1000,
-    )
-    download_check(response)
-    try:
-        data = await response.json()
-        return data
-    except JSONDecodeError:
-        # Unexpectedly 200
-        return {}
+    except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError) as err:
+        # Includes connection failures and truncated bodies. Keep TimeoutError
+        # first: aiohttp's ServerTimeoutError also is a ClientConnectionError.
+        # Cancellation must propagate so callers can stop outstanding work.
+        logger.warning("External service request failed (%s)", type(err).__name__)
+        raise BadGateway() from err
 
 
 async def gather_limited(concurrency_limit: int, tasks: Iterable[Coroutine]):
