@@ -1,6 +1,7 @@
 """GAODCore Zaragoza transports views."""
 
 import asyncio
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List
 from datetime import datetime
@@ -49,9 +50,16 @@ async def _download_processor(
     configs: List[DownloadProcessorConfig],
 ) -> List[Dict[str, Any]]:
     """Download all resources."""
+    concurrency = CONFIG.projects.transport.zaragoza.max_concurrency
+    logger.info(
+        "Starting Zaragoza batch download: %d resources (max_concurrency=%d)",
+        len(configs),
+        concurrency,
+    )
+    start = time.monotonic()
     async with aiohttp.ClientSession() as session:
         full_data = await gather_limited(
-            CONFIG.projects.transport.zaragoza.max_concurrency,
+            concurrency,
             [
                 _download_processor_item(
                     session, config.url, config.root_name, extra_data=config.extra_data
@@ -60,7 +68,14 @@ async def _download_processor(
             ],
         )
 
-    return [item for partial_data in full_data for item in partial_data]
+    result = [item for partial_data in full_data for item in partial_data]
+    logger.info(
+        "Zaragoza batch download finished: %d resources -> %d items in %.1fs",
+        len(configs),
+        len(result),
+        time.monotonic() - start,
+    )
+    return result
 
 
 def _get_origins() -> List[Dict[str, Any]]:

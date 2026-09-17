@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     "gaodcore_manager",
     "gaodcore_health",
     "drf_spectacular",
+    "drf_spectacular_sidecar",
     "rest_framework",
     "axes",
     "easyaudit",
@@ -201,6 +202,9 @@ SPECTACULAR_SETTINGS = {
     "POSTPROCESSING_HOOKS": [
         "gaodcore_project.spectacular_hooks.parameter_order_hook",
     ],
+    # Serve Swagger UI assets from local static files instead of a CDN
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
 }
 
 # SERVERS configuration removed to use Swagger UI's automatic server detection
@@ -296,11 +300,10 @@ DJANGO_EASY_AUDIT_REGISTERED_URLS = [
     r"/GA_OD_Core_admin/manager/connector-config",
     r"/GA_OD_Core_admin/manager/resource-config",
 ]
-DJANGO_EASY_AUDIT_REMOTE_ADDR_HEADER = "HTTP_X_FORWARDED_FOR"
-
-# Fix for Django 4.2 compatibility - provide fallback for remote_ip when header is missing
-# This ensures that tests don't fail due to null remote_ip constraint
-DJANGO_EASY_AUDIT_USE_REMOTE_ADDR_FALLBACK = True
+# REMOTE_ADDR is always present in the WSGI environ, so remote_ip is never NULL.
+# The WSGI wrapper in gaodcore_project.wsgi rewrites it from X-Forwarded-For when
+# the request comes through a reverse proxy, so the real client IP is audited.
+DJANGO_EASY_AUDIT_REMOTE_ADDR_HEADER = "REMOTE_ADDR"
 
 # During testing, disable audit logging to avoid database constraint issues
 if "test" in sys.argv or "pytest" in sys.modules:

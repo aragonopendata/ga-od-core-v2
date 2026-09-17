@@ -1,8 +1,25 @@
 """
 Custom schema views for separating public and admin API documentation.
 """
+from django.contrib.admin.views.decorators import staff_member_required
 from django.urls import reverse
+from django.utils.decorators import method_decorator
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+
+
+class StaffOnlyMixin:
+    """
+    Restricts a view to authenticated staff users.
+
+    Anonymous (or non-staff) users are redirected to the Django admin login page,
+    keeping the requested URL in the ``next`` query parameter. Only the
+    ``GA_OD_Core_admin`` documentation is protected; the public ``GA_OD_Core``
+    schema and Swagger UI remain open.
+    """
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, request, *args, **kwargs):
+        return super().dispatch(request, *args, **kwargs)
 
 
 class PublicSchemaView(SpectacularAPIView):
@@ -22,10 +39,11 @@ class PublicSchemaView(SpectacularAPIView):
     }
 
 
-class AdminSchemaView(SpectacularAPIView):
+class AdminSchemaView(StaffOnlyMixin, SpectacularAPIView):
     """
     Schema view for admin API endpoints only.
     Uses custom_settings to avoid global state modification.
+    Restricted to staff users.
     """
     custom_settings = {
         'TITLE': 'GA OD Core Admin API',
@@ -71,9 +89,10 @@ class PublicSwaggerView(SpectacularSwaggerView):
         return self.request.build_absolute_uri(reverse('schema'))
 
 
-class AdminSwaggerView(SpectacularSwaggerView):
+class AdminSwaggerView(StaffOnlyMixin, SpectacularSwaggerView):
     """
     Swagger UI view for admin API.
+    Restricted to staff users.
     """
     template_name_override = 'drf_spectacular/swagger-ui.html'
 
