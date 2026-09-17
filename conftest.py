@@ -106,7 +106,7 @@ def auth_client(client, django_user_model):
 
 
 def create_connector_ga_od_core(client, test_name: str, uri: str) -> ConnectorData:
-    data = client.post('/GA_OD_Core_admin/manager/connector-config/', {
+    data = client.post('/admin/GA_OD_Core_admin/manager/connector-config/', {
         "name": test_name,
         "enabled": True,
         "uri": uri
@@ -177,7 +177,7 @@ def create_resource_table_view(client, test_name: str, table_name: Optional[str]
     if table_name:
         data["object_location"] = test_name
 
-    data = client.post('/GA_OD_Core_admin/manager/resource-config/', data).json()
+    data = client.post('/admin/GA_OD_Core_admin/manager/resource-config/', data).json()
 
     return ResourceData(**data)
 

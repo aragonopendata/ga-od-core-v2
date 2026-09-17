@@ -13,7 +13,7 @@ class StaffOnlyMixin:
 
     Anonymous (or non-staff) users are redirected to the Django admin login page,
     keeping the requested URL in the ``next`` query parameter. Only the
-    ``GA_OD_Core_admin`` documentation is protected; the public ``GA_OD_Core``
+    ``/admin/GA_OD_Core_admin`` documentation is protected; the public ``GA_OD_Core``
     schema and Swagger UI remain open.
     """
 

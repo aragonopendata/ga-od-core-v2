@@ -8,7 +8,7 @@ def custom_preprocessing_hook(endpoints):
     """
     Custom preprocessing hook that:
     1. Filters out paths ending with '{format}' (Django format_suffix_patterns duplicates)
-    2. Filters out admin endpoints (paths starting with '/GA_OD_Core_admin/')
+    2. Filters out admin endpoints (paths starting with '/admin/GA_OD_Core_admin/')
     3. Only includes public API endpoints (paths starting with '/GA_OD_Core/')
     4. Reorders paths to prioritize '/GA_OD_Core/views'
 
@@ -26,7 +26,7 @@ def custom_preprocessing_hook(endpoints):
         path = endpoint[0]
 
         # Skip admin endpoints
-        if path.startswith('/GA_OD_Core_admin/'):
+        if path.startswith('/admin/GA_OD_Core_admin/'):
             continue
 
         # Only include GA_OD_Core endpoints
@@ -55,7 +55,7 @@ def admin_preprocessing_hook(endpoints):
     """
     Custom preprocessing hook for admin API that:
     1. Filters out paths ending with '{format}' (Django format_suffix_patterns duplicates)
-    2. Includes admin endpoints (paths starting with '/GA_OD_Core_admin/')
+    2. Includes admin endpoints (paths starting with '/admin/GA_OD_Core_admin/')
     3. Includes default endpoints (paths starting with '/GA_OD_Core/')
     4. Includes transport endpoints (paths starting with '/GA_OD_Core/gaodcore-transports/')
 
@@ -71,7 +71,7 @@ def admin_preprocessing_hook(endpoints):
         path = endpoint[0]
 
         # Include admin endpoints, default endpoints, and transport endpoints
-        if not (path.startswith('/GA_OD_Core_admin/') or path.startswith('/GA_OD_Core/')):
+        if not (path.startswith('/admin/GA_OD_Core_admin/') or path.startswith('/GA_OD_Core/')):
             continue
 
         # Skip format-suffixed endpoints created by Django's format_suffix_patterns

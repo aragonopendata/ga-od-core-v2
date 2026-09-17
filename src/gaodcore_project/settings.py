@@ -297,8 +297,8 @@ DJANGO_EASY_AUDIT_REGISTERED_URLS = [
     r"^/GA_OD_Core/preview",
     r"^/GA_OD_Core/show_columns",
     r"/GA_OD_Core/download",
-    r"/GA_OD_Core_admin/manager/connector-config",
-    r"/GA_OD_Core_admin/manager/resource-config",
+    r"/admin/GA_OD_Core_admin/manager/connector-config",
+    r"/admin/GA_OD_Core_admin/manager/resource-config",
 ]
 # REMOTE_ADDR is always present in the WSGI environ, so remote_ip is never NULL.
 # The WSGI wrapper in gaodcore_project.wsgi rewrites it from X-Forwarded-For when

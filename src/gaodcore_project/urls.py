@@ -29,7 +29,7 @@ urlpatterns = [
             path('ui/', PublicSwaggerView.as_view(url_name='schema'), name='schema-swagger-ui'),
         ])),
     re_path(
-        r'^GA_OD_Core_admin/',
+        r'^admin/GA_OD_Core_admin/',
         include([
             path('', RedirectView.as_view(pattern_name='admin-schema-swagger-ui'), name='admin-index'),
             path('admin/', admin.site.urls),

@@ -21,9 +21,9 @@ swagger: [https://opendata.aragon.es/GA_OD_Core/ui/](https://opendata.aragon.es/
 - **transports**: Public APP that provide different endpoints to get data of transports of _Aragón_.
   Directory: [/GA_OD_Core/gaodcore-transports](/GA_OD_Core/gaodcore-transports)
 - **admin**: Private APP that allow to manage authentication and authorization. Directory:
-  [/GA_OD_Core_admin/admin](/GA_OD_Core_admin/admin)
+  [/admin/GA_OD_Core_admin/admin](/admin/GA_OD_Core_admin/admin)
 - **manager**: Private APP that allow to manage _gaodcore_ functionalities. This app is hidden in swagger if you are not
-  session authenticated. Directory: [/GA_OD_Core_admin/manager](/GA_OD_Core_admin/manager)
+  session authenticated. Directory: [/admin/GA_OD_Core_admin/manager](/admin/GA_OD_Core_admin/manager)
 
 ## Despliegue
 
@@ -61,7 +61,7 @@ Currently, it is allowed Session and Basic authentication.
 #### Session Authentication
 
 This is util to show **manager** app in swagger. You can authenticate graphically here:
-[/GA_OD_Core_admin/admin/](/GA_OD_Core_admin/admin/)
+[/admin/GA_OD_Core_admin/admin/](/admin/GA_OD_Core_admin/admin/)
 
 #### Basic Authentication
 
@@ -164,35 +164,35 @@ It is posible to get data without create any configuration to test if data is co
 Take care that when you create a `ConnectorConfig` or `ResourceConfig` will check if resource is available. Not availability
 of a resource will raise an error.
 
-In [/GA_OD_Core_admin/manager/validator/](/GA_OD_Core_admin/manager/validator/) you must send a GET
+In [/admin/GA_OD_Core_admin/manager/validator/](/admin/GA_OD_Core_admin/manager/validator/) you must send a GET
 authenticated request with following data:
 ![validator](docs/images/swagger/validator.png)
 
 Swagger
-URL: [/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_validator_list](/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_validator_list)
+URL: [/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_validator_retrieve](/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_validator_retrieve)
 
 
 #### Create a new ConnectorConfig
 Create a `ConnectorConfig` is the way to explain how GAODCore must connect with an external resource: api or database.
 This step not include retrieval of data.
 
-In [/GA_OD_Core_admin/manager/connector-config/](/GA_OD_Core_admin/manager/connector-config/) you must send a POST
+In [/admin/GA_OD_Core_admin/manager/connector-config/](/admin/GA_OD_Core_admin/manager/connector-config/) you must send a POST
 authenticated request with following data:
 
 ![connector config creation](docs/images/swagger/connector-config-creation.png)
 Swagger
-URL: [/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_resource-config_create](/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_resource-config_create)
+URL: [/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_connector_config_create](/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_connector_config_create)
 
 #### Create a new ResourceConfig
 
 Create a `ResourceConfig` is the way to explain what data GAODCore must retrieve.
 
-In [/GA_OD_Core_admin/manager/resource-config/](/GA_OD_Core_admin/manager/resource-config/) you must send a POST
+In [/admin/GA_OD_Core_admin/manager/resource-config/](/admin/GA_OD_Core_admin/manager/resource-config/) you must send a POST
 authenticated request with following data:
 
 ![resource config creation](docs/images/swagger/resource-config-creation.png)
 Swagger
-URL: [/GA_OD_Core/ui/#operations-manager-GA_OD_Core_admin_manager_resource-config_create](/GA_OD_Core/ui/operations-manager-GA_OD_Core_admin_manager_resource-config_create)
+URL: [/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_resource_config_create](/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_resource_config_create)
 
 ### Data retrieval
 

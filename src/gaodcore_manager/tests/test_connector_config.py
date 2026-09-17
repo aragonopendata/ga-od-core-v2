@@ -39,7 +39,7 @@ def test_connector_config_path_error(
 ):
     connector_uri = connector_uri.rsplit("/", 1)[0] + "/path-error"
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/connector-config/",
+        "/admin/GA_OD_Core_admin/manager/connector-config/",
         {"name": request.node.name, "uri": connector_uri},
         HTTP_ACCEPT=accept_error,
     )
@@ -73,7 +73,7 @@ def test_connector_credentials_error(
         )
     )
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/connector-config/",
+        "/admin/GA_OD_Core_admin/manager/connector-config/",
         {"name": request.node.name, "uri": parsed.geturl()},
         HTTP_ACCEPT=accept_error,
     )
@@ -101,7 +101,7 @@ def test_connector_config_schema_error(
 ):
     uri = "test://postgres:postgres@localhost:1/guillotina"
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/connector-config/",
+        "/admin/GA_OD_Core_admin/manager/connector-config/",
         {"name": request.node.name, "uri": uri},
         HTTP_ACCEPT=accept_error,
     )
@@ -130,7 +130,7 @@ def test_connector_config_mime_type_error(
         validators, "validate_uri", side_effect=MimeTypeError("text/html")
     )
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/connector-config/",
+        "/admin/GA_OD_Core_admin/manager/connector-config/",
         {"name": request.node.name, "uri": "https://example.invalid/data"},
         HTTP_ACCEPT=accept_error,
     )
@@ -159,7 +159,7 @@ def test_connector_config_connection_unavailable_code(
         validators, "validate_uri", side_effect=DriverConnectionError("nope")
     )
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/connector-config/",
+        "/admin/GA_OD_Core_admin/manager/connector-config/",
         {"name": request.node.name, "uri": "postgresql://user:pass@localhost:1/db"},
         HTTP_ACCEPT=accept_error,
     )

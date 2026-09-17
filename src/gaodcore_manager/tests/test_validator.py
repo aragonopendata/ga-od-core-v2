@@ -27,7 +27,7 @@ def test_validator(
         conf["object_location"] = full_example.resources.table.object_location
 
     download_response = auth_client.get(
-        "/GA_OD_Core_admin/manager/validator", conf, HTTP_ACCEPT=accept_download
+        "/admin/GA_OD_Core_admin/manager/validator", conf, HTTP_ACCEPT=accept_download
     )
     compare_files(
         os.path.join(os.path.dirname(__file__), "..", "..", "gaodcore", "tests"),
@@ -40,7 +40,7 @@ def test_validator(
 @pytest.mark.django_db
 def test_validator_invalid_uri_error(auth_client, accept_error):
     response = auth_client.get(
-        "/GA_OD_Core_admin/manager/validator",
+        "/admin/GA_OD_Core_admin/manager/validator",
         {"object_location": "fail", "uri": "postgresql://test/adsf"},
         HTTP_ACCEPT=accept_error,
     )
@@ -51,7 +51,7 @@ def test_validator_invalid_uri_error(auth_client, accept_error):
 @pytest.mark.django_db
 def test_validator_invalid_schema_error(auth_client, accept_error):
     response = auth_client.get(
-        "/GA_OD_Core_admin/manager/validator",
+        "/admin/GA_OD_Core_admin/manager/validator",
         {"object_location": "fail", "uri": "test://test/adsf"},
         HTTP_ACCEPT=accept_error,
     )
@@ -64,7 +64,7 @@ def test_validator_invalid_schema_error(auth_client, accept_error):
 @pytest.mark.django_db
 def test_validator_invalid_location_error(auth_client, connector_uri, accept_error):
     response = auth_client.get(
-        "/GA_OD_Core_admin/manager/validator",
+        "/admin/GA_OD_Core_admin/manager/validator",
         {"object_location": "fail", "uri": connector_uri},
         HTTP_ACCEPT=accept_error,
     )
@@ -91,7 +91,7 @@ def test_validator_invalid_location_schema_error(
     auth_client, connector_uri, accept_error
 ):
     response = auth_client.get(
-        "/GA_OD_Core_admin/manager/validator",
+        "/admin/GA_OD_Core_admin/manager/validator",
         {
             "object_location_schema": "test",
             "object_location": "fail",
@@ -126,7 +126,7 @@ def test_validator_invalid_location_schema_error(
 @pytest.mark.django_db
 def test_validator_malformed_uri_error(auth_client, accept_error):
     response = auth_client.get(
-        "/GA_OD_Core_admin/manager/validator",
+        "/admin/GA_OD_Core_admin/manager/validator",
         {"object_location": "fail", "uri": "uri"},
         HTTP_ACCEPT=accept_error,
     )
@@ -147,7 +147,7 @@ def test_validator_config_path_error(
         data["object_location"] = "fail"
 
     download_response = auth_client.get(
-        "/GA_OD_Core_admin/manager/validator", data, HTTP_ACCEPT=accept_error
+        "/admin/GA_OD_Core_admin/manager/validator", data, HTTP_ACCEPT=accept_error
     )
 
     assert download_response.status_code == 503
@@ -166,7 +166,7 @@ def test_validator_too_many_rows(auth_client, full_example, mocker, accept_error
         conf["object_location"] = full_example.resources.table.object_location
 
     download_response = auth_client.get(
-        "/GA_OD_Core_admin/manager/validator", conf, HTTP_ACCEPT=accept_error
+        "/admin/GA_OD_Core_admin/manager/validator", conf, HTTP_ACCEPT=accept_error
     )
     assert download_response.status_code == 400
     validate_error(
@@ -198,7 +198,7 @@ def test_validator_credentials_error(
         )
     )
     response = auth_client.get(
-        "/GA_OD_Core_admin/manager/validator",
+        "/admin/GA_OD_Core_admin/manager/validator",
         {"object_location": "fail", "uri": parsed.geturl()},
         HTTP_ACCEPT=accept_error,
     )
@@ -225,7 +225,7 @@ def test_api_content_type_error(auth_client, httpserver: HTTPServer, accept_erro
         )
 
     response = auth_client.get(
-        "/GA_OD_Core_admin/manager/validator",
+        "/admin/GA_OD_Core_admin/manager/validator",
         {"uri": httpserver.url_for(url)},
         HTTP_ACCEPT=accept_error,
     )
@@ -240,7 +240,7 @@ def test_api_content_type_error(auth_client, httpserver: HTTPServer, accept_erro
 def test_validator_not_implemented_schema_error(auth_client, accept_error):
     """An unsupported URI scheme is rejected as a validation error, not as a 500."""
     response = auth_client.get(
-        "/GA_OD_Core_admin/manager/validator",
+        "/admin/GA_OD_Core_admin/manager/validator",
         {"uri": "ftp://username:password@localhost:21/resource"},
         HTTP_ACCEPT=accept_error,
     )

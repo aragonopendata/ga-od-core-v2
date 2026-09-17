@@ -48,7 +48,7 @@ def test_resource_view(auth_client, full_example: ConnectorData, request):
         # Not applicable
         return
     resource_response = auth_client.post(
-        "/GA_OD_Core_admin/manager/resource-config/",
+        "/admin/GA_OD_Core_admin/manager/resource-config/",
         {
             "name": request.node.name,
             "connector_config": full_example.id,
@@ -65,7 +65,7 @@ def test_resource_config_error(auth_client, connector_uri, request, accept_error
         auth_client, request.node.name, connector_uri
     )
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/resource-config/",
+        "/admin/GA_OD_Core_admin/manager/resource-config/",
         {
             "name": request.node.name,
             "enabled": True,
@@ -101,7 +101,7 @@ def test_resource_too_many_rows_error(
     mocker, auth_client: Client, full_example, accept_error
 ):
     auth_client.delete(
-        f"/GA_OD_Core_admin/manager/resource-config/{full_example.resources.table.id}/"
+        f"/admin/GA_OD_Core_admin/manager/resource-config/{full_example.resources.table.id}/"
     )
     mocker.patch.object(connectors, "_RESOURCE_MAX_ROWS", 1)
     conf = {
@@ -114,7 +114,7 @@ def test_resource_too_many_rows_error(
         conf["object_location"] = full_example.resources.table.object_location
 
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/resource-config/", conf, HTTP_ACCEPT=accept_error
+        "/admin/GA_OD_Core_admin/manager/resource-config/", conf, HTTP_ACCEPT=accept_error
     )
 
     assert response.status_code == 400
@@ -134,7 +134,7 @@ def test_resource_with_invalid_connector_error(
     connector.save()
 
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/resource-config/",
+        "/admin/GA_OD_Core_admin/manager/resource-config/",
         {
             "name": request.node.name,
             "enabled": True,
@@ -166,7 +166,7 @@ def test_resource_object_location_required_error(auth_client, accept_error, requ
     connector = _saved_connector(request.node.name, "postgresql://test/test")
 
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/resource-config/",
+        "/admin/GA_OD_Core_admin/manager/resource-config/",
         {"name": request.node.name, "enabled": True, "connector_config": connector.id},
         HTTP_ACCEPT=accept_error,
     )
@@ -188,7 +188,7 @@ def test_resource_object_location_not_allowed_error(auth_client, accept_error, r
     connector = _saved_connector(request.node.name, "https://example.invalid/data.json")
 
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/resource-config/",
+        "/admin/GA_OD_Core_admin/manager/resource-config/",
         {
             "name": request.node.name,
             "enabled": True,
@@ -249,7 +249,7 @@ def test_resource_config_error_codes(
     connector = _saved_connector(request.node.name, "postgresql://test/test")
 
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/resource-config/",
+        "/admin/GA_OD_Core_admin/manager/resource-config/",
         {
             "name": request.node.name,
             "enabled": True,
@@ -279,7 +279,7 @@ def test_resource_config_connection_unavailable_code(mocker, auth_client, reques
     connector = _saved_connector(request.node.name, "postgresql://test/test")
 
     response = auth_client.post(
-        "/GA_OD_Core_admin/manager/resource-config/",
+        "/admin/GA_OD_Core_admin/manager/resource-config/",
         {
             "name": request.node.name,
             "enabled": True,

@@ -166,7 +166,7 @@ class TestAdminSchemaView(TestCase):
         mock_response.content = b'{"openapi": "3.0.0"}'
         mock_get.return_value = mock_response
 
-        request = self.factory.get('/GA_OD_Core_admin/ui/schema/')
+        request = self.factory.get('/admin/GA_OD_Core_admin/ui/schema/')
         response = self.view.get(request)
 
         self.assertEqual(response.status_code, 200)
@@ -270,18 +270,18 @@ class TestAdminSwaggerView(TestCase):
     @patch('gaodcore_project.schema_views.reverse')
     def test_get_schema_url_reverse_call(self, mock_reverse):
         """Test that get_schema_url calls reverse with correct admin argument."""
-        mock_reverse.return_value = '/GA_OD_Core_admin/ui/schema/'
+        mock_reverse.return_value = '/admin/GA_OD_Core_admin/ui/schema/'
 
         # Create a mock request with build_absolute_uri method
         request = Mock()
-        request.build_absolute_uri.return_value = 'http://testserver/GA_OD_Core_admin/ui/schema/'
+        request.build_absolute_uri.return_value = 'http://testserver/admin/GA_OD_Core_admin/ui/schema/'
         self.view.request = request
 
         result = self.view.get_schema_url()
 
         mock_reverse.assert_called_once_with('admin-schema')
-        request.build_absolute_uri.assert_called_once_with('/GA_OD_Core_admin/ui/schema/')
-        self.assertEqual(result, 'http://testserver/GA_OD_Core_admin/ui/schema/')
+        request.build_absolute_uri.assert_called_once_with('/admin/GA_OD_Core_admin/ui/schema/')
+        self.assertEqual(result, 'http://testserver/admin/GA_OD_Core_admin/ui/schema/')
 
     def test_different_from_public_schema_url(self):
         """Test that admin schema URL is different from public schema URL."""
@@ -291,7 +291,7 @@ class TestAdminSwaggerView(TestCase):
                 if name == 'schema':
                     return '/GA_OD_Core/ui/schema/'
                 elif name == 'admin-schema':
-                    return '/GA_OD_Core_admin/ui/schema/'
+                    return '/admin/GA_OD_Core_admin/ui/schema/'
                 return '/'
 
             mock_reverse.side_effect = side_effect
@@ -316,7 +316,7 @@ class TestAdminSwaggerView(TestCase):
 
     def test_get_schema_url_with_real_request(self):
         """Test get_schema_url with a real request object."""
-        request = self.factory.get('/GA_OD_Core_admin/ui/')
+        request = self.factory.get('/admin/GA_OD_Core_admin/ui/')
         request.META['HTTP_HOST'] = 'testserver'
         self.view.request = request
 
@@ -396,7 +396,7 @@ if __name__ == '__main__':
 class TestAdminDocsRequireStaff(TestCase):
     """The admin documentation is staff-only; the public one stays open."""
 
-    admin_urls = ('/GA_OD_Core_admin/ui/', '/GA_OD_Core_admin/ui/schema/')
+    admin_urls = ('/admin/GA_OD_Core_admin/ui/', '/admin/GA_OD_Core_admin/ui/schema/')
 
     def test_anonymous_is_redirected_to_admin_login(self):
         """Anonymous users are sent to the admin login, keeping the target in `next`."""
@@ -404,7 +404,7 @@ class TestAdminDocsRequireStaff(TestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 302)
-                self.assertTrue(response.url.startswith('/GA_OD_Core_admin/admin/login/'))
+                self.assertTrue(response.url.startswith('/admin/GA_OD_Core_admin/admin/login/'))
                 self.assertIn('next=', response.url)
 
     def test_non_staff_user_is_redirected_to_admin_login(self):
@@ -414,7 +414,7 @@ class TestAdminDocsRequireStaff(TestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 302)
-                self.assertIn('/GA_OD_Core_admin/admin/login/', response.url)
+                self.assertIn('/admin/GA_OD_Core_admin/admin/login/', response.url)
 
     def test_staff_user_gets_the_admin_docs(self):
         """A staff user reaches both the Swagger UI and the schema."""

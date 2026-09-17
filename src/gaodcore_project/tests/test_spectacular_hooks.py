@@ -29,8 +29,8 @@ class TestCustomPreprocessingHook(unittest.TestCase):
             ('/GA_OD_Core/show_columns', 'GET', self.mock_callback),
 
             # Admin endpoints (should be filtered out)
-            ('/GA_OD_Core_admin/manager/', 'GET', self.mock_callback),
-            ('/GA_OD_Core_admin/admin/', 'POST', self.mock_callback),
+            ('/admin/GA_OD_Core_admin/manager/', 'GET', self.mock_callback),
+            ('/admin/GA_OD_Core_admin/admin/', 'POST', self.mock_callback),
 
             # Format-suffixed endpoints (should be filtered out)
             ('/GA_OD_Core/download.{format}', 'GET', self.mock_callback),
@@ -45,7 +45,7 @@ class TestCustomPreprocessingHook(unittest.TestCase):
         """Test that admin endpoints are filtered out."""
         result = custom_preprocessing_hook(self.sample_endpoints)
 
-        admin_paths = [endpoint[0] for endpoint in result if endpoint[0].startswith('/GA_OD_Core_admin/')]
+        admin_paths = [endpoint[0] for endpoint in result if endpoint[0].startswith('/admin/GA_OD_Core_admin/')]
         self.assertEqual(len(admin_paths), 0, "Admin endpoints should be filtered out")
 
     def test_includes_only_gaodcore_endpoints(self):
@@ -56,7 +56,7 @@ class TestCustomPreprocessingHook(unittest.TestCase):
             path = endpoint[0]
             self.assertTrue(path.startswith('/GA_OD_Core/'),
                           f"Path {path} should start with /GA_OD_Core/")
-            self.assertFalse(path.startswith('/GA_OD_Core_admin/'),
+            self.assertFalse(path.startswith('/admin/GA_OD_Core_admin/'),
                            f"Path {path} should not be admin endpoint")
 
     def test_filters_format_suffixed_endpoints(self):
@@ -119,7 +119,7 @@ class TestCustomPreprocessingHook(unittest.TestCase):
             ('/GA_OD_Core/valid1', 'GET', self.mock_callback),
             ('/invalid/path', 'GET', self.mock_callback),
             ('/GA_OD_Core/valid2', 'POST', self.mock_callback),
-            ('/GA_OD_Core_admin/invalid', 'GET', self.mock_callback),
+            ('/admin/GA_OD_Core_admin/invalid', 'GET', self.mock_callback),
         ]
 
         result = custom_preprocessing_hook(mixed_endpoints)
@@ -139,8 +139,8 @@ class TestAdminPreprocessingHook(unittest.TestCase):
 
         self.sample_endpoints = [
             # Admin endpoints (should be included)
-            ('/GA_OD_Core_admin/manager/', 'GET', self.mock_callback),
-            ('/GA_OD_Core_admin/admin/', 'POST', self.mock_callback),
+            ('/admin/GA_OD_Core_admin/manager/', 'GET', self.mock_callback),
+            ('/admin/GA_OD_Core_admin/admin/', 'POST', self.mock_callback),
 
             # Default GA_OD_Core endpoints (should be included)
             ('/GA_OD_Core/views', 'GET', self.mock_callback),
@@ -150,7 +150,7 @@ class TestAdminPreprocessingHook(unittest.TestCase):
             ('/GA_OD_Core/gaodcore-transports/aragon', 'GET', self.mock_callback),
 
             # Format-suffixed endpoints (should be filtered out)
-            ('/GA_OD_Core_admin/manager.{format}', 'GET', self.mock_callback),
+            ('/admin/GA_OD_Core_admin/manager.{format}', 'GET', self.mock_callback),
             ('/GA_OD_Core/download.{format}', 'GET', self.mock_callback),
 
             # Other paths (should be filtered out)
@@ -162,7 +162,7 @@ class TestAdminPreprocessingHook(unittest.TestCase):
         """Test that admin endpoints are included."""
         result = admin_preprocessing_hook(self.sample_endpoints)
 
-        admin_paths = [endpoint[0] for endpoint in result if endpoint[0].startswith('/GA_OD_Core_admin/')]
+        admin_paths = [endpoint[0] for endpoint in result if endpoint[0].startswith('/admin/GA_OD_Core_admin/')]
         self.assertGreater(len(admin_paths), 0, "Admin endpoints should be included")
 
     def test_includes_default_endpoints(self):
@@ -170,7 +170,7 @@ class TestAdminPreprocessingHook(unittest.TestCase):
         result = admin_preprocessing_hook(self.sample_endpoints)
 
         default_paths = [endpoint[0] for endpoint in result
-                        if endpoint[0].startswith('/GA_OD_Core/') and not endpoint[0].startswith('/GA_OD_Core_admin/')]
+                        if endpoint[0].startswith('/GA_OD_Core/') and not endpoint[0].startswith('/admin/GA_OD_Core_admin/')]
         self.assertGreater(len(default_paths), 0, "Default endpoints should be included")
 
     def test_filters_format_suffixed_endpoints(self):
@@ -187,8 +187,8 @@ class TestAdminPreprocessingHook(unittest.TestCase):
         for endpoint in result:
             path = endpoint[0]
             self.assertTrue(
-                path.startswith('/GA_OD_Core_admin/') or path.startswith('/GA_OD_Core/'),
-                f"Path {path} should start with /GA_OD_Core_admin/ or /GA_OD_Core/"
+                path.startswith('/admin/GA_OD_Core_admin/') or path.startswith('/GA_OD_Core/'),
+                f"Path {path} should start with /admin/GA_OD_Core_admin/ or /GA_OD_Core/"
             )
 
     def test_empty_endpoints_list(self):
@@ -199,7 +199,7 @@ class TestAdminPreprocessingHook(unittest.TestCase):
     def test_preserves_endpoint_structure(self):
         """Test that endpoint tuple structure is preserved."""
         test_endpoints = [
-            ('/GA_OD_Core_admin/test', 'GET', self.mock_callback),
+            ('/admin/GA_OD_Core_admin/test', 'GET', self.mock_callback),
             ('/GA_OD_Core/test2', 'POST', self.mock_callback),
         ]
 
