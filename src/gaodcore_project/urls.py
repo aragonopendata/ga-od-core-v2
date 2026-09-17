@@ -15,6 +15,7 @@ Including another URLconf
 """
 from django.urls import path, re_path, include
 from django.contrib import admin
+from django.views.generic import RedirectView
 
 from .schema_views import PublicSchemaView, AdminSchemaView, PublicSwaggerView, AdminSwaggerView
 
@@ -30,6 +31,7 @@ urlpatterns = [
     re_path(
         r'^GA_OD_Core_admin/',
         include([
+            path('', RedirectView.as_view(pattern_name='admin-schema-swagger-ui'), name='admin-index'),
             path('admin/', admin.site.urls),
             path('manager/', include('gaodcore_manager.urls')),
             path('health/', include('gaodcore_health.urls')),

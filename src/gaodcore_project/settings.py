@@ -300,11 +300,10 @@ DJANGO_EASY_AUDIT_REGISTERED_URLS = [
     r"/GA_OD_Core_admin/manager/connector-config",
     r"/GA_OD_Core_admin/manager/resource-config",
 ]
-DJANGO_EASY_AUDIT_REMOTE_ADDR_HEADER = "HTTP_X_FORWARDED_FOR"
-
-# Fix for Django 4.2 compatibility - provide fallback for remote_ip when header is missing
-# This ensures that tests don't fail due to null remote_ip constraint
-DJANGO_EASY_AUDIT_USE_REMOTE_ADDR_FALLBACK = True
+# REMOTE_ADDR is always present in the WSGI environ, so remote_ip is never NULL.
+# The WSGI wrapper in gaodcore_project.wsgi rewrites it from X-Forwarded-For when
+# the request comes through a reverse proxy, so the real client IP is audited.
+DJANGO_EASY_AUDIT_REMOTE_ADDR_HEADER = "REMOTE_ADDR"
 
 # During testing, disable audit logging to avoid database constraint issues
 if "test" in sys.argv or "pytest" in sys.modules:
