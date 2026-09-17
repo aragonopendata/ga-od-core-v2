@@ -2,6 +2,7 @@
 Comprehensive tests for OpenAPI schema views.
 Tests schema generation views and Swagger UI views for both public and admin APIs.
 """
+from django.contrib.auth.models import User
 from django.test import TestCase, RequestFactory
 from django.conf import settings
 from unittest.mock import patch, Mock
@@ -390,3 +391,40 @@ if __name__ == '__main__':
     TestRunner = get_runner(settings)
     test_runner = TestRunner()
     failures = test_runner.run_tests(["gaodcore_project.tests.test_schema_views"])
+
+
+class TestAdminDocsRequireStaff(TestCase):
+    """The admin documentation is staff-only; the public one stays open."""
+
+    admin_urls = ('/GA_OD_Core_admin/ui/', '/GA_OD_Core_admin/ui/schema/')
+
+    def test_anonymous_is_redirected_to_admin_login(self):
+        """Anonymous users are sent to the admin login, keeping the target in `next`."""
+        for url in self.admin_urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 302)
+                self.assertTrue(response.url.startswith('/GA_OD_Core_admin/admin/login/'))
+                self.assertIn('next=', response.url)
+
+    def test_non_staff_user_is_redirected_to_admin_login(self):
+        """An authenticated but non-staff user does not get access either."""
+        self.client.force_login(User.objects.create_user('plain-user', password='a-test-password'))
+        for url in self.admin_urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 302)
+                self.assertIn('/GA_OD_Core_admin/admin/login/', response.url)
+
+    def test_staff_user_gets_the_admin_docs(self):
+        """A staff user reaches both the Swagger UI and the schema."""
+        self.client.force_login(User.objects.create_user('staff-user', password='a-test-password', is_staff=True))
+        for url in self.admin_urls:
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_public_docs_remain_anonymous(self):
+        """Nothing changes for the public GA_OD_Core documentation."""
+        for url in ('/GA_OD_Core/ui/', '/GA_OD_Core/ui/schema/'):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 200)
