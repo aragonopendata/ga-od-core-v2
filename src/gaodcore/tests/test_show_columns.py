@@ -62,7 +62,8 @@ def test_show_columns_resource_not_exists(accept_error, client: Client):
     )
     assert download_response.status_code == 400
     validate_error(
-        download_response.content,
+        download_response,
         "Resource not exists or is not available",
         accept_error,
+        field_error_code="RESOURCE_UNAVAILABLE",
     )

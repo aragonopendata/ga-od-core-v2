@@ -70,29 +70,91 @@ This is util to deal with manager app and integrate other app with GAODCore. For
 
 ### API Error Responses
 
-The API uses standard HTTP status codes to indicate error types:
-
-| Status | Exception | Meaning |
-|--------|-----------|---------|
-| 400 | `ValidationError` | Client error - invalid input or request |
-| 502 | `BadGateway` | External API or service failure |
-| 503 | `ServiceUnavailable` | Database or connector unavailable |
-
-Error responses include structured information for programmatic handling:
+Errors are returned as an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem
+document, served with the `application/problem+json` media type. This is true for every
+format a client may ask for: an error to a CSV, SCSV, XLSX, YAML or XML request is still
+a problem document, never a table or a spreadsheet. The browsable API is the only
+exception and keeps rendering HTML.
 
 ```json
 {
+  "type": "https://opendata.aragon.es/problems/connection-unavailable",
+  "title": "Connection unavailable",
+  "status": 503,
   "detail": "Connection is not available.",
-  "error_code": "CONNECTION_UNAVAILABLE",
-  "status": 503
+  "error_code": "CONNECTION_UNAVAILABLE"
 }
 ```
 
+| Member | Notes |
+|--------|-------|
+| `type` | Stable identifier of the problem kind. Treat it as an opaque identifier: these URIs are **not** resolvable today, so do not dereference them. |
+| `title` | Short, human-readable summary of the problem kind. |
+| `status` | Always equal to the HTTP status code of the response. |
+| `detail` | Human-readable explanation. Always a string, never a field-error map. |
+| `error_code` | **Extension member** (project-specific). |
+| `errors` | **Extension member** (project-specific), present on validation errors only. |
+
+`error_code` and `errors` are *extension members*, which RFC 9457 explicitly allows a
+problem document to add next to the standard members (the RFC itself shows an example
+carrying an `errors` extension). Adding them therefore does not make the document any
+less of an RFC 9457 problem document.
+
+`error_code` gives clients a short, stable token to branch on without parsing `type`;
+clients that only understand the standard members can ignore both extensions and still
+read `type`, `title`, `status` and `detail`.
+
+**Validation errors** carry the structured, per-field detail under `errors`, keyed by
+field name: each leaf holds the human-readable `message` and the DRF validation `code`.
+Messages not tied to a field are grouped under `non_field_errors`. Nested serializers and
+`many=True` serializers keep their shape, so nothing is lost:
+
+```json
+{
+  "type": "https://opendata.aragon.es/problems/validation-error",
+  "title": "Validation error",
+  "status": 400,
+  "detail": "The request contains invalid fields.",
+  "error_code": "VALIDATION_ERROR",
+  "errors": {
+    "uri": [
+      {
+        "message": "Connection is not available.",
+        "code": "CONNECTION_UNAVAILABLE"
+      }
+    ]
+  }
+}
+```
+
+On a validation problem the top-level `error_code` is always `VALIDATION_ERROR` and
+`detail` is the generic *The request contains invalid fields.*; the specific semantic code
+(here `CONNECTION_UNAVAILABLE`) lives inside `errors`, next to the field it belongs to.
+
+Keeping field errors inside `errors` also means a resource with a field literally named
+`status`, `detail`, `error_code` or `errors` can never overwrite the envelope.
+
+**HTTP status codes:**
+
+| Status | Exception | Meaning |
+|--------|-----------|---------|
+| 400 | `ValidationError` | Client error - invalid input, request or missing resource |
+| 502 | `BadGateway` | External API or service failure |
+| 503 | `ServiceUnavailable` | Database or connector unavailable |
+
 **Error codes:**
+- `VALIDATION_ERROR` - The request contains invalid fields; see `errors`
 - `CONNECTION_UNAVAILABLE` - Database/connector connection failed
 - `OBJECT_UNAVAILABLE` - Table, view, or function doesn't exist
+- `RESOURCE_UNAVAILABLE` - Resource does not exist or is not enabled
 - `QUERY_ERROR` - Query execution failed
 - `SCHEMA_NOT_IMPLEMENTED` - Requested schema type not supported
+- `BAD_GATEWAY` - Upstream service failed
+
+`type` and `title` are derived from `error_code`: the type is
+`https://opendata.aragon.es/problems/` followed by the lower-case, dash-separated code,
+and the title is the code in sentence case. The resulting URI is stable and safe to match
+on, but it is an identifier only: nothing is published at that address.
 
 ### Create a new resource
 

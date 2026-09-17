@@ -4,7 +4,7 @@ import os
 import pytest
 from django.test.client import Client
 
-from conftest import validate_error, compare_files
+from conftest import validate_error, compare_files, problem_of, field_messages, field_codes
 
 
 @pytest.fixture(params=["/GA_OD_Core/download", "/GA_OD_Core/preview"])
@@ -85,7 +85,10 @@ def test_download_non_existent_field_error(
     )
     assert download_response.status_code == 400
     validate_error(
-        download_response.content, "Field: non_existent_field not exists.", accept_error
+        download_response,
+        "Field: non_existent_field not exists.",
+        accept_error,
+        field_error_code="INVALID_FIELD",
     )
 
 
@@ -143,12 +146,13 @@ def test_download_format_error(endpoint: str, client: Client, full_example):
         endpoint, {"resource_id": full_example.resources.table.id, "formato": "dj"}
     )
     assert download_response.status_code == 400
-    # Note is normal that all return a JSON due that formato is incorrect. Format is replacement of accept.
-    assert (
-        download_response.content
-        == b"[\"Formato: \\\"dj\\\" is not allowed. Allowed values: ['json', 'api', 'yaml', 'xml', 'xlsx', "
-        b"'csv']\"]"
-    )
+    # "formato" replaces the Accept header, so an invalid one fails content negotiation
+    # before any renderer is chosen. The problem document is served as problem+json.
+    problem = problem_of(download_response)
+    assert problem["error_code"] == "VALIDATION_ERROR"
+    message = field_messages(problem)[0]
+    assert message.startswith('Formato: "dj" is not allowed. Allowed values: ')
+    assert field_codes(problem) == ["INVALID_FORMAT"]
 
 
 @pytest.mark.django_db
@@ -175,7 +179,7 @@ def test_download_offset_error(
 
     assert download_response.status_code == 400
     validate_error(
-        download_response.content, "Value of offset is not a number.", accept_error
+        download_response, "Value of offset is not a number.", accept_error
     )
 
 
@@ -204,7 +208,7 @@ def test_download_limit_error(
 
     assert download_response.status_code == 400
     validate_error(
-        download_response.content, "Value of limit is not a number.", accept_error
+        download_response, "Value of limit is not a number.", accept_error
     )
 
 
@@ -257,7 +261,7 @@ def test_download_pagination_page_error(
 
     assert download_response.status_code == 400
     validate_error(
-        download_response.content, "Value of _page is not a number.", accept_error
+        download_response, "Value of _page is not a number.", accept_error
     )
 
 
@@ -277,7 +281,7 @@ def test_download_pagination_page_size_error(
 
     assert download_response.status_code == 400
     validate_error(
-        download_response.content, "Value of _pageSize is not a number.", accept_error
+        download_response, "Value of _pageSize is not a number.", accept_error
     )
 
 
@@ -304,7 +308,9 @@ def test_download_filters_json_error(endpoint: str, accept_error, client: Client
     )
 
     assert download_response.status_code == 400
-    validate_error(download_response.content, "Invalid JSON.", accept_error)
+    validate_error(
+        download_response, "Invalid JSON.", accept_error, field_error_code="INVALID_JSON"
+    )
 
 
 # TODO:  Fix this test
@@ -319,7 +325,7 @@ def test_download_filters_value_error(endpoint: str, accept_error, client: Clien
     )
     assert download_response.status_code == 400
     validate_error(
-        download_response.content,
+        download_response,
         "Value [] is not a String, Integer, Float, Bool, Null or None",
         accept_error,
     )
@@ -386,7 +392,10 @@ def test_download_sort_non_existent_field_error(
 
     assert download_response.status_code == 400
     validate_error(
-        download_response.content, "Sort field: acceleration not exists.", accept_error
+        download_response,
+        "Sort field: acceleration not exists.",
+        accept_error,
+        field_error_code="INVALID_SORT",
     )
 
 
@@ -401,7 +410,7 @@ def test_download_sort_mode_error(
     )
     assert download_response.status_code == 400
     validate_error(
-        download_response.content,
+        download_response,
         "Sort value name none is not allowed. Ej: fieldname1 asc, fieldname2 desc.",
         accept_error,
     )
@@ -418,7 +427,7 @@ def test_download_sort_too_many_arguments_error(
     )
     assert download_response.status_code == 400
     validate_error(
-        download_response.content,
+        download_response,
         "Sort value name none asd is not allowed. Too many arguments.",
         accept_error,
     )
@@ -433,9 +442,89 @@ def test_download_resource_not_exists(endpoint: str, accept_error, client: Clien
     )
     assert download_response.status_code == 400
     validate_error(
-        download_response.content,
+        download_response,
         "Resource not exists or is not available",
         accept_error,
+        field_error_code="RESOURCE_UNAVAILABLE",
+    )
+
+
+# Every semantic code a bad query string can produce. They are all raised while parsing
+# the query string, before the resource is looked up, so no database is involved.
+#
+# For a DRF ValidationError the top level "error_code" is always VALIDATION_ERROR: the
+# code that clients branch on lives inside "errors". Pinning it here makes the suite
+# fail if a raise site regresses to the generic "INVALID" code or to a bare HTTP status.
+QUERY_STRING_ERROR_CODES = [
+    ({}, "It is required to specify resource_id in the query string.", "REQUIRED"),
+    ({"resource_id": "a"}, "Resource_id is not a number.", "NOT_A_NUMBER"),
+    ({"resource_id": 1, "offset": "a"}, "Value of offset is not a number.", "NOT_A_NUMBER"),
+    ({"resource_id": 1, "limit": "a"}, "Value of limit is not a number.", "NOT_A_NUMBER"),
+    ({"resource_id": 1, "_page": "a"}, "Value of _page is not a number.", "NOT_A_NUMBER"),
+    (
+        {"resource_id": 1, "_pageSize": "a"},
+        "Value of _pageSize is not a number.",
+        "NOT_A_NUMBER",
+    ),
+    ({"resource_id": 1, "filters": "a"}, "Invalid JSON.", "INVALID_JSON"),
+    ({"resource_id": 1, "like": "a"}, "Invalid JSON.", "INVALID_JSON"),
+    (
+        {"resource_id": 1, "filters": "[]"},
+        "Invalid format: eg. {\u201ckey1\u201d: \u201ca\u201d, \u201ckey2\u201d: \u201cb\u201d}",
+        "INVALID_FILTER",
+    ),
+    (
+        {"resource_id": 1, "like": "[]"},
+        "Invalid format: eg. {\u201ckey1\u201d: \u201ca\u201d, \u201ckey2\u201d: \u201cb\u201d}",
+        "INVALID_FILTER",
+    ),
+    (
+        {"resource_id": 1, "sort": "name none"},
+        "Sort value name none is not allowed. Ej: fieldname1 asc, fieldname2 desc.",
+        "INVALID_SORT",
+    ),
+    (
+        {"resource_id": 1, "sort": "name none asd"},
+        "Sort value name none asd is not allowed. Too many arguments.",
+        "INVALID_SORT",
+    ),
+    ({"resource_id": 96}, "Resource not exists or is not available", "RESOURCE_UNAVAILABLE"),
+]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "query,message,expected_code",
+    QUERY_STRING_ERROR_CODES,
+    ids=[f"{item[2]}-{index}" for index, item in enumerate(QUERY_STRING_ERROR_CODES)],
+)
+def test_download_query_string_error_codes(
+    endpoint: str, query: dict, message: str, expected_code: str, client: Client
+):
+    """Each bad query string reports its own stable semantic code inside "errors"."""
+    response = client.get(endpoint, query, HTTP_ACCEPT="application/json")
+
+    assert response.status_code == 400
+    validate_error(
+        response,
+        message,
+        "application/json",
+        error_code="VALIDATION_ERROR",
+        field_error_code=expected_code,
+    )
+
+
+@pytest.mark.django_db
+def test_download_invalid_formato_error_code(endpoint: str, client: Client):
+    """``formato`` replaces the Accept header, so a bad one fails content negotiation."""
+    response = client.get(endpoint, {"resource_id": 1, "formato": "dj"})
+
+    assert response.status_code == 400
+    problem = problem_of(response)
+    assert problem["error_code"] == "VALIDATION_ERROR"
+    assert field_codes(problem) == ["INVALID_FORMAT"]
+    assert field_messages(problem)[0].startswith(
+        'Formato: "dj" is not allowed. Allowed values: '
     )
 
 
@@ -454,3 +543,40 @@ def test_download_extension(
         accept_download,
         download_response.content,
     )
+
+
+@pytest.mark.django_db
+def test_download_error_is_never_serialized_as_data(accept_error, client: Client):
+    """Errors must not go through the data renderers, whatever the client asked for."""
+    response = client.get(
+        "/GA_OD_Core/download", {"resource_id": -1}, HTTP_ACCEPT=accept_error
+    )
+    assert response.status_code == 400
+
+    if accept_error == "text/html":
+        # The browsable API is the one consumer that still gets HTML.
+        assert response["Content-Type"].startswith("text/html")
+        return
+
+    assert response["Content-Type"] == "application/problem+json"
+
+    body = response.content
+    # Not XLSX (zip magic), not XML, and not a CSV/SCSV table.
+    assert not body.startswith(b"PK")
+    assert not body.lstrip().startswith(b"<")
+    assert b"\r\n" not in body
+
+    problem = problem_of(response)
+    assert problem["error_code"] == "VALIDATION_ERROR"
+    assert field_codes(problem) == ["RESOURCE_UNAVAILABLE"]
+
+
+@pytest.mark.django_db
+def test_download_body_status_matches_http_status(accept_error, client: Client):
+    """The "status" member never drifts from the real HTTP status."""
+    response = client.get(
+        "/GA_OD_Core/download", {"resource_id": 1, "filters": "a"}, HTTP_ACCEPT=accept_error
+    )
+    if accept_error == "text/html":
+        return
+    assert problem_of(response)["status"] == response.status_code == 400

@@ -3,6 +3,7 @@ import uuid
 from typing import Callable, Any
 
 from rest_framework.exceptions import ValidationError
+from exceptions import ErrorCodes
 from sqlalchemy import text, not_, and_, or_
 import logging
 
@@ -24,7 +25,7 @@ def is_datetime(value):
 
 def _validate_field(field: str, column_names: frozenset):
     if column_names and field not in column_names:
-        raise ValidationError(f"Unknown field: {field}")
+        raise ValidationError(f"Unknown field: {field}", ErrorCodes.INVALID_FIELD)
 
 
 def process_filters_args(filters: list[dict], scheme: str = "", column_names: frozenset = frozenset()) -> list:
@@ -64,12 +65,12 @@ def process_list_filter(key: str, value: list, column_names: frozenset = frozens
         return or_(*clause_list)
     else:
         logger.warning("Filter not valid: %s", {key: value})
-        raise ValidationError("Filter not valid: %s" % {key: value})
+        raise ValidationError("Filter not valid: %s" % {key: value}, ErrorCodes.INVALID_FILTER)
 
 
 def process_simple_filter(key: str, value: Any) -> text:
     logger.warning("Filter not valid: %s", {key: value})
-    raise ValidationError("Filter not valid: %s" % {key: value})
+    raise ValidationError("Filter not valid: %s" % {key: value}, ErrorCodes.INVALID_FILTER)
 
 
 def get_function_for_operator(operator: str) -> Callable:
@@ -85,7 +86,7 @@ def get_function_for_operator(operator: str) -> Callable:
     result = filter_operators.get(operator)
     if result is None:
         logger.warning(f"Operator {operator} not implemented")
-        raise ValidationError(f"Operator {operator} not implemented")
+        raise ValidationError(f"Operator {operator} not implemented", ErrorCodes.INVALID_FILTER)
     return result
 
 

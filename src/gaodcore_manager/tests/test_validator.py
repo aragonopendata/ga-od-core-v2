@@ -7,7 +7,14 @@ from django.test import Client
 from pytest_httpserver import HTTPServer
 
 import connectors
-from conftest import ConnectorData, compare_files, validate_error, PROJECT_DIR
+from conftest import (
+    ConnectorData,
+    compare_files,
+    field_codes,
+    problem_of,
+    validate_error,
+    PROJECT_DIR,
+)
 
 
 @pytest.mark.django_db
@@ -38,7 +45,7 @@ def test_validator_invalid_uri_error(auth_client, accept_error):
         HTTP_ACCEPT=accept_error,
     )
     assert response.status_code == 503
-    validate_error(response.content, "Connection is not available.", accept_error)
+    validate_error(response, "Connection is not available.", accept_error)
 
 
 @pytest.mark.django_db
@@ -50,7 +57,7 @@ def test_validator_invalid_schema_error(auth_client, accept_error):
     )
     assert response.status_code == 400
     validate_error(
-        response.content, "Schema of the URI is not available.", accept_error
+        response, "Schema of the URI is not available.", accept_error
     )
 
 
@@ -65,13 +72,13 @@ def test_validator_invalid_location_error(auth_client, connector_uri, accept_err
     scheme = urlparse(connector_uri).scheme
     if scheme in ["postgresql", "mysql"]:
         validate_error(
-            response.content,
+            response,
             "Resource is not available. Table, view, function, etc... not exists.",
             accept_error,
         )
     elif scheme in ["http", "https"]:
         validate_error(
-            response.content,
+            response,
             "Object location or object location schema is not allowed in http and https resources",
             accept_error,
         )
@@ -96,19 +103,19 @@ def test_validator_invalid_location_schema_error(
     scheme = urlparse(connector_uri).scheme
     if scheme in ["postgresql"]:
         validate_error(
-            response.content,
+            response,
             "Resource is not available. Table, view, function, etc... not exists.",
             accept_error,
         )
     elif scheme in ["mysql"]:
         validate_error(
-            response.content,
+            response,
             "Object location schema is not allowed in mysql resources",
             accept_error,
         )
     elif scheme in ["http", "https"]:
         validate_error(
-            response.content,
+            response,
             "Object location or object location schema is not allowed in http and https resources",
             accept_error,
         )
@@ -125,7 +132,7 @@ def test_validator_malformed_uri_error(auth_client, accept_error):
     )
     assert response.status_code == 400
     validate_error(
-        response.content, "Schema of the URI is not available.", accept_error
+        response, "Schema of the URI is not available.", accept_error
     )
 
 
@@ -145,7 +152,7 @@ def test_validator_config_path_error(
 
     assert download_response.status_code == 503
     validate_error(
-        download_response.content, "Connection is not available.", accept_error
+        download_response, "Connection is not available.", accept_error
     )
 
 
@@ -163,7 +170,7 @@ def test_validator_too_many_rows(auth_client, full_example, mocker, accept_error
     )
     assert download_response.status_code == 400
     validate_error(
-        download_response.content,
+        download_response,
         "This resource have too many rows. For security reason this is not allowed.",
         accept_error,
     )
@@ -205,7 +212,7 @@ def test_validator_credentials_error(
         assert "Access denied for user 'invalid_username'" in caplog.text
     else:
         raise NotImplementedError
-    validate_error(response.content, "Connection is not available.", accept_error)
+    validate_error(response, "Connection is not available.", accept_error)
 
 
 @pytest.mark.django_db
@@ -223,7 +230,25 @@ def test_api_content_type_error(auth_client, httpserver: HTTPServer, accept_erro
         HTTP_ACCEPT=accept_error,
     )
     validate_error(
-        response.content,
+        response,
         "Mimetype of content-type is not allowed. Only allowed: JSON mimetypes.",
         accept_error,
     )
+
+
+@pytest.mark.django_db
+def test_validator_not_implemented_schema_error(auth_client, accept_error):
+    """An unsupported URI scheme is rejected as a validation error, not as a 500."""
+    response = auth_client.get(
+        "/GA_OD_Core_admin/manager/validator",
+        {"uri": "ftp://username:password@localhost:21/resource"},
+        HTTP_ACCEPT=accept_error,
+    )
+
+    validate_error(response, "Schema of the URI is not available.", accept_error)
+    if accept_error == "text/html":
+        return
+    assert response.status_code == 400
+    # The semantic code travels with the message, not in the envelope: the envelope of a
+    # DRF ValidationError is always VALIDATION_ERROR.
+    assert "SCHEMA_NOT_IMPLEMENTED" in field_codes(problem_of(response))

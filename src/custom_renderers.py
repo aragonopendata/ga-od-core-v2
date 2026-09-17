@@ -2,7 +2,10 @@
 Custom renderers for backward compatibility.
 """
 from drf_excel.renderers import XLSXRenderer
+from rest_framework.renderers import JSONRenderer
 from rest_framework_csv.renderers import CSVRenderer
+
+from exceptions import PROBLEM_CONTENT_TYPE
 
 
 class BackwardCompatibleXLSXRenderer(XLSXRenderer):
@@ -30,3 +33,15 @@ class SCSVRenderer(CSVRenderer):
     """
     media_type = "text/scsv"
     format = "scsv"
+
+
+class ProblemJSONRenderer(JSONRenderer):
+    """Renderer for RFC 9457-style error documents.
+
+    Errors must never go through the data renderers (CSV, SCSV, XLSX, YAML, XML): an
+    error envelope is not tabular data. The exception handler swaps the negotiated
+    renderer for this one so the body and the ``Content-Type`` always agree.
+    """
+
+    media_type = PROBLEM_CONTENT_TYPE
+    format = "problem+json"

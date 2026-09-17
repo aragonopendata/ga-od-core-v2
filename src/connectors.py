@@ -1078,7 +1078,7 @@ def get_session_data(
             ) from err
         except SortFieldNoExistsError as err:
             logger.warning("Sort Field No Exists Error. - %s ", err)
-            raise ValidationError(err.message) from err
+            raise ValidationError(err.message, ErrorCodes.INVALID_SORT) from err
         except Exception as err:
             logger.warning("Problem in resource query: %s", err)
             raise ServiceUnavailable(
@@ -1210,7 +1210,9 @@ def update_resource_size(resource_id, registries, size):
             id=resource_id, enabled=True, connector_config__enabled=True
         )
     except ResourceConfig.DoesNotExist as err:
-        raise ValidationError("Resource not exists or is not available", 400) from err
+        raise ValidationError(
+            "Resource not exists or is not available", ErrorCodes.RESOURCE_UNAVAILABLE
+        ) from err
 
     rsc = ResourceSizeConfig(registries=registries, size=size)
     rsc.resource_id = resource
@@ -1277,7 +1279,9 @@ def _process_like_filter(args: Union[str, Dict], model: Table) -> list:
                     key = parsed[0]
                     filters.append(model.columns[key].ilike(f"%{parsed[1]}%"))
             except (ValueError, SyntaxError) as err:
-                raise ValidationError(f"Invalid like filter format: {err}") from err
+                raise ValidationError(
+                    f"Invalid like filter format: {err}", ErrorCodes.INVALID_FILTER
+                ) from err
             except KeyError as err:
                 raise FieldNoExistsError(f"Field: {err.args[0]} not exists.") from err
     return filters

@@ -5,6 +5,8 @@ from rest_framework.negotiation import DefaultContentNegotiation
 from rest_framework.renderers import BaseRenderer
 from rest_framework.request import Request
 
+from exceptions import ErrorCodes
+
 
 def get_allowed_formats(renderers: List[BaseRenderer]):
     return [renderer.format for renderer in renderers]
@@ -19,6 +21,7 @@ class LegacyContentNegotiation(DefaultContentNegotiation):
         allowed_formats = get_allowed_formats(renderers)
         force_format = request.query_params.get('formato')
         if force_format is not None and force_format not in allowed_formats:
-            raise ValidationError(f'Formato: "{force_format}" is not allowed. Allowed values: {allowed_formats}', 400)
+            raise ValidationError(f'Formato: "{force_format}" is not allowed. Allowed values: {allowed_formats}',
+                                  ErrorCodes.INVALID_FORMAT)
 
         return super().select_renderer(request, renderers, format_suffix=force_format or format_suffix)

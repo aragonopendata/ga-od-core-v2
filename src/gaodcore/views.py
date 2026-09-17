@@ -47,8 +47,10 @@ _RESOURCE_MAX_ROWS_EXCEL = 1048576
 def _get_data_public_error(func: Callable, *args, **kwargs) -> List[Dict[str, Any]]:
     try:
         return func(*args, **kwargs)
-    except (FieldNoExistsError, SortFieldNoExistsError) as err:
-        raise ValidationError(err, 400) from err
+    except FieldNoExistsError as err:
+        raise ValidationError(str(err), ErrorCodes.INVALID_FIELD) from err
+    except SortFieldNoExistsError as err:
+        raise ValidationError(str(err), ErrorCodes.INVALID_SORT) from err
     except NoObjectError as err:
         raise ServiceUnavailable(
             "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
@@ -78,7 +80,10 @@ def _get_resource(resource_id: int):
         logger.warning(
             "Resource %s does not exist or is not available: %s", resource_id, err
         )
-        raise ValidationError("Resource not exists or is not available", 400) from err
+        raise ValidationError(
+            "Resource not exists or is not available",
+            ErrorCodes.RESOURCE_UNAVAILABLE,
+        ) from err
 
 
 def get_response_xlsx(data: ReturnList) -> HttpResponse:
@@ -297,8 +302,14 @@ class DownloadView(APIViewMixin):
                 ):
                     raise ValidationError(
                         "An xlsx cannot be generated with so many lines, please request it in another format",
-                        407,
+                        ErrorCodes.TOO_MANY_ROWS,
                     ) from TooManyRowsErrorExcel
+            except FieldNoExistsError as err:
+                # The Excel pre-check queries the resource too, so a bad "fields" or
+                # "sort" must fail the same way it does for every other format.
+                raise ValidationError(str(err), ErrorCodes.INVALID_FIELD) from err
+            except SortFieldNoExistsError as err:
+                raise ValidationError(str(err), ErrorCodes.INVALID_SORT) from err
             except DriverConnectionError as err:
                 logger.warning(
                     "Connection is not available during Excel validation: %s", err
@@ -495,14 +506,17 @@ class DownloadView(APIViewMixin):
         ) or request.query_params.get("view_id")
         if not resource_id:
             raise ValidationError(
-                "It is required to specify resource_id in the query string."
+                "It is required to specify resource_id in the query string.",
+                ErrorCodes.REQUIRED,
             )
 
         try:
             resource_id = int(resource_id)
         except ValueError as err:
             logger.info("Resource_id is not a number. : %s", err)
-            raise ValidationError("Resource_id is not a number.") from err
+            raise ValidationError(
+                "Resource_id is not a number.", ErrorCodes.NOT_A_NUMBER
+            ) from err
 
         return resource_id
 
@@ -519,7 +533,7 @@ class DownloadView(APIViewMixin):
                 value = int(request.query_params.get(field))
             except ValueError as err:
                 raise ValidationError(
-                    f"Value of {field} is not a number.", 400
+                    f"Value of {field} is not a number.", ErrorCodes.NOT_A_NUMBER
                 ) from err
 
         return value
@@ -559,7 +573,9 @@ class DownloadView(APIViewMixin):
             try:
                 limit = int(limit)
             except ValueError as err:
-                raise ValidationError("Value of limit is not a number.", 400) from err
+                raise ValidationError(
+                    "Value of limit is not a number.", ErrorCodes.NOT_A_NUMBER
+                ) from err
 
             if request.get_full_path().startswith("/preview"):
                 if limit > self._PREVIEW_LIMIT:
@@ -569,7 +585,7 @@ class DownloadView(APIViewMixin):
                 limit = int(page_size)
             except ValueError as err:
                 raise ValidationError(
-                    "Value of _pageSize is not a number.", 400
+                    "Value of _pageSize is not a number.", ErrorCodes.NOT_A_NUMBER
                 ) from err
 
             if request.get_full_path().startswith("/preview"):
@@ -588,10 +604,13 @@ class DownloadView(APIViewMixin):
         try:
             filters = json.loads(request.query_params.get("filters", "{}"))
         except JSONDecodeError as err:
-            raise ValidationError("Invalid JSON.", 400) from err
+            raise ValidationError("Invalid JSON.", ErrorCodes.INVALID_JSON) from err
 
         if not isinstance(filters, dict):
-            raise ValidationError("Invalid format: eg. {“key1”: “a”, “key2”: “b”}", 400)
+            raise ValidationError(
+                "Invalid format: eg. {“key1”: “a”, “key2”: “b”}",
+                ErrorCodes.INVALID_FILTER,
+            )
 
         for _, value in filters.items():
             if (
@@ -600,7 +619,7 @@ class DownloadView(APIViewMixin):
             ):
                 raise ValidationError(
                     f"Value {value} is not a String, Integer, Float, Bool, Dict, List, Null or None",
-                    400,
+                    ErrorCodes.INVALID_FILTER,
                 )
         return filters
 
@@ -615,15 +634,18 @@ class DownloadView(APIViewMixin):
             like = json.loads(request.query_params.get("like", "{}"))
 
         except JSONDecodeError as err:
-            raise ValidationError("Invalid JSON.", 400) from err
+            raise ValidationError("Invalid JSON.", ErrorCodes.INVALID_JSON) from err
 
         if not isinstance(like, dict):
-            raise ValidationError("Invalid format: eg. {“key1”: “a”, “key2”: “b”}", 400)
+            raise ValidationError(
+                "Invalid format: eg. {“key1”: “a”, “key2”: “b”}",
+                ErrorCodes.INVALID_FILTER,
+            )
         for _, value in like.items():
             if type(value) not in (str, int, float, bool, None) and value is not None:
                 raise ValidationError(
                     f"Value {value} is not a String, Integer, Float, Bool, Null or None",
-                    400,
+                    ErrorCodes.INVALID_FILTER,
                 )
         return like
 
@@ -649,11 +671,13 @@ class DownloadView(APIViewMixin):
                     sort.append(OrderBy(field=clause[0], ascending=False))
                 else:
                     raise ValidationError(
-                        f"Sort value {item} is not allowed. Ej: fieldname1 asc, fieldname2 desc."
+                        f"Sort value {item} is not allowed. Ej: fieldname1 asc, fieldname2 desc.",
+                        ErrorCodes.INVALID_SORT,
                     )
             else:
                 raise ValidationError(
-                    f"Sort value {item} is not allowed. Too many arguments."
+                    f"Sort value {item} is not allowed. Too many arguments.",
+                    ErrorCodes.INVALID_SORT,
                 )
 
         return sort
@@ -668,7 +692,9 @@ class DownloadView(APIViewMixin):
         try:
             format = request.accepted_renderer.format
         except ValueError as err:
-            raise ValidationError("Invalid Response_contnt_type.", 400) from err
+            raise ValidationError(
+                "Invalid Response_contnt_type.", ErrorCodes.INVALID_FORMAT
+            ) from err
 
         return format
 

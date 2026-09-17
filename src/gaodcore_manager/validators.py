@@ -24,10 +24,13 @@ def uri_validator(uri):
     try:
         validate_uri(uri)
     except NotImplementedSchemaError as err:
-        raise ValidationError("Schema of the URI is not available.", 400) from err
+        raise ValidationError(
+            "Schema of the URI is not available.", ErrorCodes.SCHEMA_NOT_IMPLEMENTED
+        ) from err
     except MimeTypeError as err:
-        raise MimeTypeError(
-            "Mimetype of content-type is not allowed. Only allowed: JSON mimetypes."
+        raise ValidationError(
+            "Mimetype of content-type is not allowed. Only allowed: JSON mimetypes.",
+            ErrorCodes.MIME_TYPE_NOT_ALLOWED,
         ) from err
     except DriverConnectionError as err:
         raise ServiceUnavailable(
@@ -44,20 +47,22 @@ def resource_validator(
     parsed = urlparse(uri)
     if parsed.scheme in ["postgresql"]:
         if not object_location:
-            raise ValidationError("Object location is not filled.", 400)
+            raise ValidationError("Object location is not filled.", ErrorCodes.REQUIRED)
     elif parsed.scheme == "mysql" and object_location_schema:
         raise ValidationError(
-            "Object location schema is not allowed in mysql resources", 400
+            "Object location schema is not allowed in mysql resources",
+            ErrorCodes.INVALID_FIELD,
         )
     elif parsed.scheme in ["http", "https"] and (
         object_location or object_location_schema
     ):
         raise ValidationError(
             "Object location or object location schema is not allowed in http and https resources",
-            400,
+            ErrorCodes.INVALID_FIELD,
         )
-    else:
-        ValidationError("Schema of the URI is not available.", 400)
+    # Any other scheme (oracle, mssql, sqlite, ...) has no extra field constraint here.
+    # Whether it is supported at all is decided by validate_resource() below, which
+    # raises NotImplementedSchemaError for unsupported schemes (mapped right after).
 
     try:
         return validate_resource(
@@ -66,18 +71,23 @@ def resource_validator(
             object_location_schema=object_location_schema,
         )
     except NotImplementedSchemaError as err:
-        raise ValidationError("Schema of the URI is not available.", 400) from err
+        raise ValidationError(
+            "Schema of the URI is not available.", ErrorCodes.SCHEMA_NOT_IMPLEMENTED
+        ) from err
     except MimeTypeError as err:
         raise ValidationError(
-            "Mimetype of content-type is not allowed. Only allowed: JSON mimetypes."
+            "Mimetype of content-type is not allowed. Only allowed: JSON mimetypes.",
+            ErrorCodes.MIME_TYPE_NOT_ALLOWED,
         ) from err
     except TooManyRowsError as err:
         raise ValidationError(
-            "This resource have too many rows. For security reason this is not allowed."
+            "This resource have too many rows. For security reason this is not allowed.",
+            ErrorCodes.TOO_MANY_ROWS,
         ) from err
     except NoObjectError as err:
         raise ValidationError(
-            "Resource is not available. Table, view, function, etc... not exists."
+            "Resource is not available. Table, view, function, etc... not exists.",
+            ErrorCodes.RESOURCE_UNAVAILABLE,
         ) from err
     except DriverConnectionError as err:
         raise ServiceUnavailable(

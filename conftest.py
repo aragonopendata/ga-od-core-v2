@@ -201,32 +201,107 @@ def full_example(auth_client, connector_uri: str, request) -> ConnectorData:
     return connector_data
 
 
-def validate_error(content_error: bytes, error_description: str, mime_type: str, error_field: Optional[str] = None):
+PROBLEM_CONTENT_TYPE = "application/problem+json"
+PROBLEM_TYPE_BASE = "https://opendata.aragon.es/problems/"
+NON_FIELD_ERRORS_KEY = "non_field_errors"
+VALIDATION_ERROR_CODE = "VALIDATION_ERROR"
+VALIDATION_ERROR_DETAIL = "The request contains invalid fields."
+
+
+def problem_of(response) -> dict:
+    """Assert that ``response`` carries a well formed problem document and return it.
+
+    Errors are always served as ``application/problem+json``, whatever data format the
+    client asked for, so the body is never CSV/SCSV/XML/YAML/XLSX. The only exception is
+    the browsable API, which keeps rendering HTML.
+    """
+    assert response["Content-Type"] == PROBLEM_CONTENT_TYPE, response["Content-Type"]
+
+    problem = json.loads(response.content)
+    assert isinstance(problem, dict)
+
+    # The envelope is complete and its status agrees with the real HTTP status.
+    assert set(problem) >= {"type", "title", "status", "detail", "error_code"}
+    assert problem["status"] == response.status_code
+    assert isinstance(problem["detail"], str)
+
+    # "type" and "title" are derived from the stable error_code.
+    error_code = problem["error_code"]
+    assert error_code == error_code.upper()
+    assert problem["type"] == PROBLEM_TYPE_BASE + error_code.lower().replace("_", "-")
+    assert problem["title"] == error_code.replace("_", " ").capitalize()
+
+    if "errors" in problem:
+        assert isinstance(problem["errors"], dict)
+
+    return problem
+
+
+def field_messages(problem: dict, error_field: Optional[str] = None) -> list:
+    """Return the messages reported for ``error_field`` (or the non-field ones)."""
+    return [
+        item["message"]
+        for item in problem["errors"][error_field or NON_FIELD_ERRORS_KEY]
+    ]
+
+
+def field_codes(problem: dict, error_field: Optional[str] = None) -> list:
+    """Return the validation codes reported for ``error_field`` (or the non-field ones)."""
+    return [
+        item["code"] for item in problem["errors"][error_field or NON_FIELD_ERRORS_KEY]
+    ]
+
+
+def validate_error(response,
+                   error_description: str,
+                   mime_type: str,
+                   error_field: Optional[str] = None,
+                   error_code: Optional[str] = None,
+                   field_error_code: Optional[str] = None):
+    """Assert the shared error contract for an API error response.
+
+    @param response: the Django test client response.
+    @param error_description: the human readable message the caller expects.
+    @param mime_type: the media type the request asked for.
+    @param error_field: field the message belongs to, for validation errors.
+    @param error_code: expected top level ``error_code``, when the caller pins it.
+    @param field_error_code: expected semantic code of the entry inside ``errors``.
+        For DRF ``ValidationError`` the top level code is always ``VALIDATION_ERROR``,
+        so the meaningful code lives under ``errors[<field>][*].code``. It is checked
+        against the entry carrying ``error_description``, which also guarantees the
+        code did not regress to the generic ``INVALID`` or to a bare HTTP status.
+    """
     if mime_type == 'text/html':
-        assert content_error
-    elif mime_type == 'application/json':
-        if error_field:
-            error = {error_field: [error_description]}
-        else:
-            error = [error_description]
-        assert json.loads(content_error) == error
-    elif mime_type == 'text/csv':
-        if ',' in error_description:
-            error_description = f'"{error_description}"'
-        if error_field:
-            error_field = f'{error_field}.0'
-        else:
-            error_field = '""'
-        assert content_error == f'{error_field}\r\n{error_description}\r\n'.encode()
-    elif mime_type == 'application/xml':
-        if error_field:
-            error = f'<?xml version="1.0" encoding="utf-8"?>\n<root><{error_field}><list-item>{error_description}' \
-                    f'</list-item></{error_field}></root>'
-        else:
-            error = f'<?xml version="1.0" encoding="utf-8"?>\n<root><list-item>{error_description}</list-item></root>'
-        assert content_error == error.encode()
+        # The browsable API keeps rendering HTML for humans.
+        assert response['Content-Type'].startswith('text/html')
+        assert response.content
+        return
+
+    problem = problem_of(response)
+
+    if error_code:
+        assert problem["error_code"] == error_code
+
+    if field_error_code:
+        # The semantic code belongs to the very entry holding the expected message.
+        assert problem["error_code"] == VALIDATION_ERROR_CODE
+        entries = problem["errors"][error_field or NON_FIELD_ERRORS_KEY]
+        matching = [item for item in entries if item["message"] == error_description]
+        assert matching, (error_description, entries)
+        assert [item["code"] for item in matching] == [field_error_code] * len(matching)
+
+    if error_field is not None:
+        # Field errors live under "errors", never inside "detail".
+        assert problem["error_code"] == VALIDATION_ERROR_CODE
+        assert problem["detail"] == VALIDATION_ERROR_DETAIL
+        assert error_description in field_messages(problem, error_field)
+    elif problem["error_code"] == VALIDATION_ERROR_CODE:
+        assert problem["detail"] == VALIDATION_ERROR_DETAIL
+        assert error_description in field_messages(problem)
     else:
-        raise NotImplementedError
+        # Non-validation problems carry the message in "detail" and have no "errors".
+        assert problem["detail"] == error_description
+        assert "errors" not in problem
 
 
 def compare_files(directory: str, file_without_extension, mimetype: str, content: bytes):
@@ -329,10 +404,14 @@ def connector_uri(request, pg, mysql, httpserver: HTTPServer):
         "text/html",
         "application/json",
         "text/csv",
+        "text/scsv",
         "application/xml",
+        "application/yaml",
+        "application/xlsx",
     ]
 )
 def accept_error(request):
+    """Every data format a client may ask for. Errors answer problem+json for all but HTML."""
     return request.param
 
 

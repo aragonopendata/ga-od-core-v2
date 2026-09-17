@@ -25,7 +25,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.utils.serializer_helpers import ReturnList
 
 from connectors import TooManyRowsErrorExcel
-from exceptions import BadGateway
+from exceptions import BadGateway, ErrorCodes
 from serializers import DictSerializer
 
 logger = logging.getLogger(__name__)
@@ -197,7 +197,7 @@ def modify_header(return_list, columns_name, format_is_xlsx=False):
     elif len(columns_name) > 0:
         raise ValidationError(
             "El número de columnas tiene que ser igual al numero de fields o al número total de columnas por defecto",
-            400,
+            ErrorCodes.INVALID_COLUMNS,
         ) from TooManyRowsErrorExcel
 
     return return_list
