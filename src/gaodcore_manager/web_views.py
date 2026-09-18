@@ -24,6 +24,10 @@ class StaffManagerTemplateMixin:
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["active_section"] = self.active_section
+        # Drives the shared private administration shell's global navigation
+        # (see gaodcore_manager/private_base.html). Manager's section values
+        # ("resources"/"connectors") line up with the shared nav keys.
+        context["private_active_section"] = self.active_section
         return context
 
 

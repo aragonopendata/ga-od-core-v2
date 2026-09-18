@@ -1,15 +1,11 @@
-{% load i18n static %}{% get_current_language as LANGUAGE_CODE %}<!DOCTYPE html>
-<html lang="{{ LANGUAGE_CODE|default:'es' }}">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}{% trans "GA OD Core Manager" %}{% endblock %}</title>
+{% extends "gaodcore_manager/private_base.html" %}
+{% load i18n static %}
+
+{% block extra_css %}
   <link rel="stylesheet" href="{% static 'gaodcore_manager/manager.css' %}">
-</head>
-<body>
-  <header class="manager-header">
-    <a href="{% url 'manager_web:resource-list' %}" class="manager-header__title">{% trans "GA OD Core Manager" %}</a>
-  </header>
+{% endblock %}
+
+{% block breadcrumbs %}
   <nav class="manager-breadcrumbs" aria-label="{% trans 'Breadcrumb' %}">
     <a href="{% url 'manager_web:resource-list' %}">{% trans "Manager" %}</a>
     {% if breadcrumb_section %}
@@ -23,22 +19,6 @@
       {% endif %}
     {% endif %}
   </nav>
-  <div class="manager-tabs">
-    <nav class="manager-tabs__nav">
-      <a href="{% url 'manager_web:resource-list' %}"{% if active_section == "resources" %} class="active"{% endif %}>{% trans "Resources" %}</a>
-      <a href="{% url 'manager_web:connector-list' %}"{% if active_section == "connectors" %} class="active"{% endif %}>{% trans "Connectors" %}</a>
-      <a href="{% url 'admin-schema-swagger-ui' %}" target="_blank" rel="noopener noreferrer">{% trans "API (Swagger)" %}<span class="manager-visually-hidden"> ({% trans "Opens in a new tab" %})</span></a>
-    </nav>
-  </div>
-  <main class="manager-content">
-    {% if messages %}
-      <ul class="manager-messages" id="manager-messages">
-        {% for message in messages %}
-          <li class="manager-messages__item manager-messages__item--{{ message.level_tag }}">{{ message }}</li>
-        {% endfor %}
-      </ul>
-    {% endif %}
-    {% block manager_content %}{% endblock %}
-  </main>
-</body>
-</html>
+{% endblock %}
+
+{% block private_content %}{% block manager_content %}{% endblock %}{% endblock %}

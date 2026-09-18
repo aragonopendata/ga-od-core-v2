@@ -118,6 +118,58 @@ class TestStandaloneTemplate(WebManagerTestCase):
         self.assertIn(reverse("manager_web:resource-list"), content)
         self.assertIn(reverse("manager_web:connector-list"), content)
 
+    def test_navigation_includes_the_health_tab(self):
+        response = self.client.get(reverse("manager_web:resource-list"))
+        content = response.content.decode()
+        self.assertIn(">Salud<", content)
+        self.assertIn(reverse("gaodcore_health:connector_list"), content)
+
+    def test_manager_pages_use_the_shared_private_base_stylesheet(self):
+        response = self.client.get(reverse("manager_web:resource-list"))
+        content = response.content.decode()
+        self.assertIn("gaodcore_manager/private_base.css", content)
+
+    @staticmethod
+    def _nav_html(content):
+        match = re.search(
+            r'<nav class="manager-tabs__nav">.*?</nav>', content, re.DOTALL
+        )
+        assert match is not None
+        return match.group(0)
+
+    def test_resources_tab_is_marked_active_on_resource_pages(self):
+        response = self.client.get(reverse("manager_web:resource-list"))
+        nav = self._nav_html(response.content.decode())
+        resources_match = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("manager_web:resource-list")) + r'"[^>]*>', nav
+        )
+        connectors_match = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("manager_web:connector-list")) + r'"[^>]*>', nav
+        )
+        self.assertIn('class="active"', resources_match.group(0))
+        self.assertNotIn('class="active"', connectors_match.group(0))
+
+    def test_connectors_tab_is_marked_active_on_connector_pages(self):
+        response = self.client.get(reverse("manager_web:connector-list"))
+        nav = self._nav_html(response.content.decode())
+        resources_match = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("manager_web:resource-list")) + r'"[^>]*>', nav
+        )
+        connectors_match = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("manager_web:connector-list")) + r'"[^>]*>', nav
+        )
+        self.assertNotIn('class="active"', resources_match.group(0))
+        self.assertIn('class="active"', connectors_match.group(0))
+
+    def test_health_tab_is_never_marked_active_from_manager_pages(self):
+        response = self.client.get(reverse("manager_web:resource-list"))
+        nav = self._nav_html(response.content.decode())
+        health_match = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("gaodcore_health:connector_list")) + r'"[^>]*>', nav
+        )
+        self.assertIsNotNone(health_match)
+        self.assertNotIn('class="active"', health_match.group(0))
+
     def test_navigation_includes_the_private_swagger_link(self):
         response = self.client.get(reverse("manager_web:resource-list"))
         content = response.content.decode()

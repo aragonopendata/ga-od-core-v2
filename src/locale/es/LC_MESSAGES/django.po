@@ -282,14 +282,14 @@ msgstr "Monitoreo en tiempo real de la salud de conectores y recursos"
 #: gaodcore_health/templates/health/base.html:662
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_list.html:4
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_list.html:7
-#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:29
+#: gaodcore_manager/templates/gaodcore_manager/private_base.html:18
 #: gaodcore_manager/web_views.py:111 gaodcore_manager/web_views.py:123
 #: gaodcore_manager/web_views.py:236 gaodcore_manager/web_views.py:253
 msgid "Connectors"
 msgstr "Conectores"
 
 #: gaodcore_health/templates/health/base.html:668
-#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:28
+#: gaodcore_manager/templates/gaodcore_manager/private_base.html:17
 #: gaodcore_manager/templates/gaodcore_manager/resourceconfig_list.html:4
 #: gaodcore_manager/templates/gaodcore_manager/resourceconfig_list.html:7
 #: gaodcore_manager/web_views.py:76 gaodcore_manager/web_views.py:88
@@ -511,8 +511,8 @@ msgstr "Filtrar"
 #: gaodcore_manager/templates/gaodcore_manager/config_form.html:4
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:4
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_list.html:4
-#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:6
-#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:11
+#: gaodcore_manager/templates/gaodcore_manager/private_base.html:6
+#: gaodcore_manager/templates/gaodcore_manager/private_base.html:12
 #: gaodcore_manager/templates/gaodcore_manager/resourceconfig_detail.html:4
 #: gaodcore_manager/templates/gaodcore_manager/resourceconfig_list.html:4
 msgid "GA OD Core Manager"
@@ -533,13 +533,17 @@ msgstr "Editar"
 msgid "View resources"
 msgstr "Ver recursos"
 
-#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:30
+#: gaodcore_manager/templates/gaodcore_manager/private_base.html:20
 msgid "API (Swagger)"
 msgstr "API (Swagger)"
 
-#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:30
+#: gaodcore_manager/templates/gaodcore_manager/private_base.html:20
 msgid "Opens in a new tab"
 msgstr "Se abre en una pestaña nueva"
+
+#: gaodcore_manager/templates/gaodcore_manager/private_base.html:19
+msgid "Health"
+msgstr "Salud"
 
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:16
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_list.html:16
@@ -602,11 +606,11 @@ msgstr "de"
 msgid "Next"
 msgstr "Siguiente"
 
-#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:13
+#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:9
 msgid "Breadcrumb"
 msgstr "Migas de pan"
 
-#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:14
+#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:10
 msgid "Manager"
 msgstr "Gestor"
 
