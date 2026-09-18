@@ -15,7 +15,12 @@ from rest_framework.test import APITestCase
 from rest_framework import status
 
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
-from gaodcore_health.models import HealthCheckResult, HealthCheckSchedule, HealthCheckAlert
+from gaodcore_health.models import (
+    HealthCheckAlert,
+    HealthCheckResult,
+    HealthCheckSchedule,
+    ResourceHealthCheckResult,
+)
 from gaodcore_health.health_check import (
     check_connector_health,
     check_all_connectors_health,
@@ -261,7 +266,7 @@ class HealthCheckAPITests(APITestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            username="testuser", password="testpass123"
+            username="testuser", password="testpass123", is_staff=True
         )
         self.client.force_authenticate(user=self.user)
 
@@ -362,16 +367,15 @@ class HealthCheckAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    @patch("gaodcore_health.health_check.check_all_connectors_health")
+    @patch("gaodcore_health.views.check_all_connectors_health_sync")
     def test_health_check_trigger_endpoint(self, mock_check):
         """Test health check trigger API endpoint."""
         # Mock the health check function
-        mock_result = MagicMock()
-        mock_result.connector = self.connector
-        mock_result.is_healthy = True
-        mock_result.response_time_ms = 100
-        mock_result.error_message = None
-        mock_result.error_type = None
+        mock_result = HealthCheckResult(
+            connector=self.connector,
+            is_healthy=True,
+            response_time_ms=100,
+        )
         mock_check.return_value = [mock_result]
 
         url = reverse("gaodcore_health:api_check")
@@ -379,7 +383,7 @@ class HealthCheckAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
-        mock_check.assert_called_once_with(2)
+        mock_check.assert_called_once_with(2, timeout=None)
 
     def test_unauthenticated_access(self):
         """Test that unauthenticated users cannot access health endpoints."""
@@ -528,19 +532,104 @@ class HealthHtmlAccessControlTests(HealthHtmlTestCase):
                 self.assertEqual(response.status_code, 200)
 
 
-class HealthApiAccessUnchangedTests(HealthHtmlTestCase):
-    """The staff-only HTML migration must not touch /health/api/ auth."""
+class HealthApiAccessControlTests(HealthHtmlTestCase):
+    """Every Health API endpoint must require a staff user."""
 
-    def test_api_status_rejects_anonymous_requests_with_401(self):
-        response = self.client.get(reverse("gaodcore_health:api_status"))
-        self.assertEqual(response.status_code, 401)
+    def setUp(self):
+        super().setUp()
+        HealthCheckResult.objects.create(
+            connector=self.connector, is_healthy=True, response_time_ms=42
+        )
+        ResourceHealthCheckResult.objects.create(
+            resource=self.resource, is_healthy=True, response_time_ms=42
+        )
 
-    def test_api_status_allows_any_authenticated_user_not_just_staff(self):
-        # The API keeps IsAuthenticated, not staff-only: a logged-in but
-        # non-staff user must still be able to reach it.
+    def _read_api_urls(self):
+        return [
+            reverse("gaodcore_health:api_status"),
+            reverse("gaodcore_health:api_summary"),
+            reverse("gaodcore_health:api_history"),
+            reverse(
+                "gaodcore_health:api_connector_detail", args=[self.connector.id]
+            ),
+            reverse("gaodcore_health:api_resource_status"),
+            reverse("gaodcore_health:api_resource_summary"),
+            reverse("gaodcore_health:api_resource_history"),
+            reverse(
+                "gaodcore_health:api_resource_detail", args=[self.resource.id]
+            ),
+        ]
+
+    def test_anonymous_users_cannot_access_any_read_api(self):
+        for url in self._read_api_urls():
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_authenticated_non_staff_users_cannot_access_any_read_api(self):
         self.client.force_login(self.regular_user)
-        response = self.client.get(reverse("gaodcore_health:api_status"))
-        self.assertEqual(response.status_code, 200)
+        for url in self._read_api_urls():
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_staff_users_can_access_every_read_api(self):
+        self.client.force_login(self.staff_user)
+        for url in self._read_api_urls():
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    @patch("gaodcore_health.views.check_all_connectors_health_sync")
+    @patch("gaodcore_health.views.check_all_resources_health_sync")
+    def test_anonymous_users_cannot_trigger_health_checks(
+        self, mock_resource_check, mock_connector_check
+    ):
+        for url in (
+            reverse("gaodcore_health:api_check"),
+            reverse("gaodcore_health:api_resource_check"),
+        ):
+            with self.subTest(url=url):
+                response = self.client.post(url)
+                self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        mock_connector_check.assert_not_called()
+        mock_resource_check.assert_not_called()
+
+    @patch("gaodcore_health.views.check_all_connectors_health_sync")
+    @patch("gaodcore_health.views.check_all_resources_health_sync")
+    def test_authenticated_non_staff_users_cannot_trigger_health_checks(
+        self, mock_resource_check, mock_connector_check
+    ):
+        self.client.force_login(self.regular_user)
+        for url in (
+            reverse("gaodcore_health:api_check"),
+            reverse("gaodcore_health:api_resource_check"),
+        ):
+            with self.subTest(url=url):
+                response = self.client.post(url)
+                self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        mock_connector_check.assert_not_called()
+        mock_resource_check.assert_not_called()
+
+    @patch("gaodcore_health.views.check_all_connectors_health_sync", return_value=[])
+    @patch("gaodcore_health.views.check_all_resources_health_sync", return_value=[])
+    def test_staff_users_can_trigger_both_health_checks(
+        self, mock_resource_check, mock_connector_check
+    ):
+        self.client.force_login(self.staff_user)
+
+        connector_response = self.client.post(
+            reverse("gaodcore_health:api_check"), {"concurrency": 2}
+        )
+        resource_response = self.client.post(
+            reverse("gaodcore_health:api_resource_check"),
+            {"concurrency": 3},
+        )
+
+        self.assertEqual(connector_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(resource_response.status_code, status.HTTP_200_OK)
+        mock_connector_check.assert_called_once_with(2, timeout=None)
+        mock_resource_check.assert_called_once_with(3, timeout=None)
 
 
 class HealthHtmlSharedShellTests(HealthHtmlTestCase):

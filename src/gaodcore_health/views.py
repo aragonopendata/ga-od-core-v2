@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.db.models import Avg
 from django.views.generic import ListView, DetailView
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
@@ -50,7 +50,7 @@ class HealthStatusView(APIView):
     Get current health status of all connectors.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     @extend_schema(
         tags=["health"],
@@ -93,7 +93,7 @@ class HealthSummaryView(APIView):
     Get health summary statistics.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     @extend_schema(
         tags=["health"],
@@ -142,7 +142,7 @@ class HealthCheckView(APIView):
     """
 
     schema = None  # Exclude from OpenAPI schema
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     @extend_schema(
         tags=["health"],
@@ -209,7 +209,7 @@ class HealthHistoryView(APIView):
     Get health check history.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     @extend_schema(
         tags=["health"],
@@ -282,7 +282,7 @@ class ConnectorHealthDetailAPIView(APIView):
     Get detailed health information for a specific connector.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     @extend_schema(
         tags=["health"],
@@ -832,7 +832,7 @@ class ResourceHealthStatusView(APIView):
     Get current health status of all resources.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     @extend_schema(
         tags=["health"],
@@ -897,7 +897,7 @@ class ResourceHealthSummaryView(APIView):
     Get health summary for resources.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     @extend_schema(
         tags=["health"],
@@ -946,7 +946,7 @@ class ResourceHealthCheckView(APIView):
     """
 
     schema = None  # Exclude from OpenAPI schema
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     @extend_schema(
         tags=["health"],
@@ -1013,7 +1013,7 @@ class ResourceHealthHistoryView(APIView):
     Get historical resource health check results.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     @extend_schema(
         tags=["health"],
@@ -1086,7 +1086,7 @@ class ResourceHealthDetailAPIView(APIView):
     Get detailed health information for a specific resource.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
 
     @extend_schema(
         tags=["health"],
