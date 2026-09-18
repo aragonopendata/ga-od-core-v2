@@ -4,6 +4,7 @@ External probes are monkeypatched at `gaodcore_manager.validators`, so no real
 database or network access is required.
 """
 
+import re
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -147,6 +148,53 @@ class TestConnectorCrud(WebCrudTestCase):
         response = self.client.get(reverse("manager_web:connector-create"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "csrfmiddlewaretoken")
+
+    def test_create_form_renders_uri_as_a_textarea(self):
+        self.login_staff()
+        response = self.client.get(reverse("manager_web:connector-create"))
+        content = response.content.decode()
+        match = re.search(r'<textarea[^>]*name="uri"[^>]*>', content)
+        self.assertIsNotNone(match)
+
+    def test_update_form_renders_uri_as_a_textarea_with_the_current_value(self):
+        self.login_staff()
+        response = self.client.get(
+            reverse("manager_web:connector-update", kwargs={"pk": self.connector.pk})
+        )
+        content = response.content.decode()
+        match = re.search(
+            r'<textarea[^>]*name="uri"[^>]*>(.*?)</textarea>', content, re.DOTALL
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group(1).strip(), self.connector.uri)
+
+    def test_create_accepts_a_long_uri_unchanged_through_the_textarea(self):
+        self.login_staff()
+        long_uri = POSTGRESQL_URI + "-" + ("x" * 500)
+        response = self.client.post(
+            reverse("manager_web:connector-create"),
+            {"name": "long-uri-connector", "uri": long_uri, "enabled": "on"},
+        )
+        created = ConnectorConfig.objects.get(name="long-uri-connector")
+        self.assertRedirects(
+            response,
+            reverse("manager_web:connector-detail", kwargs={"pk": created.pk}),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(created.uri, long_uri)
+        self.assertEqual(self.validate_uri.call_count, 1)
+
+    def test_update_accepts_a_long_uri_unchanged_through_the_textarea(self):
+        self.login_staff()
+        long_uri = POSTGRESQL_URI + "-" + ("y" * 500)
+        response = self.client.post(
+            reverse("manager_web:connector-update", kwargs={"pk": self.connector.pk}),
+            {"name": "crud-connector", "uri": long_uri, "enabled": "on"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.connector.refresh_from_db()
+        self.assertEqual(self.connector.uri, long_uri)
+        self.assertEqual(self.validate_uri.call_count, 1)
 
     def test_create_redirects_to_detail_and_reports_success(self):
         self.login_staff()

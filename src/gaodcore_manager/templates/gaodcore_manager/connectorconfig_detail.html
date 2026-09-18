@@ -36,8 +36,10 @@
     <tr>
       <th scope="row">{% trans "URI" %}</th>
       <td>
-        <span id="connector-uri-masked">••••••••••••••••</span>
-        <button type="button" id="connector-uri-toggle" class="manager-button">{% trans "Show URI" %}</button>
+        <div class="manager-uri-display">
+          <span id="connector-uri-masked" class="manager-uri-display__value">••••••••••••••••</span>
+          <button type="button" id="connector-uri-toggle" class="manager-button">{% trans "Show URI" %}</button>
+        </div>
       </td>
     </tr>
   </tbody>

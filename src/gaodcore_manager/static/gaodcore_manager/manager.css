@@ -297,6 +297,11 @@ thead th {
   font-size: 13px;
 }
 
+.manager-form__uri-field {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  resize: vertical;
+}
+
 .manager-form__help {
   margin: 4px 0 0;
   color: var(--muted-text);
@@ -315,6 +320,21 @@ thead th {
   display: flex;
   gap: 8px;
   margin-top: 24px;
+}
+
+.manager-uri-display {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.manager-uri-display__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .manager-modal {

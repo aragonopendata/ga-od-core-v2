@@ -123,6 +123,31 @@ class TestStandaloneTemplate(WebManagerTestCase):
         content = response.content.decode()
         self.assertIn(reverse("admin-schema-swagger-ui"), content)
 
+    def test_swagger_navigation_link_opens_in_a_new_tab_accessibly(self):
+        response = self.client.get(reverse("manager_web:resource-list"))
+        content = response.content.decode()
+        match = re.search(r'<a[^>]*href="' + re.escape(reverse("admin-schema-swagger-ui")) + r'"[^>]*>.*?</a>', content)
+        self.assertIsNotNone(match)
+        swagger_link = match.group(0)
+        self.assertIn('target="_blank"', swagger_link)
+        self.assertIn('rel="noopener noreferrer"', swagger_link)
+        self.assertIn(">API (Swagger)", swagger_link)
+        self.assertIn("Se abre en una pestaña nueva", swagger_link)
+
+    def test_resources_and_connectors_links_do_not_open_in_a_new_tab(self):
+        response = self.client.get(reverse("manager_web:resource-list"))
+        content = response.content.decode()
+        resources_match = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("manager_web:resource-list")) + r'"[^>]*>', content
+        )
+        connectors_match = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("manager_web:connector-list")) + r'"[^>]*>', content
+        )
+        self.assertIsNotNone(resources_match)
+        self.assertIsNotNone(connectors_match)
+        self.assertNotIn('target="_blank"', resources_match.group(0))
+        self.assertNotIn('target="_blank"', connectors_match.group(0))
+
 
 class TestBreadcrumbs(WebManagerTestCase):
     def setUp(self):
@@ -512,6 +537,19 @@ class TestConnectorDetail(WebManagerTestCase):
         self.assertIn("JSON.parse", content)
         self.assertNotIn(f'value="{self.connector.uri}"', content)
         self.assertNotIn(f'data-uri="{self.connector.uri}"', content)
+
+    def test_connector_detail_uri_display_has_dedicated_wrapping_structure(self):
+        response = self.client.get(
+            reverse("manager_web:connector-detail", kwargs={"pk": self.connector.pk})
+        )
+        content = response.content.decode()
+        self.assertIn('class="manager-uri-display"', content)
+        self.assertIn("manager-uri-display__value", content)
+        toggle_match = re.search(
+            r'<button[^>]*id="connector-uri-toggle"[^>]*>', content
+        )
+        self.assertIsNotNone(toggle_match)
+        self.assertIn('type="button"', toggle_match.group(0))
 
     def test_connector_detail_has_a_view_resources_link(self):
         response = self.client.get(

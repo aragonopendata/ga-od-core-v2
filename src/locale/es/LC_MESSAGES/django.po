@@ -537,6 +537,10 @@ msgstr "Ver recursos"
 msgid "API (Swagger)"
 msgstr "API (Swagger)"
 
+#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:30
+msgid "Opens in a new tab"
+msgstr "Se abre en una pestaña nueva"
+
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:16
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_list.html:16
 #: gaodcore_manager/templates/gaodcore_manager/resourceconfig_detail.html:16
@@ -555,12 +559,12 @@ msgstr "Creado en"
 msgid "Updated at"
 msgstr "Actualizado en"
 
-#: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:39
-#: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:50
+#: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:41
+#: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:53
 msgid "Show URI"
 msgstr "Mostrar URI"
 
-#: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:51
+#: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:54
 msgid "Hide URI"
 msgstr "Ocultar URI"
 

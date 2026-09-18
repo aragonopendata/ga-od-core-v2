@@ -27,7 +27,7 @@
     <nav class="manager-tabs__nav">
       <a href="{% url 'manager_web:resource-list' %}"{% if active_section == "resources" %} class="active"{% endif %}>{% trans "Resources" %}</a>
       <a href="{% url 'manager_web:connector-list' %}"{% if active_section == "connectors" %} class="active"{% endif %}>{% trans "Connectors" %}</a>
-      <a href="{% url 'admin-schema-swagger-ui' %}">{% trans "API (Swagger)" %}</a>
+      <a href="{% url 'admin-schema-swagger-ui' %}" target="_blank" rel="noopener noreferrer">{% trans "API (Swagger)" %}<span class="manager-visually-hidden"> ({% trans "Opens in a new tab" %})</span></a>
     </nav>
   </div>
   <main class="manager-content">

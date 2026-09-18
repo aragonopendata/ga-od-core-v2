@@ -48,7 +48,11 @@ class ConnectorConfigForm(forms.ModelForm):
     class Meta:
         model = ConnectorConfig
         fields = ["name", "uri", "enabled"]
-        widgets = {"uri": forms.TextInput()}
+        widgets = {
+            "uri": forms.Textarea(
+                attrs={"rows": 3, "class": "manager-form__uri-field"}
+            )
+        }
 
     def clean_uri(self):
         uri = self.cleaned_data["uri"]
