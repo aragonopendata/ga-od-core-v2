@@ -16,6 +16,8 @@ import sys
 
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 from gaodcore_project.config import Config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -267,6 +269,38 @@ LOGGING = {
         },
     },
 }
+
+_TRUE_ENV_VALUES = ("1", "true", "yes", "on")
+_FALSE_ENV_VALUES = ("0", "false", "no", "off")
+
+
+def parse_bool_env(name: str, default: bool) -> bool:
+    """Reads a boolean environment variable, failing loudly on unknown values.
+
+    An absent or empty variable falls back to `default`. Any value outside the
+    accepted true/false literals raises ImproperlyConfigured so a typo cannot
+    silently disable a security relevant behavior.
+    """
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    normalized = raw.strip().lower()
+    if normalized in _TRUE_ENV_VALUES:
+        return True
+    if normalized in _FALSE_ENV_VALUES:
+        return False
+    raise ImproperlyConfigured(
+        f"Invalid boolean value {raw!r} for environment variable {name}. "
+        f"Allowed values: {', '.join(_TRUE_ENV_VALUES + _FALSE_ENV_VALUES)}."
+    )
+
+
+# When disabled, saving a connector or a resource no longer probes the external
+# database or API. Local field constraints are always enforced, and the explicit
+# manager validator endpoint always performs a real external check.
+GAODCORE_VALIDATE_EXTERNAL_CONNECTIONS = parse_bool_env(
+    "GAODCORE_VALIDATE_EXTERNAL_CONNECTIONS", True
+)
 
 CACHES = {
     "default": {

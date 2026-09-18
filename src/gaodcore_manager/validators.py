@@ -1,6 +1,7 @@
 from typing import Any, Dict, Iterable, Optional
 from urllib.parse import urlparse
 
+from django.conf import settings
 from rest_framework.exceptions import ValidationError
 
 from exceptions import ServiceUnavailable, ErrorCodes
@@ -38,13 +39,21 @@ def uri_validator(uri):
         ) from err
 
 
-def resource_validator(
-    uri: str, object_location: str, object_location_schema: Optional[str]
-) -> Iterable[Dict[str, Any]]:
-    """Validate if resource is available.
-    @return: A iterable of dictionaries. Keys of dictionaries are the name of resource columns.
+def external_validation_enabled() -> bool:
+    """Whether saving a configuration is allowed to probe the external origin."""
+    return bool(getattr(settings, "GAODCORE_VALIDATE_EXTERNAL_CONNECTIONS", True))
+
+
+def resource_local_validator(
+    uri: str, object_location: Optional[str], object_location_schema: Optional[str]
+) -> None:
+    """Validate the field constraints that depend only on the URI scheme.
+
+    These rules never perform I/O, so they always run, also when external
+    validation is disabled. Shared by the REST serializers and the manager web
+    forms.
     """
-    parsed = urlparse(uri)
+    parsed = urlparse(uri or "")
     if parsed.scheme in ["postgresql"]:
         if not object_location:
             raise ValidationError("Object location is not filled.", ErrorCodes.REQUIRED)
@@ -61,8 +70,37 @@ def resource_validator(
             ErrorCodes.INVALID_FIELD,
         )
     # Any other scheme (oracle, mssql, sqlite, ...) has no extra field constraint here.
-    # Whether it is supported at all is decided by validate_resource() below, which
-    # raises NotImplementedSchemaError for unsupported schemes (mapped right after).
+    # Whether it is supported at all is decided by validate_resource(), which raises
+    # NotImplementedSchemaError for unsupported schemes.
+
+
+def uri_persistence_validator(uri: str) -> None:
+    """Validate a connector URI before persisting it, honoring the external flag."""
+    if external_validation_enabled():
+        uri_validator(uri)
+
+
+def resource_persistence_validator(
+    uri: str, object_location: Optional[str], object_location_schema: Optional[str]
+) -> None:
+    """Validate a resource before persisting it, honoring the external flag.
+
+    Local field constraints always run; the external probe only runs when
+    GAODCORE_VALIDATE_EXTERNAL_CONNECTIONS is enabled.
+    """
+    if external_validation_enabled():
+        resource_validator(uri, object_location, object_location_schema)
+    else:
+        resource_local_validator(uri, object_location, object_location_schema)
+
+
+def resource_validator(
+    uri: str, object_location: str, object_location_schema: Optional[str]
+) -> Iterable[Dict[str, Any]]:
+    """Validate if resource is available.
+    @return: A iterable of dictionaries. Keys of dictionaries are the name of resource columns.
+    """
+    resource_local_validator(uri, object_location, object_location_schema)
 
     try:
         return validate_resource(
