@@ -1,0 +1,48 @@
+{% extends "gaodcore_manager/manager_base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Resources" %} | {% trans "GA OD Core Manager" %}{% endblock %}
+
+{% block manager_content %}
+<h1>{% trans "Resources" %}</h1>
+{% include "gaodcore_manager/_list_filters.html" %}
+<div class="manager-table-wrapper">
+<table id="resource-list">
+  <thead>
+    <tr>
+      <th scope="col">{% trans "ID" %}</th>
+      <th scope="col">{% trans "Name" %}</th>
+      <th scope="col">{% trans "Connector" %}</th>
+      <th scope="col">{% trans "Object location" %}</th>
+      <th scope="col">{% trans "Enabled" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for resource in resources %}
+    <tr>
+      <td>{{ resource.id }}</td>
+      <td><a href="{% url 'manager_web:resource-detail' pk=resource.pk %}">{{ resource.name }}</a></td>
+      <td><a href="{% url 'manager_web:connector-detail' pk=resource.connector_config.pk %}">{{ resource.connector_config.name }}</a></td>
+      <td>{{ resource.object_location|default:"—" }}</td>
+      <td>{% if resource.enabled %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}</td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="5">{% trans "No resources found." %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if is_paginated %}
+<div class="manager-pagination">
+  {% if page_obj.has_previous %}
+    <a class="manager-button" href="?{% if pagination_query_string %}{{ pagination_query_string }}&{% endif %}page={{ page_obj.previous_page_number }}">{% trans "Previous" %}</a>
+  {% endif %}
+  <span>{% trans "Page" %} {{ page_obj.number }} {% trans "of" %} {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}
+    <a class="manager-button" href="?{% if pagination_query_string %}{{ pagination_query_string }}&{% endif %}page={{ page_obj.next_page_number }}">{% trans "Next" %}</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

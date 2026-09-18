@@ -34,6 +34,7 @@ urlpatterns = [
             path('', RedirectView.as_view(pattern_name='admin-schema-swagger-ui'), name='admin-index'),
             path('admin/', admin.site.urls),
             path('manager/', include('gaodcore_manager.urls')),
+            path('web/manager/', include('gaodcore_manager.web_urls')),
             path('health/', include('gaodcore_health.urls')),
             path('ui/schema/', AdminSchemaView.as_view(), name='admin-schema'),
             path('ui/', AdminSwaggerView.as_view(url_name='admin-schema'), name='admin-schema-swagger-ui'),

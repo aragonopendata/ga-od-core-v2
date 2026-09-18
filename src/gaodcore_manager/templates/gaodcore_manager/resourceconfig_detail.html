@@ -1,0 +1,46 @@
+{% extends "gaodcore_manager/manager_base.html" %}
+{% load i18n %}
+
+{% block title %}{{ resource.name }} | {% trans "GA OD Core Manager" %}{% endblock %}
+
+{% block manager_content %}
+<h1>{{ resource.name }}</h1>
+<div class="manager-table-wrapper">
+<table id="resource-detail">
+  <tbody>
+    <tr>
+      <th scope="row">{% trans "ID" %}</th>
+      <td>{{ resource.id }}</td>
+    </tr>
+    <tr>
+      <th scope="row">{% trans "Name" %}</th>
+      <td>{{ resource.name }}</td>
+    </tr>
+    <tr>
+      <th scope="row">{% trans "Connector" %}</th>
+      <td><a href="{% url 'manager_web:connector-detail' pk=resource.connector_config.pk %}">{{ resource.connector_config.name }}</a></td>
+    </tr>
+    <tr>
+      <th scope="row">{% trans "Enabled" %}</th>
+      <td>{% if resource.enabled %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}</td>
+    </tr>
+    <tr>
+      <th scope="row">{% trans "Object location" %}</th>
+      <td>{{ resource.object_location|default:"—" }}</td>
+    </tr>
+    <tr>
+      <th scope="row">{% trans "Object location schema" %}</th>
+      <td>{{ resource.object_location_schema|default:"—" }}</td>
+    </tr>
+    <tr>
+      <th scope="row">{% trans "Created at" %}</th>
+      <td>{{ resource.created_at|default:"—" }}</td>
+    </tr>
+    <tr>
+      <th scope="row">{% trans "Updated at" %}</th>
+      <td>{{ resource.updated_at|default:"—" }}</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+{% endblock %}
