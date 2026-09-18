@@ -30,6 +30,13 @@
     </nav>
   </div>
   <main class="manager-content">
+    {% if messages %}
+      <ul class="manager-messages" id="manager-messages">
+        {% for message in messages %}
+          <li class="manager-messages__item manager-messages__item--{{ message.level_tag }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
     {% block manager_content %}{% endblock %}
   </main>
 </body>

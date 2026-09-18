@@ -94,7 +94,7 @@ class TestStandaloneTemplate(WebManagerTestCase):
                 response = self.client.get(url)
                 content = response.content.decode()
                 self.assertIn("gaodcore_manager/manager.css", content)
-                self.assertIn("GA OD Core Manager", content)
+                self.assertIn("Gestor GA OD Core", content)
 
     def test_manager_pages_do_not_load_django_admin_assets(self):
         response = self.client.get(reverse("manager_web:resource-list"))
@@ -124,13 +124,13 @@ class TestBreadcrumbs(WebManagerTestCase):
     def test_resource_list_breadcrumb(self):
         response = self.client.get(reverse("manager_web:resource-list"))
         content = response.content.decode()
-        self.assertIn("Manager", content)
+        self.assertIn("Gestor", content)
         self.assertIn("Recursos", content)
 
     def test_connector_list_breadcrumb(self):
         response = self.client.get(reverse("manager_web:connector-list"))
         content = response.content.decode()
-        self.assertIn("Manager", content)
+        self.assertIn("Gestor", content)
         self.assertIn("Conectores", content)
 
     def test_resource_detail_breadcrumb_includes_object_name(self):
@@ -196,12 +196,12 @@ class TestResourceList(WebManagerTestCase):
         self.assertEqual(len(response.context["resources"]), 50)
         self.assertTrue(response.context["is_paginated"])
         self.assertNotIn("Previous", response.content.decode())
-        self.assertIn("Next", response.content.decode())
+        self.assertIn("Siguiente", response.content.decode())
 
         response_page_2 = self.client.get(reverse("manager_web:resource-list") + "?page=2")
         self.assertEqual(response_page_2.status_code, 200)
         self.assertEqual(len(response_page_2.context["resources"]), 11)
-        self.assertIn("Previous", response_page_2.content.decode())
+        self.assertIn("Anterior", response_page_2.content.decode())
         self.assertNotIn("Next", response_page_2.content.decode())
 
     def test_resource_list_pagination_uses_deterministic_id_ordering(self):
@@ -211,7 +211,7 @@ class TestResourceList(WebManagerTestCase):
     def test_resource_list_empty_state(self):
         ResourceConfig.objects.all().delete()
         response = self.client.get(reverse("manager_web:resource-list"))
-        self.assertContains(response, "No resources found.")
+        self.assertContains(response, "No se han encontrado recursos.")
 
     def test_resource_list_search_by_name(self):
         ResourceConfig.objects.create(
@@ -328,12 +328,12 @@ class TestConnectorList(WebManagerTestCase):
         self.assertEqual(len(response.context["connectors"]), 50)
         self.assertTrue(response.context["is_paginated"])
         self.assertNotIn("Previous", response.content.decode())
-        self.assertIn("Next", response.content.decode())
+        self.assertIn("Siguiente", response.content.decode())
 
         response_page_2 = self.client.get(reverse("manager_web:connector-list") + "?page=2")
         self.assertEqual(response_page_2.status_code, 200)
         self.assertEqual(len(response_page_2.context["connectors"]), 11)
-        self.assertIn("Previous", response_page_2.content.decode())
+        self.assertIn("Anterior", response_page_2.content.decode())
         self.assertNotIn("Next", response_page_2.content.decode())
 
     def test_connector_list_pagination_uses_deterministic_id_ordering(self):
@@ -344,7 +344,7 @@ class TestConnectorList(WebManagerTestCase):
         ResourceConfig.objects.all().delete()
         ConnectorConfig.objects.all().delete()
         response = self.client.get(reverse("manager_web:connector-list"))
-        self.assertContains(response, "No connectors found.")
+        self.assertContains(response, "No se han encontrado conectores.")
 
     def test_connector_list_search_by_name(self):
         ConnectorConfig.objects.create(name="other-connector", uri="postgresql://x/y", enabled=True)
@@ -390,7 +390,7 @@ class TestConnectorDetail(WebManagerTestCase):
             reverse("manager_web:connector-detail", kwargs={"pk": self.connector.pk})
         )
         content = response.content.decode()
-        self.assertIn("Show URI", content)
+        self.assertIn("Mostrar URI", content)
         self.assertIn("connector-uri-toggle", content)
         self.assertIn("connector-uri-masked", content)
         # The raw URI must not appear outside of the json_script payload.

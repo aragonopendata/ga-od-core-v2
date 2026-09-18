@@ -9,7 +9,7 @@ ARG ORACLE_INSTANT_CLIENT_TMP="/tmp/instantclient-basiclite-linux.zip"
 
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y wget libaio1 libaio-dev unzip \
+    && apt-get install -y wget libaio1 libaio-dev unzip gettext \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
@@ -73,6 +73,7 @@ COPY ./scripts ./scripts
 RUN chmod +x scripts/create_requests_view.sh
 
 CMD bash -c "python manage.py migrate --noinput \
+    && python manage.py compilemessages \
     && python manage.py collectstatic --noinput \
     && python manage.py createcachetable \
     && gunicorn gaodcore_project.wsgi --bind :8000 --workers 9 --timeout 240 --max-requests 1000 --max-requests-jitter 100"

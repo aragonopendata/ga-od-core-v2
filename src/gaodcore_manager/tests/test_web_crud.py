@@ -7,8 +7,11 @@ database or network access is required.
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils.html import escape
 
 from gaodcore_manager import validators
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
@@ -51,6 +54,12 @@ class WebCrudTestCase(TestCase):
 
     def login_staff(self):
         self.client.force_login(self.staff_user)
+
+    def assertRenderedMessage(self, response, expected):
+        """The destination page must render the success notification itself."""
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "manager-messages__item--success")
+        self.assertContains(response, escape(expected))
 
 
 class TestRoutes(WebCrudTestCase):
@@ -149,15 +158,13 @@ class TestConnectorCrud(WebCrudTestCase):
         self.assertRedirects(
             response,
             reverse("manager_web:connector-detail", kwargs={"pk": created.pk}),
+            fetch_redirect_response=False,
         )
         self.assertEqual(self.validate_uri.call_count, 1)
         response = self.client.get(
             reverse("manager_web:connector-detail", kwargs={"pk": created.pk})
         )
-        messages = [str(item) for item in response.context["messages"]]
-        self.assertEqual(
-            messages, ['The connector "new-connector" has been created successfully.']
-        )
+        self.assertRenderedMessage(response, 'The connector "new-connector" has been created successfully.')
 
     def test_create_reports_external_failure_as_a_form_error(self):
         from connectors import DriverConnectionError
@@ -201,14 +208,13 @@ class TestConnectorCrud(WebCrudTestCase):
         response = self.client.post(
             reverse("manager_web:connector-delete", kwargs={"pk": self.connector.pk})
         )
-        self.assertRedirects(response, reverse("manager_web:connector-list"))
+        self.assertRedirects(
+            response, reverse("manager_web:connector-list"), fetch_redirect_response=False
+        )
         self.assertFalse(ConnectorConfig.objects.filter(pk=self.connector.pk).exists())
         self.assertFalse(ResourceConfig.objects.filter(pk=self.resource.pk).exists())
         response = self.client.get(reverse("manager_web:connector-list"))
-        messages = [str(item) for item in response.context["messages"]]
-        self.assertEqual(
-            messages, ['The connector "crud-connector" has been deleted successfully.']
-        )
+        self.assertRenderedMessage(response, 'The connector "crud-connector" has been deleted successfully.')
 
 
 class TestResourceCrud(WebCrudTestCase):
@@ -230,7 +236,9 @@ class TestResourceCrud(WebCrudTestCase):
         )
         created = ResourceConfig.objects.get(name="new-resource")
         self.assertRedirects(
-            response, reverse("manager_web:resource-detail", kwargs={"pk": created.pk})
+            response,
+            reverse("manager_web:resource-detail", kwargs={"pk": created.pk}),
+            fetch_redirect_response=False,
         )
         self.assertEqual(self.validate_resource.call_count, 1)
         # Empty optional fields are stored as NULL, like the REST API does.
@@ -238,10 +246,7 @@ class TestResourceCrud(WebCrudTestCase):
         response = self.client.get(
             reverse("manager_web:resource-detail", kwargs={"pk": created.pk})
         )
-        messages = [str(item) for item in response.context["messages"]]
-        self.assertEqual(
-            messages, ['The resource "new-resource" has been created successfully.']
-        )
+        self.assertRenderedMessage(response, 'The resource "new-resource" has been created successfully.')
 
     def test_local_rules_reject_a_postgresql_resource_without_object_location(self):
         self.login_staff()
@@ -326,11 +331,133 @@ class TestResourceCrud(WebCrudTestCase):
         response = self.client.post(
             reverse("manager_web:resource-delete", kwargs={"pk": self.resource.pk})
         )
-        self.assertRedirects(response, reverse("manager_web:resource-list"))
+        self.assertRedirects(
+            response, reverse("manager_web:resource-list"), fetch_redirect_response=False
+        )
         self.assertFalse(ResourceConfig.objects.filter(pk=self.resource.pk).exists())
         self.assertTrue(ConnectorConfig.objects.filter(pk=self.connector.pk).exists())
         response = self.client.get(reverse("manager_web:resource-list"))
-        messages = [str(item) for item in response.context["messages"]]
-        self.assertEqual(
-            messages, ['The resource "crud-resource" has been deleted successfully.']
+        self.assertRenderedMessage(response, 'The resource "crud-resource" has been deleted successfully.')
+
+
+class TestDeletionModal(WebCrudTestCase):
+    def test_list_and_detail_pages_expose_the_modal_and_its_triggers(self):
+        self.login_staff()
+        pages = [
+            reverse("manager_web:resource-list"),
+            reverse("manager_web:resource-detail", kwargs={"pk": self.resource.pk}),
+            reverse("manager_web:connector-list"),
+            reverse("manager_web:connector-detail", kwargs={"pk": self.connector.pk}),
+        ]
+        for url in pages:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'id="delete-modal"')
+                self.assertContains(response, "data-delete-url=")
+                # The destructive action is a CSRF protected POST, never a GET link.
+                self.assertContains(response, "csrfmiddlewaretoken")
+
+    def test_connector_triggers_warn_about_the_resource_cascade(self):
+        self.login_staff()
+        for url in (
+            reverse("manager_web:connector-list"),
+            reverse("manager_web:connector-detail", kwargs={"pk": self.connector.pk}),
+        ):
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertContains(
+                    response,
+                    escape("Its 1 associated resource will also be deleted."),
+                )
+
+    def test_connector_cascade_warning_uses_the_plural_form(self):
+        ResourceConfig.objects.create(
+            name="crud-resource-2",
+            connector_config=self.connector,
+            enabled=True,
+            object_location="another_table",
         )
+        self.login_staff()
+        response = self.client.get(
+            reverse("manager_web:connector-detail", kwargs={"pk": self.connector.pk})
+        )
+        self.assertContains(
+            response, escape("Its 2 associated resources will also be deleted.")
+        )
+
+    def test_resource_triggers_carry_no_cascade_warning(self):
+        self.login_staff()
+        response = self.client.get(
+            reverse("manager_web:resource-detail", kwargs={"pk": self.resource.pk})
+        )
+        self.assertContains(response, "data-delete-url=")
+        self.assertNotContains(response, "data-delete-warning=")
+
+    def test_connector_list_counts_resources_without_a_query_per_row(self):
+        """The cascade warning must not cost one COUNT per connector."""
+        self.login_staff()
+        url = reverse("manager_web:connector-list")
+
+        with CaptureQueriesContext(connection) as baseline:
+            self.assertEqual(self.client.get(url).status_code, 200)
+
+        for index in range(5):
+            connector = ConnectorConfig.objects.create(
+                name=f"bulk-connector-{index}",
+                uri=f"{POSTGRESQL_URI}-bulk-{index}",
+                enabled=True,
+            )
+            ResourceConfig.objects.create(
+                name=f"bulk-resource-{index}",
+                connector_config=connector,
+                enabled=True,
+                object_location="t",
+            )
+
+        with CaptureQueriesContext(connection) as grown:
+            self.assertEqual(self.client.get(url).status_code, 200)
+
+        self.assertEqual(len(grown), len(baseline))
+
+
+class TestSpanishTranslations(WebCrudTestCase):
+    """The modal and notification strings must be reachable through the catalogue."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.defaults["HTTP_ACCEPT_LANGUAGE"] = "es"
+
+    def test_modal_strings_are_translated(self):
+        self.login_staff()
+        response = self.client.get(
+            reverse("manager_web:connector-detail", kwargs={"pk": self.connector.pk})
+        )
+        self.assertContains(response, "Confirmar eliminación")
+        self.assertContains(
+            response,
+            escape(
+                '¿Seguro que quieres eliminar "crud-connector"? '
+                "Esta acción no se puede deshacer."
+            ),
+        )
+        self.assertContains(
+            response, escape("Se eliminará también su 1 recurso asociado.")
+        )
+
+    def test_success_messages_are_translated(self):
+        self.login_staff()
+        self.client.post(
+            reverse("manager_web:resource-delete", kwargs={"pk": self.resource.pk})
+        )
+        response = self.client.get(reverse("manager_web:resource-list"))
+        self.assertContains(
+            response, escape('El recurso "crud-resource" se ha eliminado correctamente.')
+        )
+
+    def test_form_actions_are_translated(self):
+        self.login_staff()
+        response = self.client.get(reverse("manager_web:resource-create"))
+        self.assertContains(response, "Nuevo recurso")
+        self.assertContains(response, "Guardar")
+        self.assertContains(response, "Cancelar")

@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.db.models import Count
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
@@ -98,7 +99,11 @@ class ConnectorConfigListView(SearchFilterListMixin, StaffManagerTemplateMixin, 
     paginate_by = 50
 
     def get_queryset(self):
-        queryset = ConnectorConfig.objects.order_by("id")
+        # `resource_count` feeds the cascade warning of the deletion modal; a single
+        # aggregate avoids one COUNT query per row.
+        queryset = ConnectorConfig.objects.annotate(
+            resource_count=Count("resourceconfig")
+        ).order_by("id")
         return self.filter_queryset(queryset)
 
     def get_context_data(self, **kwargs):
@@ -118,6 +123,8 @@ class ConnectorConfigDetailView(StaffManagerTemplateMixin, DetailView):
         context["breadcrumb_section"] = _("Connectors")
         context["breadcrumb_section_url"] = reverse("manager_web:connector-list")
         context["breadcrumb_object"] = self.object.name
+        # Feeds the cascade warning of the deletion modal.
+        context["resource_count"] = self.object.resourceconfig_set.count()
         return context
 
 

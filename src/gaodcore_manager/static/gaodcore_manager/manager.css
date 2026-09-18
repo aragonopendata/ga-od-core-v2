@@ -187,3 +187,128 @@ thead th {
   background: var(--accent-dark);
   color: var(--header-fg);
 }
+
+.manager-button--danger {
+  background: #ba2121;
+  border-color: #8a1818;
+}
+
+.manager-button--danger:hover {
+  background: #8a1818;
+}
+
+.manager-messages {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.manager-messages__item {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 2px;
+  background: var(--body-bg);
+}
+
+.manager-messages__item--success {
+  border-left-color: #2b7a2b;
+  background: #eaf6ea;
+}
+
+.manager-messages__item--error {
+  border-left-color: #ba2121;
+  background: #fbeaea;
+}
+
+.manager-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.manager-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  white-space: nowrap;
+}
+
+.manager-form {
+  max-width: 720px;
+}
+
+.manager-form__field {
+  margin-bottom: 16px;
+}
+
+.manager-form__field label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.manager-form__field input[type="text"],
+.manager-form__field input[type="url"],
+.manager-form__field textarea,
+.manager-form__field select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--surface-bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.manager-form__help {
+  margin: 4px 0 0;
+  color: var(--muted-text);
+  font-size: 12px;
+}
+
+.manager-form__errors {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  color: #ba2121;
+  font-size: 13px;
+}
+
+.manager-form__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.manager-modal {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 20px;
+  max-width: 520px;
+  color: var(--text);
+  background: var(--surface-bg);
+}
+
+.manager-modal::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.manager-modal h2 {
+  margin-top: 0;
+  font-size: 16px;
+}
+
+.manager-modal__warning {
+  color: #ba2121;
+  font-weight: bold;
+}
+
+.manager-modal__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}

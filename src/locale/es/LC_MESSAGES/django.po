@@ -419,3 +419,127 @@ msgstr "Monitor de Salud de Recursos"
 #| msgid "Resource Health Monitor"
 msgid "Resource Configurations"
 msgstr "Monitor de Salud de Recursos"
+
+#
+# Manager web UI (gaodcore_manager web_views.py and templates)
+#
+
+msgid "GA OD Core Manager"
+msgstr "Gestor GA OD Core"
+
+msgid "Breadcrumb"
+msgstr "Migas de pan"
+
+msgid "Manager"
+msgstr "Gestor"
+
+msgid "Search"
+msgstr "Buscar"
+
+msgid "Filter"
+msgstr "Filtrar"
+
+msgid "Yes"
+msgstr "Sí"
+
+msgid "No"
+msgstr "No"
+
+msgid "ID"
+msgstr "ID"
+
+msgid "Created at"
+msgstr "Creado en"
+
+msgid "Updated at"
+msgstr "Actualizado en"
+
+msgid "Object location"
+msgstr "Ubicación del objeto"
+
+msgid "Object location schema"
+msgstr "Esquema de la ubicación del objeto"
+
+msgid "Show URI"
+msgstr "Mostrar URI"
+
+msgid "Hide URI"
+msgstr "Ocultar URI"
+
+msgid "No resources found."
+msgstr "No se han encontrado recursos."
+
+msgid "No connectors found."
+msgstr "No se han encontrado conectores."
+
+msgid "Previous"
+msgstr "Anterior"
+
+msgid "Next"
+msgstr "Siguiente"
+
+msgid "Page"
+msgstr "Página"
+
+msgid "of"
+msgstr "de"
+
+msgid "Actions"
+msgstr "Acciones"
+
+msgid "Edit"
+msgstr "Editar"
+
+msgid "Delete"
+msgstr "Eliminar"
+
+msgid "Save"
+msgstr "Guardar"
+
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgid "New resource"
+msgstr "Nuevo recurso"
+
+msgid "Edit resource"
+msgstr "Editar recurso"
+
+msgid "New connector"
+msgstr "Nuevo conector"
+
+msgid "Edit connector"
+msgstr "Editar conector"
+
+msgid "Confirm deletion"
+msgstr "Confirmar eliminación"
+
+msgid ""
+"Are you sure you want to delete &quot;%(name)s&quot;? This action cannot be "
+"undone."
+msgstr ""
+"¿Seguro que quieres eliminar &quot;%(name)s&quot;? Esta acción no se puede "
+"deshacer."
+
+msgid "Its %(counter)s associated resource will also be deleted."
+msgid_plural "Its %(counter)s associated resources will also be deleted."
+msgstr[0] "Se eliminará también su %(counter)s recurso asociado."
+msgstr[1] "Se eliminarán también sus %(counter)s recursos asociados."
+
+msgid "The resource \"%(name)s\" has been created successfully."
+msgstr "El recurso \"%(name)s\" se ha creado correctamente."
+
+msgid "The resource \"%(name)s\" has been updated successfully."
+msgstr "El recurso \"%(name)s\" se ha actualizado correctamente."
+
+msgid "The resource \"%(name)s\" has been deleted successfully."
+msgstr "El recurso \"%(name)s\" se ha eliminado correctamente."
+
+msgid "The connector \"%(name)s\" has been created successfully."
+msgstr "El conector \"%(name)s\" se ha creado correctamente."
+
+msgid "The connector \"%(name)s\" has been updated successfully."
+msgstr "El conector \"%(name)s\" se ha actualizado correctamente."
+
+msgid "The connector \"%(name)s\" has been deleted successfully."
+msgstr "El conector \"%(name)s\" se ha eliminado correctamente."

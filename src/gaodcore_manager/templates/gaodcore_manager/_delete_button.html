@@ -1,0 +1,15 @@
+{% load i18n %}
+{% comment %}
+Delete trigger for the shared modal. Expects `object`, `delete_url_name` and
+`is_connector`. The confirmation texts are rendered here so they go through the
+translation catalogue instead of being built in JavaScript.
+
+For connectors the caller also passes `resource_count`, which the views compute
+(an annotation on the list, an explicit count on the detail).
+{% endcomment %}
+<button type="button" class="manager-button manager-button--danger"
+        data-delete-url="{% url delete_url_name pk=object.pk %}"
+        data-delete-message="{% blocktrans with name=object.name %}Are you sure you want to delete &quot;{{ name }}&quot;? This action cannot be undone.{% endblocktrans %}"
+        {% if is_connector %}data-delete-warning="{% blocktrans count counter=resource_count %}Its {{ counter }} associated resource will also be deleted.{% plural %}Its {{ counter }} associated resources will also be deleted.{% endblocktrans %}"{% endif %}>
+  {% trans "Delete" %}
+</button>

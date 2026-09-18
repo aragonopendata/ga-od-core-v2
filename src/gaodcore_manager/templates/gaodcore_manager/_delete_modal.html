@@ -1,0 +1,59 @@
+{% load i18n %}
+{% comment %}
+Shared deletion confirmation dialog.
+
+Any button with `data-delete-url` opens it. The button carries the already
+translated confirmation text in `data-delete-message` and, optionally, an extra
+`data-delete-warning` (used for connectors, whose deletion cascades to their
+resources). The destructive action is always this CSRF protected POST; no GET
+ever deletes anything. Uses the native <dialog> element, so no frontend
+dependency is added; browsers without it fall back to window.confirm().
+{% endcomment %}
+<dialog id="delete-modal" class="manager-modal" aria-labelledby="delete-modal-title">
+  <form method="post" id="delete-modal-form">
+    {% csrf_token %}
+    <h2 id="delete-modal-title">{% trans "Confirm deletion" %}</h2>
+    <p id="delete-modal-message"></p>
+    <p id="delete-modal-warning" class="manager-modal__warning" hidden></p>
+    <div class="manager-modal__actions">
+      <button type="button" class="manager-button" id="delete-modal-cancel">{% trans "Cancel" %}</button>
+      <button type="submit" class="manager-button manager-button--danger">{% trans "Delete" %}</button>
+    </div>
+  </form>
+</dialog>
+<script>
+(function () {
+  var dialog = document.getElementById("delete-modal");
+  var form = document.getElementById("delete-modal-form");
+  var messageNode = document.getElementById("delete-modal-message");
+  var warningNode = document.getElementById("delete-modal-warning");
+  var cancel = document.getElementById("delete-modal-cancel");
+  var supportsDialog = typeof dialog.showModal === "function";
+
+  cancel.addEventListener("click", function () {
+    dialog.close();
+  });
+
+  document.addEventListener("click", function (event) {
+    var trigger = event.target.closest("[data-delete-url]");
+    if (!trigger) {
+      return;
+    }
+    event.preventDefault();
+    var message = trigger.getAttribute("data-delete-message") || "";
+    var warning = trigger.getAttribute("data-delete-warning") || "";
+    if (!supportsDialog) {
+      if (window.confirm(warning ? message + "\n\n" + warning : message)) {
+        form.action = trigger.getAttribute("data-delete-url");
+        form.submit();
+      }
+      return;
+    }
+    form.action = trigger.getAttribute("data-delete-url");
+    messageNode.textContent = message;
+    warningNode.textContent = warning;
+    warningNode.hidden = !warning;
+    dialog.showModal();
+  });
+})();
+</script>

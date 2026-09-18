@@ -5,6 +5,9 @@
 
 {% block manager_content %}
 <h1>{% trans "Resources" %}</h1>
+<div class="manager-toolbar">
+  <a class="manager-button" href="{% url 'manager_web:resource-create' %}">{% trans "New resource" %}</a>
+</div>
 {% include "gaodcore_manager/_list_filters.html" %}
 <div class="manager-table-wrapper">
 <table id="resource-list">
@@ -15,6 +18,7 @@
       <th scope="col">{% trans "Connector" %}</th>
       <th scope="col">{% trans "Object location" %}</th>
       <th scope="col">{% trans "Enabled" %}</th>
+      <th scope="col">{% trans "Actions" %}</th>
     </tr>
   </thead>
   <tbody>
@@ -25,10 +29,14 @@
       <td><a href="{% url 'manager_web:connector-detail' pk=resource.connector_config.pk %}">{{ resource.connector_config.name }}</a></td>
       <td>{{ resource.object_location|default:"—" }}</td>
       <td>{% if resource.enabled %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}</td>
+      <td class="manager-actions">
+        <a class="manager-button" href="{% url 'manager_web:resource-update' pk=resource.pk %}">{% trans "Edit" %}</a>
+        {% include "gaodcore_manager/_delete_button.html" with delete_url_name="manager_web:resource-delete" object=resource is_connector=False %}
+      </td>
     </tr>
     {% empty %}
     <tr>
-      <td colspan="5">{% trans "No resources found." %}</td>
+      <td colspan="6">{% trans "No resources found." %}</td>
     </tr>
     {% endfor %}
   </tbody>
@@ -45,4 +53,5 @@
   {% endif %}
 </div>
 {% endif %}
+{% include "gaodcore_manager/_delete_modal.html" %}
 {% endblock %}
