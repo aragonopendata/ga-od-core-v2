@@ -4,6 +4,8 @@ The private surface (Django admin, manager API, health API, private schema and
 Swagger UI) is served under ``/admin/GA_OD_Core_admin/``. The public API keeps
 its own ``/GA_OD_Core/`` prefix and is untouched by that move.
 """
+from urllib.parse import parse_qs, urlsplit
+
 from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 from django.urls import NoReverseMatch, Resolver404, resolve, reverse
@@ -46,11 +48,20 @@ class TestPrivateBasePathResolves(TestCase):
             with self.subTest(url=url):
                 self.assertIsNotNone(resolve(url))
 
-    def test_private_base_path_redirects_to_the_private_swagger_ui(self):
-        """The private base path redirects to its own Swagger UI, under the new prefix."""
+    def test_private_base_path_redirects_to_the_html_manager(self):
+        """The private base path redirects to the HTML manager resource list."""
         response = self.client.get(PRIVATE_PREFIX)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, f'{PRIVATE_PREFIX}ui/')
+        self.assertEqual(response.url, reverse('manager_web:resource-list'))
+
+    def test_anonymous_user_following_the_private_root_reaches_admin_login_with_next(self):
+        """Anonymous users bounce through the manager, to the admin login, and back."""
+        response = self.client.get(PRIVATE_PREFIX, follow=True)
+        self.assertEqual(response.status_code, 200)
+        final_url, _status = response.redirect_chain[-1]
+        self.assertTrue(final_url.startswith(f'{PRIVATE_PREFIX}admin/login/'))
+        query = parse_qs(urlsplit(final_url).query)
+        self.assertEqual(query['next'], [reverse('manager_web:resource-list')])
 
 
 class TestOldPrivateBasePathIsGone(TestCase):

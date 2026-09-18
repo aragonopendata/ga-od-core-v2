@@ -1,3 +1,6 @@
+import re
+from urllib.parse import parse_qs, urlsplit
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -114,6 +117,11 @@ class TestStandaloneTemplate(WebManagerTestCase):
         self.assertIn(">Conectores<", content)
         self.assertIn(reverse("manager_web:resource-list"), content)
         self.assertIn(reverse("manager_web:connector-list"), content)
+
+    def test_navigation_includes_the_private_swagger_link(self):
+        response = self.client.get(reverse("manager_web:resource-list"))
+        content = response.content.decode()
+        self.assertIn(reverse("admin-schema-swagger-ui"), content)
 
 
 class TestBreadcrumbs(WebManagerTestCase):
@@ -504,6 +512,45 @@ class TestConnectorDetail(WebManagerTestCase):
         self.assertIn("JSON.parse", content)
         self.assertNotIn(f'value="{self.connector.uri}"', content)
         self.assertNotIn(f'data-uri="{self.connector.uri}"', content)
+
+    def test_connector_detail_has_a_view_resources_link(self):
+        response = self.client.get(
+            reverse("manager_web:connector-detail", kwargs={"pk": self.connector.pk})
+        )
+        content = response.content.decode()
+        self.assertIn("Ver recursos", content)
+        match = re.search(r'href="([^"]*)">Ver recursos<', content)
+        self.assertIsNotNone(match)
+        parsed = urlsplit(match.group(1))
+        self.assertEqual(parsed.path, reverse("manager_web:resource-list"))
+        query = parse_qs(parsed.query)
+        self.assertEqual(query["connector"], [str(self.connector.pk)])
+        self.assertEqual(query["enabled"], ["all"])
+        self.assertNotIn("q", query)
+
+    def test_view_resources_link_shows_disabled_resources_for_that_connector_only(self):
+        other_connector = ConnectorConfig.objects.create(
+            name="other-connector", uri="postgresql://x/y", enabled=True
+        )
+        disabled_resource = ResourceConfig.objects.create(
+            name="disabled-resource",
+            connector_config=self.connector,
+            enabled=False,
+            object_location="some_table",
+        )
+        other_resource = ResourceConfig.objects.create(
+            name="other-connector-resource",
+            connector_config=other_connector,
+            enabled=True,
+            object_location="some_table",
+        )
+        response = self.client.get(
+            f"{reverse('manager_web:resource-list')}?connector={self.connector.pk}&enabled=all"
+        )
+        resources = list(response.context["resources"])
+        self.assertIn(self.resource, resources)
+        self.assertIn(disabled_resource, resources)
+        self.assertNotIn(other_resource, resources)
 
 
 class TestExistingRoutesUnaffected(TestCase):

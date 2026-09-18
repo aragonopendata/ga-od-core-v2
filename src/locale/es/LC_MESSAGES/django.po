@@ -522,12 +522,20 @@ msgstr "Gestor GA OD Core"
 msgid "Save"
 msgstr "Guardar"
 
-#: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:9
+#: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:10
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_list.html:31
 #: gaodcore_manager/templates/gaodcore_manager/resourceconfig_detail.html:9
 #: gaodcore_manager/templates/gaodcore_manager/resourceconfig_list.html:33
 msgid "Edit"
 msgstr "Editar"
+
+#: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:9
+msgid "View resources"
+msgstr "Ver recursos"
+
+#: gaodcore_manager/templates/gaodcore_manager/manager_base.html:30
+msgid "API (Swagger)"
+msgstr "API (Swagger)"
 
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:16
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_list.html:16

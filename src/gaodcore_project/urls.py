@@ -31,7 +31,7 @@ urlpatterns = [
     re_path(
         r'^admin/GA_OD_Core_admin/',
         include([
-            path('', RedirectView.as_view(pattern_name='admin-schema-swagger-ui'), name='admin-index'),
+            path('', RedirectView.as_view(pattern_name='manager_web:resource-list'), name='admin-index'),
             path('admin/', admin.site.urls),
             path('manager/', include('gaodcore_manager.urls')),
             path('web/manager/', include('gaodcore_manager.web_urls')),
