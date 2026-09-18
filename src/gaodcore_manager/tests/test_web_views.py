@@ -259,6 +259,107 @@ class TestResourceList(WebManagerTestCase):
         self.assertIn("q=matching", content)
         self.assertIn("enabled=1", content)
 
+    def test_resource_list_filter_by_connector(self):
+        other_connector = ConnectorConfig.objects.create(
+            name="other-connector", uri="postgresql://x/y", enabled=True
+        )
+        ResourceConfig.objects.create(
+            name="other-resource", connector_config=other_connector, enabled=True, object_location="t"
+        )
+        response = self.client.get(
+            reverse("manager_web:resource-list"), {"connector": self.connector.pk, "enabled": "all"}
+        )
+        names = [resource.name for resource in response.context["resources"]]
+        self.assertEqual(names, ["test-resource"])
+        self.assertEqual(response.context["connector_filter"], str(self.connector.pk))
+
+    def test_resource_list_connector_filter_combines_with_q_and_enabled(self):
+        other_connector = ConnectorConfig.objects.create(
+            name="other-connector", uri="postgresql://x/y", enabled=True
+        )
+        ResourceConfig.objects.create(
+            name="test-resource-2", connector_config=self.connector, enabled=False, object_location="t"
+        )
+        ResourceConfig.objects.create(
+            name="test-resource-3", connector_config=other_connector, enabled=True, object_location="t"
+        )
+        response = self.client.get(
+            reverse("manager_web:resource-list"),
+            {"connector": self.connector.pk, "q": "test-resource", "enabled": "all"},
+        )
+        names = sorted(resource.name for resource in response.context["resources"])
+        self.assertEqual(names, ["test-resource", "test-resource-2"])
+
+    def test_resource_list_empty_connector_value_means_all_connectors(self):
+        response = self.client.get(reverse("manager_web:resource-list"), {"connector": ""})
+        names = [resource.name for resource in response.context["resources"]]
+        self.assertEqual(names, ["test-resource"])
+        self.assertEqual(response.context["connector_filter"], "")
+
+    def test_resource_list_malformed_connector_value_is_ignored(self):
+        response = self.client.get(reverse("manager_web:resource-list"), {"connector": "not-a-pk"})
+        self.assertEqual(response.status_code, 200)
+        names = [resource.name for resource in response.context["resources"]]
+        self.assertEqual(names, ["test-resource"])
+
+    def test_resource_list_nonexistent_connector_pk_returns_no_matches(self):
+        response = self.client.get(reverse("manager_web:resource-list"), {"connector": "999999"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context["resources"]), [])
+
+    def test_resource_list_connector_filter_persists_in_pagination_links(self):
+        for i in range(60):
+            ResourceConfig.objects.create(
+                name=f"pag-connector-resource-{i}",
+                connector_config=self.connector,
+                enabled=True,
+                object_location="t",
+            )
+        response = self.client.get(
+            reverse("manager_web:resource-list"), {"connector": self.connector.pk}
+        )
+        content = response.content.decode()
+        self.assertIn(f"connector={self.connector.pk}", content)
+        # A new filter submission starts from the first page: no `page` field.
+        self.assertNotIn('name="page"', content)
+
+    def test_resource_list_connector_selector_includes_enabled_and_disabled_connectors(self):
+        disabled_connector = ConnectorConfig.objects.create(
+            name="a-disabled-connector", uri="postgresql://x/y-disabled", enabled=False
+        )
+        response = self.client.get(reverse("manager_web:resource-list"))
+        connectors = list(response.context["connector_choices"])
+        self.assertIn(disabled_connector, connectors)
+        self.assertIn(self.connector, connectors)
+
+    def test_resource_list_connector_selector_is_ordered_case_insensitively_by_name_then_pk(self):
+        ConnectorConfig.objects.create(name="banana", uri="postgresql://x/y-banana", enabled=True)
+        ConnectorConfig.objects.create(name="Apple", uri="postgresql://x/y-apple-1", enabled=True)
+        ConnectorConfig.objects.create(name="apple", uri="postgresql://x/y-apple-2", enabled=True)
+        response = self.client.get(reverse("manager_web:resource-list"))
+        names_and_pks = [(c.name.lower(), c.pk) for c in response.context["connector_choices"]]
+        self.assertEqual(names_and_pks, sorted(names_and_pks))
+
+    def test_resource_list_connector_selector_marks_selected_option(self):
+        response = self.client.get(
+            reverse("manager_web:resource-list"), {"connector": self.connector.pk}
+        )
+        content = response.content.decode()
+        self.assertIn(
+            f'value="{self.connector.pk}" selected', content
+        )
+
+    def test_resource_list_does_not_apply_connector_filter_by_default(self):
+        other_connector = ConnectorConfig.objects.create(
+            name="other-connector", uri="postgresql://x/y", enabled=True
+        )
+        ResourceConfig.objects.create(
+            name="other-resource", connector_config=other_connector, enabled=True, object_location="t"
+        )
+        response = self.client.get(reverse("manager_web:resource-list"), {"enabled": "all"})
+        names = sorted(resource.name for resource in response.context["resources"])
+        self.assertEqual(names, ["other-resource", "test-resource"])
+
 
 class TestResourceDetail(WebManagerTestCase):
     def setUp(self):
@@ -378,6 +479,10 @@ class TestConnectorList(WebManagerTestCase):
         content = response.content.decode()
         self.assertNotIn(self.connector.uri, content)
         self.assertNotIn("secret-password", content)
+
+    def test_connector_list_does_not_show_a_connector_selector(self):
+        response = self.client.get(reverse("manager_web:connector-list"))
+        self.assertNotIn('id="id_connector"', response.content.decode())
 
 
 class TestConnectorDetail(WebManagerTestCase):

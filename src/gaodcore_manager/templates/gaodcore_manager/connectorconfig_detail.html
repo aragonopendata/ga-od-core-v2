@@ -7,7 +7,7 @@
 <h1>{{ connector.name }}</h1>
 <div class="manager-toolbar">
   <a class="manager-button" href="{% url 'manager_web:connector-update' pk=connector.pk %}">{% trans "Edit" %}</a>
-  {% include "gaodcore_manager/_delete_button.html" with delete_url_name="manager_web:connector-delete" object=connector is_connector=True resource_count=resource_count %}
+  {% include "gaodcore_manager/_delete_button.html" with delete_url_name="manager_web:connector-delete" edit_url_name="manager_web:connector-update" object=connector is_connector=True resource_count=resource_count %}
 </div>
 <div class="manager-table-wrapper">
 <table id="connector-detail">

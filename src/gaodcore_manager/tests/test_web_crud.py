@@ -394,6 +394,78 @@ class TestDeletionModal(WebCrudTestCase):
         self.assertContains(response, "data-delete-url=")
         self.assertNotContains(response, "data-delete-warning=")
 
+    def test_edit_to_disable_link_targets_are_populated_for_list_and_detail_triggers(self):
+        self.login_staff()
+        resource_edit_url = reverse("manager_web:resource-update", kwargs={"pk": self.resource.pk})
+        connector_edit_url = reverse("manager_web:connector-update", kwargs={"pk": self.connector.pk})
+        pages = [
+            reverse("manager_web:resource-list"),
+            reverse("manager_web:resource-detail", kwargs={"pk": self.resource.pk}),
+        ]
+        for url in pages:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertContains(response, f'data-edit-url="{resource_edit_url}"')
+
+        pages = [
+            reverse("manager_web:connector-list"),
+            reverse("manager_web:connector-detail", kwargs={"pk": self.connector.pk}),
+        ]
+        for url in pages:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertContains(response, f'data-edit-url="{connector_edit_url}"')
+
+    def test_modal_includes_the_edit_to_disable_action(self):
+        self.login_staff()
+        response = self.client.get(reverse("manager_web:resource-list"))
+        self.assertContains(response, 'id="delete-modal-edit"')
+        self.assertContains(response, "Edit to disable")
+
+    def test_resource_advisory_text_is_present(self):
+        self.login_staff()
+        response = self.client.get(reverse("manager_web:resource-list"))
+        self.assertContains(
+            response,
+            escape('If you only want to stop publishing this resource, edit it and clear "Enabled".'),
+        )
+
+    def test_connector_advisory_text_is_present(self):
+        self.login_staff()
+        response = self.client.get(reverse("manager_web:connector-list"))
+        self.assertContains(
+            response,
+            escape(
+                "Disabling the connector makes all its resources unavailable "
+                "without deleting their configuration."
+            ),
+        )
+
+    def test_list_row_edit_and_delete_controls_are_icon_only_with_accessible_labels(self):
+        self.login_staff()
+        resource_edit_url = reverse("manager_web:resource-update", kwargs={"pk": self.resource.pk})
+        resource_delete_url = reverse("manager_web:resource-delete", kwargs={"pk": self.resource.pk})
+        response = self.client.get(reverse("manager_web:resource-list"))
+        content = response.content.decode()
+        self.assertIn(f'href="{resource_edit_url}"', content)
+        self.assertIn(f'data-delete-url="{resource_delete_url}"', content)
+        self.assertIn(escape(f"Edit {self.resource.name}"), content)
+        self.assertIn(escape(f"Delete {self.resource.name}"), content)
+        self.assertIn("<svg", content)
+        # The row action cell only renders icon buttons, not the plain text
+        # ones (the modal's own "Delete" confirm button is unrelated to this).
+        actions_cell = content[content.index('class="manager-actions"'):content.index("</td>")]
+        self.assertNotIn(">Edit<", actions_cell)
+        self.assertNotIn(">Delete<", actions_cell)
+
+    def test_detail_pages_keep_text_action_buttons(self):
+        self.login_staff()
+        response = self.client.get(
+            reverse("manager_web:resource-detail", kwargs={"pk": self.resource.pk})
+        )
+        self.assertContains(response, ">Edit<")
+        self.assertContains(response, ">Delete<")
+
     def test_connector_list_counts_resources_without_a_query_per_row(self):
         """The cascade warning must not cost one COUNT per connector."""
         self.login_staff()

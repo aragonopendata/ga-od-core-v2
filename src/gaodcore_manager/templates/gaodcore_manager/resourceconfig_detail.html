@@ -7,7 +7,7 @@
 <h1>{{ resource.name }}</h1>
 <div class="manager-toolbar">
   <a class="manager-button" href="{% url 'manager_web:resource-update' pk=resource.pk %}">{% trans "Edit" %}</a>
-  {% include "gaodcore_manager/_delete_button.html" with delete_url_name="manager_web:resource-delete" object=resource is_connector=False %}
+  {% include "gaodcore_manager/_delete_button.html" with delete_url_name="manager_web:resource-delete" edit_url_name="manager_web:resource-update" object=resource is_connector=False %}
 </div>
 <div class="manager-table-wrapper">
 <table id="resource-detail">

@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count
+from django.db.models.functions import Lower
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
@@ -67,13 +68,26 @@ class ResourceConfigListView(SearchFilterListMixin, StaffManagerTemplateMixin, L
     active_section = "resources"
     paginate_by = 50
 
+    def get_connector_filter(self):
+        """Returns the requested `connector` value, or "" for all connectors."""
+        return self.request.GET.get("connector", "").strip()
+
     def get_queryset(self):
         queryset = ResourceConfig.objects.select_related("connector_config").order_by("id")
-        return self.filter_queryset(queryset)
+        queryset = self.filter_queryset(queryset)
+        connector_filter = self.get_connector_filter()
+        # A malformed value (not a plain positive integer) is treated as no
+        # filter applied, so it can never reach the database as an invalid
+        # connector_config_id lookup.
+        if connector_filter.isdigit():
+            queryset = queryset.filter(connector_config_id=connector_filter)
+        return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["breadcrumb_section"] = _("Resources")
+        context["connector_filter"] = self.get_connector_filter()
+        context["connector_choices"] = ConnectorConfig.objects.order_by(Lower("name"), "pk")
         return context
 
 

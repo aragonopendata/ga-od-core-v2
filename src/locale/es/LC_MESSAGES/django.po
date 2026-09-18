@@ -18,6 +18,8 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: gaodcore_health/models.py:18 gaodcore_health/models.py:147
+#: gaodcore_manager/templates/gaodcore_manager/_list_filters.html:12
+#: gaodcore_manager/templates/gaodcore_manager/_list_filters.html:16
 #: gaodcore_manager/templates/gaodcore_manager/resourceconfig_detail.html:24
 #: gaodcore_manager/templates/gaodcore_manager/resourceconfig_list.html:18
 msgid "Connector"
@@ -426,31 +428,54 @@ msgstr "Configuración de recurso"
 msgid "Resource Configurations"
 msgstr "Configuraciones de recurso"
 
-#: gaodcore_manager/templates/gaodcore_manager/_delete_button.html:12
+#: gaodcore_manager/templates/gaodcore_manager/_delete_button.html:15
+#: gaodcore_manager/templates/gaodcore_manager/_edit_button.html:7
+#, python-format
+msgid "Delete %(name)s"
+msgstr "Eliminar %(name)s"
+
+#: gaodcore_manager/templates/gaodcore_manager/_delete_button.html:17
+msgid "Disabling the connector makes all its resources unavailable without deleting their configuration."
+msgstr "Deshabilitar el conector hace que todos sus recursos dejen de estar disponibles, sin eliminar su configuración."
+
+#: gaodcore_manager/templates/gaodcore_manager/_delete_button.html:19
+msgid "If you only want to stop publishing this resource, edit it and clear &quot;Enabled&quot;."
+msgstr "Si solo quieres dejar de publicar este recurso, edítalo y desmarca &quot;Habilitado&quot;."
+
+#: gaodcore_manager/templates/gaodcore_manager/_delete_button.html:24
 #, python-format
 msgid "Are you sure you want to delete &quot;%(name)s&quot;? This action cannot be undone."
 msgstr "¿Seguro que quieres eliminar &quot;%(name)s&quot;? Esta acción no se puede deshacer."
 
-#: gaodcore_manager/templates/gaodcore_manager/_delete_button.html:13
+#: gaodcore_manager/templates/gaodcore_manager/_delete_button.html:26
 #, python-format
 msgid "Its %(counter)s associated resource will also be deleted."
 msgid_plural "Its %(counter)s associated resources will also be deleted."
 msgstr[0] "Se eliminará también su %(counter)s recurso asociado."
 msgstr[1] "Se eliminarán también sus %(counter)s recursos asociados."
 
-#: gaodcore_manager/templates/gaodcore_manager/_delete_button.html:14
-#: gaodcore_manager/templates/gaodcore_manager/_delete_modal.html:20
+#: gaodcore_manager/templates/gaodcore_manager/_delete_button.html:35
+#: gaodcore_manager/templates/gaodcore_manager/_delete_modal.html:26
 msgid "Delete"
 msgstr "Eliminar"
 
-#: gaodcore_manager/templates/gaodcore_manager/_delete_modal.html:15
+#: gaodcore_manager/templates/gaodcore_manager/_delete_modal.html:19
 msgid "Confirm deletion"
 msgstr "Confirmar eliminación"
 
-#: gaodcore_manager/templates/gaodcore_manager/_delete_modal.html:19
+#: gaodcore_manager/templates/gaodcore_manager/_delete_modal.html:24
 #: gaodcore_manager/templates/gaodcore_manager/config_form.html:29
 msgid "Cancel"
 msgstr "Cancelar"
+
+#: gaodcore_manager/templates/gaodcore_manager/_delete_modal.html:25
+msgid "Edit to disable"
+msgstr "Editar para deshabilitar"
+
+#: gaodcore_manager/templates/gaodcore_manager/_edit_button.html:7
+#, python-format
+msgid "Edit %(name)s"
+msgstr "Editar %(name)s"
 
 #: gaodcore_manager/templates/gaodcore_manager/_list_filters.html:3
 msgid "Search"
@@ -472,7 +497,11 @@ msgstr "Sí"
 msgid "No"
 msgstr "No"
 
-#: gaodcore_manager/templates/gaodcore_manager/_list_filters.html:11
+#: gaodcore_manager/templates/gaodcore_manager/_list_filters.html:14
+msgid "All connectors"
+msgstr "Todos los conectores"
+
+#: gaodcore_manager/templates/gaodcore_manager/_list_filters.html:20
 msgid "Filter"
 msgstr "Filtrar"
 

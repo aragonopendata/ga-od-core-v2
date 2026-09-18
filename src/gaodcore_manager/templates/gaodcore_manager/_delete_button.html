@@ -1,15 +1,37 @@
 {% load i18n %}
 {% comment %}
-Delete trigger for the shared modal. Expects `object`, `delete_url_name` and
-`is_connector`. The confirmation texts are rendered here so they go through the
-translation catalogue instead of being built in JavaScript.
+Delete trigger for the shared modal. Expects `object`, `delete_url_name`,
+`edit_url_name` and `is_connector`. For connectors the caller also passes
+`resource_count`, which the views compute (an annotation on the list, an
+explicit count on the detail).
 
-For connectors the caller also passes `resource_count`, which the views compute
-(an annotation on the list, an explicit count on the detail).
+`edit_url_name` feeds the modal's non-destructive "Edit to disable" action,
+and the per-type disable hint tells administrators that disabling is the
+reversible alternative to deleting.
+
+Pass `icon_only=True` to render a compact icon-only control for list rows;
+detail pages omit it and keep the text version.
 {% endcomment %}
-<button type="button" class="manager-button manager-button--danger"
+{% blocktrans asvar delete_label with name=object.name %}Delete {{ name }}{% endblocktrans %}
+{% if is_connector %}
+{% blocktrans asvar disable_hint %}Disabling the connector makes all its resources unavailable without deleting their configuration.{% endblocktrans %}
+{% else %}
+{% blocktrans asvar disable_hint %}If you only want to stop publishing this resource, edit it and clear &quot;Enabled&quot;.{% endblocktrans %}
+{% endif %}
+<button type="button" class="manager-button manager-button--danger{% if icon_only %} manager-icon-button{% endif %}"
         data-delete-url="{% url delete_url_name pk=object.pk %}"
+        data-edit-url="{% url edit_url_name pk=object.pk %}"
         data-delete-message="{% blocktrans with name=object.name %}Are you sure you want to delete &quot;{{ name }}&quot;? This action cannot be undone.{% endblocktrans %}"
-        {% if is_connector %}data-delete-warning="{% blocktrans count counter=resource_count %}Its {{ counter }} associated resource will also be deleted.{% plural %}Its {{ counter }} associated resources will also be deleted.{% endblocktrans %}"{% endif %}>
+        data-disable-hint="{{ disable_hint }}"
+        {% if is_connector %}data-delete-warning="{% blocktrans count counter=resource_count %}Its {{ counter }} associated resource will also be deleted.{% plural %}Its {{ counter }} associated resources will also be deleted.{% endblocktrans %}"{% endif %}
+        {% if icon_only %}aria-label="{{ delete_label }}" title="{{ delete_label }}"{% endif %}>
+  {% if icon_only %}
+  <svg class="manager-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+    <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+          d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m3 0-.87 12.14A2 2 0 0115.14 21H8.86a2 2 0 01-1.99-1.86L6 7" />
+  </svg>
+  <span class="manager-visually-hidden">{{ delete_label }}</span>
+  {% else %}
   {% trans "Delete" %}
+  {% endif %}
 </button>

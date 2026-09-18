@@ -30,8 +30,8 @@
       <td>{{ resource.object_location|default:"—" }}</td>
       <td>{% if resource.enabled %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}</td>
       <td class="manager-actions">
-        <a class="manager-button" href="{% url 'manager_web:resource-update' pk=resource.pk %}">{% trans "Edit" %}</a>
-        {% include "gaodcore_manager/_delete_button.html" with delete_url_name="manager_web:resource-delete" object=resource is_connector=False %}
+        {% include "gaodcore_manager/_edit_button.html" with edit_url_name="manager_web:resource-update" object=resource %}
+        {% include "gaodcore_manager/_delete_button.html" with delete_url_name="manager_web:resource-delete" edit_url_name="manager_web:resource-update" object=resource is_connector=False icon_only=True %}
       </td>
     </tr>
     {% empty %}

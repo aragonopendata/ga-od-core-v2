@@ -8,5 +8,14 @@
     <option value="1" {% if enabled_filter == "1" %}selected{% endif %}>{% trans "Yes" %}</option>
     <option value="0" {% if enabled_filter == "0" %}selected{% endif %}>{% trans "No" %}</option>
   </select>
+  {% if connector_choices %}
+  <label for="id_connector">{% trans "Connector" %}</label>
+  <select id="id_connector" name="connector">
+    <option value="" {% if not connector_filter %}selected{% endif %}>{% trans "All connectors" %}</option>
+    {% for connector in connector_choices %}
+    <option value="{{ connector.pk }}" {% if connector_filter == connector.pk|stringformat:"s" %}selected{% endif %}>{{ connector.name }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
   <button type="submit" class="manager-button">{% trans "Filter" %}</button>
 </form>

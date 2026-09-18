@@ -28,8 +28,8 @@
       <td>{% if connector.enabled %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}</td>
       <td>{{ connector.updated_at|default:"—" }}</td>
       <td class="manager-actions">
-        <a class="manager-button" href="{% url 'manager_web:connector-update' pk=connector.pk %}">{% trans "Edit" %}</a>
-        {% include "gaodcore_manager/_delete_button.html" with delete_url_name="manager_web:connector-delete" object=connector is_connector=True resource_count=connector.resource_count %}
+        {% include "gaodcore_manager/_edit_button.html" with edit_url_name="manager_web:connector-update" object=connector %}
+        {% include "gaodcore_manager/_delete_button.html" with delete_url_name="manager_web:connector-delete" edit_url_name="manager_web:connector-update" object=connector is_connector=True resource_count=connector.resource_count icon_only=True %}
       </td>
     </tr>
     {% empty %}

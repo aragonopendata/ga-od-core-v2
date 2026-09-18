@@ -197,6 +197,40 @@ thead th {
   background: #8a1818;
 }
 
+.manager-button--secondary {
+  background: var(--surface-bg);
+  color: var(--accent-dark);
+}
+
+.manager-button--secondary:hover {
+  background: var(--body-bg);
+  color: var(--accent-dark);
+}
+
+.manager-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  line-height: 0;
+}
+
+.manager-icon {
+  display: block;
+}
+
+.manager-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .manager-messages {
   list-style: none;
   margin: 0 0 16px;
@@ -304,6 +338,11 @@ thead th {
 .manager-modal__warning {
   color: #ba2121;
   font-weight: bold;
+}
+
+.manager-modal__hint {
+  color: var(--muted-text);
+  font-size: 13px;
 }
 
 .manager-modal__actions {
