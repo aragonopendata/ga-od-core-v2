@@ -221,6 +221,19 @@ class TestResourceList(WebManagerTestCase):
         names = [resource.name for resource in response.context["resources"]]
         self.assertEqual(names, ["test-resource"])
 
+    def test_resource_list_defaults_to_enabled_only(self):
+        ResourceConfig.objects.create(
+            name="disabled-resource", connector_config=self.connector, enabled=False, object_location="t"
+        )
+        response = self.client.get(reverse("manager_web:resource-list"))
+        names = [resource.name for resource in response.context["resources"]]
+        self.assertEqual(names, ["test-resource"])
+        self.assertEqual(response.context["enabled_filter"], "1")
+
+        response = self.client.get(reverse("manager_web:resource-list"), {"enabled": "all"})
+        names = sorted(resource.name for resource in response.context["resources"])
+        self.assertEqual(names, ["disabled-resource", "test-resource"])
+
     def test_resource_list_filter_by_enabled(self):
         ResourceConfig.objects.create(
             name="disabled-resource", connector_config=self.connector, enabled=False, object_location="t"
@@ -338,6 +351,17 @@ class TestConnectorList(WebManagerTestCase):
         response = self.client.get(reverse("manager_web:connector-list"), {"q": "test-connector"})
         names = [connector.name for connector in response.context["connectors"]]
         self.assertEqual(names, ["test-connector"])
+
+    def test_connector_list_defaults_to_enabled_only(self):
+        ConnectorConfig.objects.create(name="disabled-connector", uri="postgresql://x/y", enabled=False)
+        response = self.client.get(reverse("manager_web:connector-list"))
+        names = [connector.name for connector in response.context["connectors"]]
+        self.assertEqual(names, ["test-connector"])
+        self.assertEqual(response.context["enabled_filter"], "1")
+
+        response = self.client.get(reverse("manager_web:connector-list"), {"enabled": "all"})
+        names = sorted(connector.name for connector in response.context["connectors"])
+        self.assertEqual(names, ["disabled-connector", "test-connector"])
 
     def test_connector_list_filter_by_enabled(self):
         ConnectorConfig.objects.create(name="disabled-connector", uri="postgresql://x/y", enabled=False)

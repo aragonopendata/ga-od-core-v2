@@ -25,15 +25,23 @@ class StaffManagerTemplateMixin:
 class SearchFilterListMixin:
     """Adds a `?q=` name search and an `?enabled=` filter to a ListView, and
     exposes the current values plus the querystring needed to keep them
-    across pagination links."""
+    across pagination links.
+
+    The `?enabled=` filter defaults to only enabled rows; `?enabled=all`
+    removes the filter."""
 
     search_field = "name"
+    default_enabled_filter = "1"
+
+    def get_enabled_filter(self):
+        """Returns the requested `enabled` value, defaulting to enabled-only."""
+        return self.request.GET.get("enabled", self.default_enabled_filter)
 
     def filter_queryset(self, queryset):
         query = self.request.GET.get("q", "").strip()
         if query:
             queryset = queryset.filter(**{f"{self.search_field}__icontains": query})
-        enabled = self.request.GET.get("enabled", "")
+        enabled = self.get_enabled_filter()
         if enabled in ("1", "0"):
             queryset = queryset.filter(enabled=(enabled == "1"))
         return queryset
@@ -41,7 +49,7 @@ class SearchFilterListMixin:
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["search_query"] = self.request.GET.get("q", "")
-        context["enabled_filter"] = self.request.GET.get("enabled", "")
+        context["enabled_filter"] = self.get_enabled_filter()
         pagination_params = self.request.GET.copy()
         pagination_params.pop("page", None)
         context["pagination_query_string"] = pagination_params.urlencode()
