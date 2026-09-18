@@ -4,12 +4,12 @@ Views for health monitoring API endpoints.
 
 from datetime import timedelta
 
-from django.shortcuts import render, redirect
+from django.contrib.admin.views.decorators import staff_member_required
+from django.shortcuts import redirect
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 from django.db.models import Avg
 from django.views.generic import ListView, DetailView
-from django.contrib.auth.mixins import LoginRequiredMixin
-from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -19,7 +19,12 @@ from drf_spectacular.types import OpenApiTypes
 
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from .models import HealthCheckResult, ResourceHealthCheckResult
-from .mixins import ConnectorHealthMixin, ResourceHealthMixin, HealthContextMixin
+from .mixins import (
+    ConnectorHealthMixin,
+    ResourceHealthMixin,
+    HealthContextMixin,
+    StaffRequiredMixin,
+)
 from .serializers import (
     HealthCheckResultSerializer,
     HealthStatusSerializer,
@@ -377,70 +382,21 @@ class ConnectorHealthDetailAPIView(APIView):
         return Response(serializer.data)
 
 
-@extend_schema(exclude=True)
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@staff_member_required
 def health_dashboard(request):
     """
-    Render the health monitoring dashboard.
+    Legacy dashboard route (kept for backwards compatibility). The
+    standalone dashboard UI has been retired in favor of the modern,
+    ListView-based connector health list that now shares the private
+    administration UI with Manager; redirect there instead of rendering it.
     """
-    # Get summary data for the dashboard
-    summary = get_connector_health_summary(hours=24)
-
-    # Get current status of all connectors
-    connectors = ConnectorConfig.objects.filter(enabled=True)
-    connector_statuses = []
-
-    for connector in connectors:
-        latest_check = HealthCheckResult.objects.filter(connector=connector).first()
-
-        status_class = (
-            "healthy" if latest_check and latest_check.is_healthy else "unhealthy"
-        )
-        if not latest_check:
-            status_class = "unknown"
-
-        connector_statuses.append(
-            {
-                "id": connector.id,
-                "name": connector.name,
-                "status": "Healthy"
-                if latest_check and latest_check.is_healthy
-                else "Unhealthy"
-                if latest_check
-                else "Unknown",
-                "status_class": status_class,
-                "last_check": latest_check.check_time if latest_check else None,
-                "response_time_ms": latest_check.response_time_ms
-                if latest_check
-                else None,
-                "error_message": latest_check.error_message
-                if latest_check and not latest_check.is_healthy
-                else None,
-            }
-        )
-
-    # Count statuses
-    healthy_count = sum(1 for c in connector_statuses if c["status_class"] == "healthy")
-    unhealthy_count = sum(
-        1 for c in connector_statuses if c["status_class"] == "unhealthy"
-    )
-    unknown_count = sum(1 for c in connector_statuses if c["status_class"] == "unknown")
-
-    context = {
-        "summary": summary,
-        "connectors": connector_statuses,
-        "healthy_count": healthy_count,
-        "unhealthy_count": unhealthy_count,
-        "unknown_count": unknown_count,
-    }
-
-    return render(request, "health/dashboard.html", context)
+    return redirect("gaodcore_health:connector_list")
 
 
 # New ListView-based Health Monitoring Views
 
 
+@staff_member_required
 def health_index(_request):
     """
     Redirect /health/ to /health/connectors/
@@ -449,7 +405,7 @@ def health_index(_request):
 
 
 class ConnectorHealthListView(
-    LoginRequiredMixin, ConnectorHealthMixin, HealthContextMixin, ListView
+    StaffRequiredMixin, ConnectorHealthMixin, HealthContextMixin, ListView
 ):
     """
     ListView for connector health monitoring.
@@ -558,9 +514,11 @@ class ConnectorHealthListView(
             {
                 "connector_health_data": connector_health_data,
                 "page_title": "Connector Health Monitor",
+                # health/base.html always prefixes breadcrumbs with
+                # "Manager > Health", so only the Health-specific tail is
+                # listed here.
                 "breadcrumbs": [
-                    {"name": "Health", "url": None},
-                    {"name": "Connectors", "url": None, "active": True},
+                    {"name": _("Connectors"), "url": None, "active": True},
                 ],
                 "current_status_filter": status_filter,
             }
@@ -570,7 +528,7 @@ class ConnectorHealthListView(
 
 
 class ResourceHealthListView(
-    LoginRequiredMixin, ResourceHealthMixin, HealthContextMixin, ListView
+    StaffRequiredMixin, ResourceHealthMixin, HealthContextMixin, ListView
 ):
     """
     ListView for resource health monitoring.
@@ -698,8 +656,7 @@ class ResourceHealthListView(
                 "resource_health_data": resource_health_data,
                 "page_title": "Resource Health Monitor",
                 "breadcrumbs": [
-                    {"name": "Health", "url": None},
-                    {"name": "Resources", "url": None, "active": True},
+                    {"name": _("Resources"), "url": None, "active": True},
                 ],
                 "current_status_filter": status_filter,
             }
@@ -709,7 +666,7 @@ class ResourceHealthListView(
 
 
 class ConnectorResourceListView(
-    LoginRequiredMixin, ResourceHealthMixin, HealthContextMixin, ListView
+    StaffRequiredMixin, ResourceHealthMixin, HealthContextMixin, ListView
 ):
     """
     ListView for resources filtered by connector.
@@ -758,10 +715,9 @@ class ConnectorResourceListView(
                 "connector": connector,
                 "page_title": f"Resources - {connector.name if connector else 'Unknown Connector'}",
                 "breadcrumbs": [
-                    {"name": "Health", "url": None},
-                    {"name": "Connectors", "url": "gaodcore_health:connector_list"},
+                    {"name": _("Connectors"), "url": "gaodcore_health:connector_list"},
                     {
-                        "name": connector.name if connector else "Unknown",
+                        "name": connector.name if connector else _("Unknown"),
                         "url": None,
                         "active": True,
                     },
@@ -774,7 +730,7 @@ class ConnectorResourceListView(
 
 
 class ConnectorHealthDetailView(
-    LoginRequiredMixin,
+    StaffRequiredMixin,
     ConnectorHealthMixin,
     ResourceHealthMixin,
     HealthContextMixin,
@@ -812,8 +768,7 @@ class ConnectorHealthDetailView(
                 "resource_health_data": resources_health,
                 "page_title": f"Connector Details - {connector.name}",
                 "breadcrumbs": [
-                    {"name": "Health", "url": None},
-                    {"name": "Connectors", "url": "gaodcore_health:connector_list"},
+                    {"name": _("Connectors"), "url": "gaodcore_health:connector_list"},
                     {"name": connector.name, "url": None, "active": True},
                 ],
             }
@@ -823,7 +778,7 @@ class ConnectorHealthDetailView(
 
 
 class ResourceHealthDetailView(
-    LoginRequiredMixin, ResourceHealthMixin, HealthContextMixin, DetailView
+    StaffRequiredMixin, ResourceHealthMixin, HealthContextMixin, DetailView
 ):
     """
     Detail view for a specific resource showing info and health data.
@@ -855,8 +810,7 @@ class ResourceHealthDetailView(
                 "resource_health_data": resource_health,
                 "page_title": f"Resource Details - {resource.name}",
                 "breadcrumbs": [
-                    {"name": "Health", "url": None},
-                    {"name": "Connectors", "url": "gaodcore_health:connector_list"},
+                    {"name": _("Connectors"), "url": "gaodcore_health:connector_list"},
                     {
                         "name": resource.connector_config.name,
                         "url": "gaodcore_health:connector_detail",

@@ -2,11 +2,26 @@
 Health status mixins for reusable logic in health monitoring views.
 """
 
+from django.contrib.admin.views.decorators import staff_member_required
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.db.models import OuterRef, Subquery
 
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from .models import HealthCheckResult, ResourceHealthCheckResult
+
+
+class StaffRequiredMixin:
+    """Restricts a class-based view to active staff users.
+
+    Mirrors gaodcore_manager.web_views.StaffManagerTemplateMixin: anonymous
+    users and authenticated non-staff users are redirected to the Django
+    Admin login, with the requested URL preserved in `next`.
+    """
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
 
 
 class ConnectorHealthMixin:
@@ -220,6 +235,9 @@ class HealthContextMixin:
                 "current_section": getattr(self, "current_section", "health"),
                 "breadcrumbs": getattr(self, "breadcrumbs", []),
                 "last_updated": timezone.now(),
+                # Drives the shared private administration shell's global
+                # navigation (see gaodcore_manager/private_base.html).
+                "private_active_section": "health",
             }
         )
 

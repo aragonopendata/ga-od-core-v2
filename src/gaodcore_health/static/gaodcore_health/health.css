@@ -1,0 +1,334 @@
+/*
+ * Health-specific styles. Reuses the shared private administration shell
+ * (variables, header, global nav, breadcrumbs, content surface, messages,
+ * buttons, tables, focus handling) from gaodcore_manager/private_base.css.
+ * Only Health-specific presentation lives here: secondary navigation,
+ * summary cards, status badges, filters, the health table and detail views.
+ */
+
+:root {
+  --health-healthy: #1e6b1e;
+  --health-healthy-bg: #eaf6ea;
+  --health-unhealthy: #ba2121;
+  --health-unhealthy-bg: #fbeaea;
+  --health-unknown: #8a6d1c;
+  --health-unknown-bg: #fff6da;
+}
+
+/* Secondary navigation: Connector health / Resource health */
+.health-subnav {
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.health-subnav__nav {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.health-subnav__nav a {
+  display: inline-block;
+  padding: 8px 12px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+  border-bottom: 3px solid transparent;
+}
+
+.health-subnav__nav a:hover {
+  color: var(--accent-dark);
+}
+
+.health-subnav__nav a.active {
+  border-bottom-color: var(--accent-dark);
+  color: var(--accent-dark);
+  font-weight: bold;
+}
+
+/* Filters */
+.health-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.health-filters label {
+  color: var(--muted-text);
+}
+
+.health-filter-button {
+  display: inline-block;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--surface-bg);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.health-filter-button:hover {
+  border-color: var(--accent-dark);
+  color: var(--accent-dark);
+}
+
+.health-filter-button.active {
+  background: var(--accent);
+  border-color: var(--accent-dark);
+  color: var(--header-fg);
+  font-weight: bold;
+}
+
+/* Filter info banner (e.g. resources scoped to one connector) */
+.health-filter-info {
+  background: var(--body-bg);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.health-filter-info strong {
+  color: var(--muted-text);
+}
+
+/* Summary cards */
+.health-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.health-stat-card {
+  background: var(--surface-bg);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 2px;
+  padding: 14px;
+  text-align: center;
+}
+
+.health-stat-card.total {
+  border-left-color: var(--accent-dark);
+}
+
+.health-stat-card.healthy {
+  border-left-color: var(--health-healthy);
+}
+
+.health-stat-card.unhealthy {
+  border-left-color: var(--health-unhealthy);
+}
+
+.health-stat-card.unknown {
+  border-left-color: var(--health-unknown);
+}
+
+.health-stat-number {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: var(--text);
+}
+
+.health-stat-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--muted-text);
+  margin-top: 4px;
+}
+
+/* Status badges (semantic colors kept: green/red/amber) */
+.health-status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.health-status-badge.healthy {
+  background: var(--health-healthy-bg);
+  color: var(--health-healthy);
+}
+
+.health-status-badge.unhealthy {
+  background: var(--health-unhealthy-bg);
+  color: var(--health-unhealthy);
+}
+
+.health-status-badge.unknown {
+  background: var(--health-unknown-bg);
+  color: var(--health-unknown);
+}
+
+/* Health table rows */
+.health-table tr.table-row {
+  cursor: pointer;
+}
+
+.health-table tr.table-row:hover {
+  background-color: var(--body-bg);
+}
+
+.health-table .item-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  color: var(--muted-text);
+  font-size: 0.9em;
+}
+
+.health-table .last-check {
+  color: var(--muted-text);
+  font-size: 0.9em;
+}
+
+.connector-link {
+  color: var(--link);
+  text-decoration: underline;
+}
+
+.connector-link:hover {
+  color: var(--accent-dark);
+}
+
+/* Empty state */
+.health-empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--muted-text);
+}
+
+.health-empty-state h3 {
+  color: var(--text);
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+
+.health-empty-state p {
+  margin: 4px 0;
+}
+
+/* Detail views */
+.health-detail-section {
+  margin-bottom: 24px;
+}
+
+.health-detail-section h2 {
+  font-size: 16px;
+  color: var(--text);
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.health-detail-fields {
+  display: grid;
+  gap: 4px;
+}
+
+.health-field-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--body-bg);
+  gap: 12px;
+}
+
+.health-field-row:last-child {
+  border-bottom: none;
+}
+
+.health-field-label {
+  flex: 0 0 160px;
+  font-weight: 600;
+  color: var(--muted-text);
+  font-size: 13px;
+}
+
+.health-field-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.health-field-value.error-text {
+  color: var(--health-unhealthy);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+/* Info table (key/value rows used on the resource detail page) */
+.health-info-table .info-label {
+  font-weight: 600;
+  color: var(--muted-text);
+  background-color: var(--body-bg);
+  width: 30%;
+  border-right: 1px solid var(--border);
+}
+
+.health-info-table .info-value {
+  color: var(--text);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.health-info-table .info-value.error-text {
+  color: var(--health-unhealthy);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9em;
+}
+
+.health-no-data {
+  color: var(--muted-text);
+  font-style: italic;
+  text-align: center;
+  padding: 16px;
+}
+
+.health-last-updated {
+  text-align: center;
+  color: var(--muted-text);
+  font-size: 13px;
+  margin-top: 20px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .health-summary-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .health-field-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .health-field-label {
+    flex: none;
+  }
+
+  .health-field-value {
+    flex: none;
+    width: 100%;
+  }
+
+  .health-info-table .info-label {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .health-info-table .info-value {
+    width: 100%;
+  }
+}

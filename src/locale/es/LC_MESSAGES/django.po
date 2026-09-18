@@ -270,16 +270,12 @@ msgstr "Alerta de verificación de salud del recurso"
 msgid "Resource Health Check Alerts"
 msgstr "Alertas de verificación de salud del recurso"
 
-#: gaodcore_health/templates/health/base.html:7
-#: gaodcore_health/templates/health/base.html:652
+#: gaodcore_health/templates/health/base.html:4
 msgid "Health Monitor"
 msgstr "Monitor de Salud"
 
-#: gaodcore_health/templates/health/base.html:653
-msgid "Real-time monitoring of connector and resource health"
-msgstr "Monitoreo en tiempo real de la salud de conectores y recursos"
-
-#: gaodcore_health/templates/health/base.html:662
+#: gaodcore_health/views.py:521 gaodcore_health/views.py:718
+#: gaodcore_health/views.py:771 gaodcore_health/views.py:813
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_list.html:4
 #: gaodcore_manager/templates/gaodcore_manager/connectorconfig_list.html:7
 #: gaodcore_manager/templates/gaodcore_manager/private_base.html:18
@@ -288,7 +284,7 @@ msgstr "Monitoreo en tiempo real de la salud de conectores y recursos"
 msgid "Connectors"
 msgstr "Conectores"
 
-#: gaodcore_health/templates/health/base.html:668
+#: gaodcore_health/views.py:659
 #: gaodcore_manager/templates/gaodcore_manager/private_base.html:17
 #: gaodcore_manager/templates/gaodcore_manager/resourceconfig_list.html:4
 #: gaodcore_manager/templates/gaodcore_manager/resourceconfig_list.html:7
@@ -297,11 +293,30 @@ msgstr "Conectores"
 msgid "Resources"
 msgstr "Recursos"
 
+#: gaodcore_health/templates/health/base.html:37
+msgid "Health sections"
+msgstr "Secciones de salud"
+
+#: gaodcore_health/templates/health/base.html:38
+msgid "Connector health"
+msgstr "Salud de conectores"
+
+#: gaodcore_health/templates/health/base.html:39
+msgid "Resource health"
+msgstr "Salud de recursos"
+
+#: gaodcore_health/templates/health/base.html:46
+#, python-format
+msgid "Last updated: %(updated)s"
+msgstr "Última actualización: %(updated)s"
+
 #: gaodcore_health/templates/health/connector_list.html:4
 msgid "Connector Health Monitor"
 msgstr "Monitor de Salud de Conectores"
 
+#: gaodcore_health/templates/health/connector_detail.html:8
 #: gaodcore_health/templates/health/connector_list.html:8
+#: gaodcore_health/templates/health/resource_detail.html:9
 #: gaodcore_health/templates/health/resource_list.html:8
 msgid "Refresh Data"
 msgstr "Actualizar Datos"
@@ -317,21 +332,34 @@ msgstr "Filtrar por Estado:"
 msgid "All"
 msgstr "Todos"
 
+#: gaodcore_health/templates/health/connector_detail.html:59
+#: gaodcore_health/templates/health/connector_detail.html:129
 #: gaodcore_health/templates/health/connector_list.html:15
-#: gaodcore_health/templates/health/connector_list.html:28
+#: gaodcore_health/templates/health/connector_list.html:65
+#: gaodcore_health/templates/health/resource_detail.html:76
 #: gaodcore_health/templates/health/resource_list.html:15
+#: gaodcore_health/templates/health/resource_list.html:88
 msgid "Healthy"
 msgstr "Sano"
 
+#: gaodcore_health/templates/health/connector_detail.html:61
+#: gaodcore_health/templates/health/connector_detail.html:131
 #: gaodcore_health/templates/health/connector_list.html:16
-#: gaodcore_health/templates/health/connector_list.html:32
+#: gaodcore_health/templates/health/connector_list.html:67
+#: gaodcore_health/templates/health/resource_detail.html:78
 #: gaodcore_health/templates/health/resource_list.html:16
+#: gaodcore_health/templates/health/resource_list.html:90
 msgid "Unhealthy"
 msgstr "No Sano"
 
+#: gaodcore_health/templates/health/connector_detail.html:63
+#: gaodcore_health/templates/health/connector_detail.html:133
 #: gaodcore_health/templates/health/connector_list.html:17
-#: gaodcore_health/templates/health/connector_list.html:36
+#: gaodcore_health/templates/health/connector_list.html:69
+#: gaodcore_health/templates/health/resource_detail.html:80
 #: gaodcore_health/templates/health/resource_list.html:17
+#: gaodcore_health/templates/health/resource_list.html:92
+#: gaodcore_health/views.py:720
 msgid "Unknown"
 msgstr "Desconocido"
 
@@ -339,13 +367,110 @@ msgstr "Desconocido"
 msgid "Total Connectors"
 msgstr "Total Conectores"
 
+#: gaodcore_health/templates/health/connector_detail.html:55
 #: gaodcore_health/templates/health/connector_list.html:48
+#: gaodcore_health/templates/health/resource_detail.html:72
+#: gaodcore_health/templates/health/resource_detail.html:124
+#: gaodcore_health/templates/health/resource_list.html:63
 msgid "Status"
 msgstr "Estado"
 
+#: gaodcore_health/templates/health/connector_detail.html:69
+#: gaodcore_health/templates/health/connector_detail.html:113
 #: gaodcore_health/templates/health/connector_list.html:49
+#: gaodcore_health/templates/health/resource_detail.html:86
+#: gaodcore_health/templates/health/resource_list.html:64
 msgid "Last Check"
 msgstr "Última Verificación"
+
+#: gaodcore_health/templates/health/connector_detail.html:74
+#: gaodcore_health/templates/health/connector_detail.html:142
+#: gaodcore_health/templates/health/resource_detail.html:91
+#: gaodcore_health/templates/health/resource_list.html:101
+msgid "Never"
+msgstr "Nunca"
+
+#: gaodcore_health/templates/health/connector_detail.html:79
+#: gaodcore_health/templates/health/resource_detail.html:96
+msgid "Response Time"
+msgstr "Tiempo de Respuesta"
+
+#: gaodcore_health/templates/health/connector_detail.html:82
+#: gaodcore_health/templates/health/resource_detail.html:99
+#, python-format
+msgid "%(ms)sms"
+msgstr "%(ms)sms"
+
+#: gaodcore_health/templates/health/connector_detail.html:84
+#: gaodcore_health/templates/health/resource_detail.html:101
+msgid "N/A"
+msgstr "N/D"
+
+#: gaodcore_health/templates/health/connector_detail.html:4
+msgid "Connector Details"
+msgstr "Detalles del Conector"
+
+#: gaodcore_health/templates/health/connector_detail.html:13
+msgid "Connector Information"
+msgstr "Información del Conector"
+
+#: gaodcore_health/templates/health/connector_detail.html:50
+#: gaodcore_health/templates/health/resource_detail.html:65
+msgid "Health Information"
+msgstr "Información de Salud"
+
+#: gaodcore_health/templates/health/connector_detail.html:90
+msgid "Error"
+msgstr "Error"
+
+#: gaodcore_health/templates/health/connector_detail.html:97
+msgid "No health data available for this connector."
+msgstr "No hay datos de salud disponibles para este conector."
+
+#: gaodcore_health/templates/health/connector_detail.html:103
+#, python-format
+msgid "Resources (%(count)s)"
+msgstr "Recursos (%(count)s)"
+
+#: gaodcore_health/templates/health/connector_detail.html:152
+msgid "No enabled resources found for this connector."
+msgstr "No se encontraron recursos habilitados para este conector."
+
+#: gaodcore_health/templates/health/connector_list.html:103
+msgid "No connectors found"
+msgstr "No se encontraron conectores"
+
+#: gaodcore_health/templates/health/connector_list.html:104
+msgid "No enabled connectors are currently configured for monitoring."
+msgstr "No hay conectores habilitados configurados actualmente para monitorización."
+
+#: gaodcore_health/templates/health/connector_list.html:105
+msgid "Create connectors in the connector management interface."
+msgstr "Cree conectores en la interfaz de gestión de conectores."
+
+#: gaodcore_health/templates/health/resource_detail.html:4
+msgid "Resource Details"
+msgstr "Detalles del Recurso"
+
+#: gaodcore_health/templates/health/resource_detail.html:10
+msgid "Preview data"
+msgstr "Vista previa de datos"
+
+#: gaodcore_health/templates/health/resource_detail.html:15
+msgid "Resource Information"
+msgstr "Información del Recurso"
+
+#: gaodcore_health/templates/health/resource_detail.html:107
+msgid "Error type"
+msgstr "Tipo de Error"
+
+#: gaodcore_health/templates/health/resource_detail.html:111
+msgid "Error message"
+msgstr "Mensaje de Error"
+
+#: gaodcore_health/templates/health/resource_detail.html:125
+msgid "No health data available"
+msgstr "No hay datos de salud disponibles"
 
 #: gaodcore_health/templates/health/resource_list.html:4
 msgid "Resource Health Monitor"
@@ -355,13 +480,38 @@ msgstr "Monitor de Salud de Recursos"
 msgid "Resources for Connector:"
 msgstr "Recursos para Conector:"
 
-#: gaodcore_health/templates/health/resource_list.html:27
+#: gaodcore_health/templates/health/resource_list.html:26
 msgid "Type:"
 msgstr "Tipo:"
 
 #: gaodcore_health/templates/health/resource_list.html:28
 msgid "URI:"
 msgstr "URI:"
+
+#: gaodcore_health/templates/health/resource_list.html:36
+msgid "Total Resources"
+msgstr "Total Recursos"
+
+#: gaodcore_health/templates/health/resource_list.html:126
+msgid "No resources found"
+msgstr "No se encontraron recursos"
+
+#: gaodcore_health/templates/health/resource_list.html:128
+#, python-format
+msgid "No enabled resources are configured for connector %(name)s."
+msgstr "No hay recursos habilitados configurados para el conector %(name)s."
+
+#: gaodcore_health/templates/health/resource_list.html:129
+msgid "Create resources for this connector in the resource management interface."
+msgstr "Cree recursos para este conector en la interfaz de gestión de recursos."
+
+#: gaodcore_health/templates/health/resource_list.html:131
+msgid "No enabled resources are currently configured for monitoring."
+msgstr "No hay recursos habilitados configurados actualmente para monitorización."
+
+#: gaodcore_health/templates/health/resource_list.html:132
+msgid "Create resources in the resource management interface."
+msgstr "Cree recursos en la interfaz de gestión de recursos."
 
 #: gaodcore_manager/models.py:20
 msgid "Primary key of ConnectorConfig."
@@ -541,6 +691,8 @@ msgstr "API (Swagger)"
 msgid "Opens in a new tab"
 msgstr "Se abre en una pestaña nueva"
 
+#: gaodcore_health/templates/health/base.html:16
+#: gaodcore_health/templates/health/base.html:18
 #: gaodcore_manager/templates/gaodcore_manager/private_base.html:19
 msgid "Health"
 msgstr "Salud"

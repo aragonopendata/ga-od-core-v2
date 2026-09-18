@@ -3,6 +3,7 @@ Tests for health monitoring functionality.
 """
 
 import asyncio
+import re
 from datetime import timedelta
 from unittest.mock import patch, MagicMock
 
@@ -13,15 +14,17 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 from rest_framework import status
 
-from gaodcore_manager.models import ConnectorConfig
-from .models import HealthCheckResult, HealthCheckSchedule, HealthCheckAlert
-from .health_check import (
+from gaodcore_manager.models import ConnectorConfig, ResourceConfig
+from gaodcore_health.models import HealthCheckResult, HealthCheckSchedule, HealthCheckAlert
+from gaodcore_health.health_check import (
     check_connector_health,
     check_all_connectors_health,
     check_and_send_alerts,
     cleanup_old_health_results,
     get_connector_health_summary,
 )
+
+PRIVATE_PREFIX = "/admin/GA_OD_Core_admin/"
 
 
 class HealthCheckModelTests(TestCase):
@@ -378,20 +381,6 @@ class HealthCheckAPITests(APITestCase):
         self.assertEqual(len(response.data), 1)
         mock_check.assert_called_once_with(2)
 
-    def test_health_dashboard_view(self):
-        """Test health dashboard view."""
-        # Create a health check result
-        HealthCheckResult.objects.create(
-            connector=self.connector, is_healthy=True, response_time_ms=100
-        )
-
-        url = reverse("gaodcore_health:dashboard")
-        response = self.client.get(url)
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertContains(response, "Health Monitor Dashboard")
-        self.assertContains(response, self.connector.name)
-
     def test_unauthenticated_access(self):
         """Test that unauthenticated users cannot access health endpoints."""
         self.client.force_authenticate(user=None)
@@ -472,3 +461,305 @@ class HealthCheckManagementCommandTests(TestCase):
         self.assertIn("Health Report", output)
         self.assertIn("Total Checks: 1", output)
         self.assertIn(self.connector.name, output)
+
+
+class HealthHtmlTestCase(TestCase):
+    """Base fixtures for the modern Health HTML interface tests."""
+
+    def setUp(self):
+        self.connector = ConnectorConfig.objects.create(
+            name="html-connector",
+            uri="postgresql://user:secret-password@localhost/db",
+            enabled=True,
+        )
+        self.resource = ResourceConfig.objects.create(
+            name="html-resource",
+            connector_config=self.connector,
+            enabled=True,
+            object_location="some_table",
+        )
+        self.staff_user = User.objects.create_user(
+            "html-staff", password="pw", is_staff=True
+        )
+        self.regular_user = User.objects.create_user(
+            "html-regular", password="pw", is_staff=False
+        )
+
+    def _html_urls(self):
+        return [
+            reverse("gaodcore_health:health_index"),
+            reverse("gaodcore_health:connector_list"),
+            reverse("gaodcore_health:resource_list"),
+            reverse("gaodcore_health:connector_detail", args=[self.connector.id]),
+            reverse("gaodcore_health:resource_detail", args=[self.resource.id]),
+            reverse("gaodcore_health:connector_resources", args=[self.connector.id]),
+            reverse("gaodcore_health:dashboard"),
+        ]
+
+
+class HealthHtmlAccessControlTests(HealthHtmlTestCase):
+    """Every human-facing Health HTML view must be staff-only, like Manager."""
+
+    def test_anonymous_users_are_redirected_to_the_admin_login(self):
+        for url in self._html_urls():
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 302)
+                self.assertTrue(
+                    response.url.startswith(f"{PRIVATE_PREFIX}admin/login/")
+                )
+                self.assertIn(f"next={url}", response.url)
+
+    def test_non_staff_users_cannot_view_any_page(self):
+        self.client.force_login(self.regular_user)
+        for url in self._html_urls():
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 302)
+                self.assertTrue(
+                    response.url.startswith(f"{PRIVATE_PREFIX}admin/login/")
+                )
+
+    def test_staff_users_can_access_every_modern_html_page(self):
+        self.client.force_login(self.staff_user)
+        for url in self._html_urls():
+            with self.subTest(url=url):
+                response = self.client.get(url, follow=True)
+                self.assertEqual(response.status_code, 200)
+
+
+class HealthApiAccessUnchangedTests(HealthHtmlTestCase):
+    """The staff-only HTML migration must not touch /health/api/ auth."""
+
+    def test_api_status_rejects_anonymous_requests_with_401(self):
+        response = self.client.get(reverse("gaodcore_health:api_status"))
+        self.assertEqual(response.status_code, 401)
+
+    def test_api_status_allows_any_authenticated_user_not_just_staff(self):
+        # The API keeps IsAuthenticated, not staff-only: a logged-in but
+        # non-staff user must still be able to reach it.
+        self.client.force_login(self.regular_user)
+        response = self.client.get(reverse("gaodcore_health:api_status"))
+        self.assertEqual(response.status_code, 200)
+
+
+class HealthHtmlSharedShellTests(HealthHtmlTestCase):
+    """Health pages must render through the shared private administration shell."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.staff_user)
+
+    def test_health_pages_use_the_shared_private_base_stylesheet(self):
+        response = self.client.get(reverse("gaodcore_health:connector_list"))
+        content = response.content.decode()
+        self.assertIn("gaodcore_manager/private_base.css", content)
+        self.assertIn("gaodcore_health/health.css", content)
+
+    def test_global_navigation_marks_health_active(self):
+        response = self.client.get(reverse("gaodcore_health:connector_list"))
+        content = response.content.decode()
+        nav_match = re.search(
+            r'<nav class="manager-tabs__nav">.*?</nav>', content, re.DOTALL
+        )
+        self.assertIsNotNone(nav_match)
+        health_link = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("gaodcore_health:connector_list")) + r'"[^>]*>',
+            nav_match.group(0),
+        )
+        self.assertIsNotNone(health_link)
+        self.assertIn('class="active"', health_link.group(0))
+
+    def test_secondary_navigation_marks_connector_health_active_on_connector_pages(self):
+        response = self.client.get(reverse("gaodcore_health:connector_list"))
+        content = response.content.decode()
+        subnav_match = re.search(
+            r'<nav class="health-subnav__nav"[^>]*>.*?</nav>', content, re.DOTALL
+        )
+        self.assertIsNotNone(subnav_match)
+        connectors_link = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("gaodcore_health:connector_list")) + r'"[^>]*>',
+            subnav_match.group(0),
+        )
+        resources_link = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("gaodcore_health:resource_list")) + r'"[^>]*>',
+            subnav_match.group(0),
+        )
+        self.assertIn('class="active"', connectors_link.group(0))
+        self.assertNotIn('class="active"', resources_link.group(0))
+
+    def test_secondary_navigation_marks_resource_health_active_on_resource_pages(self):
+        response = self.client.get(reverse("gaodcore_health:resource_list"))
+        content = response.content.decode()
+        subnav_match = re.search(
+            r'<nav class="health-subnav__nav"[^>]*>.*?</nav>', content, re.DOTALL
+        )
+        connectors_link = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("gaodcore_health:connector_list")) + r'"[^>]*>',
+            subnav_match.group(0),
+        )
+        resources_link = re.search(
+            r'<a[^>]*href="' + re.escape(reverse("gaodcore_health:resource_list")) + r'"[^>]*>',
+            subnav_match.group(0),
+        )
+        self.assertNotIn('class="active"', connectors_link.group(0))
+        self.assertIn('class="active"', resources_link.group(0))
+
+    def test_breadcrumbs_present_on_list_and_detail_pages(self):
+        cases = [
+            (reverse("gaodcore_health:connector_list"), ["Salud", "Conectores"]),
+            (reverse("gaodcore_health:resource_list"), ["Salud", "Recursos"]),
+            (
+                reverse("gaodcore_health:connector_detail", args=[self.connector.id]),
+                ["Salud", "Conectores", self.connector.name],
+            ),
+            (
+                reverse("gaodcore_health:resource_detail", args=[self.resource.id]),
+                ["Salud", "Conectores", self.connector.name, self.resource.name],
+            ),
+            (
+                reverse(
+                    "gaodcore_health:connector_resources", args=[self.connector.id]
+                ),
+                ["Salud", "Conectores", self.connector.name],
+            ),
+        ]
+        for url, expected_crumbs in cases:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                content = response.content.decode()
+                breadcrumb_match = re.search(
+                    r'<nav class="manager-breadcrumbs".*?</nav>', content, re.DOTALL
+                )
+                self.assertIsNotNone(breadcrumb_match)
+                breadcrumb_html = breadcrumb_match.group(0)
+                for crumb in expected_crumbs:
+                    self.assertIn(crumb, breadcrumb_html)
+
+
+class HealthFilterAndPaginationTests(HealthHtmlTestCase):
+    """Status filters and pagination must keep working after the CSS/markup migration."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.staff_user)
+
+    def test_status_filter_persists_across_pagination_links(self):
+        for i in range(25):
+            ConnectorConfig.objects.create(
+                name=f"pag-connector-{i}", uri=f"postgresql://x/y{i}", enabled=True
+            )
+        response = self.client.get(
+            reverse("gaodcore_health:connector_list"), {"status": "unknown"}
+        )
+        content = response.content.decode()
+        self.assertIn("status=unknown", content)
+
+    def test_connector_list_pagination_renders_second_page(self):
+        for i in range(25):
+            ConnectorConfig.objects.create(
+                name=f"pag-connector-{i}", uri=f"postgresql://x/y{i}", enabled=True
+            )
+        response = self.client.get(
+            reverse("gaodcore_health:connector_list") + "?page=2"
+        )
+        self.assertEqual(response.status_code, 200)
+
+
+class HealthStatusRenderingTests(HealthHtmlTestCase):
+    """Healthy, unhealthy and unknown states must remain visible after restyling."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.staff_user)
+
+    def test_connector_list_shows_unknown_badge_with_no_health_checks(self):
+        response = self.client.get(reverse("gaodcore_health:connector_list"))
+        self.assertContains(response, "health-status-badge unknown")
+
+    def test_connector_list_shows_healthy_badge(self):
+        HealthCheckResult.objects.create(
+            connector=self.connector, is_healthy=True, response_time_ms=42
+        )
+        response = self.client.get(reverse("gaodcore_health:connector_list"))
+        self.assertContains(response, "health-status-badge healthy")
+
+    def test_connector_detail_shows_unhealthy_badge_and_error_message(self):
+        HealthCheckResult.objects.create(
+            connector=self.connector,
+            is_healthy=False,
+            response_time_ms=None,
+            error_message="Connection refused",
+        )
+        response = self.client.get(
+            reverse("gaodcore_health:connector_detail", args=[self.connector.id])
+        )
+        content = response.content.decode()
+        self.assertIn("health-status-badge unhealthy", content)
+        self.assertIn("Connection refused", content)
+
+    def test_no_emoji_status_icons_are_rendered(self):
+        HealthCheckResult.objects.create(
+            connector=self.connector, is_healthy=True, response_time_ms=42
+        )
+        response = self.client.get(reverse("gaodcore_health:connector_list"))
+        content = response.content.decode()
+        for icon in ("✅", "❌", "⚠️", "\U0001f3e5", "\U0001f50c"):
+            self.assertNotIn(icon, content)
+
+
+class HealthAutoRefreshTests(HealthHtmlTestCase):
+    """The 30-second auto-refresh must stay exclusive to Health."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.staff_user)
+
+    def test_health_pages_contain_the_refresh_timer(self):
+        response = self.client.get(reverse("gaodcore_health:connector_list"))
+        content = response.content.decode()
+        self.assertIn("window.location.reload()", content)
+        self.assertIn("30000", content)
+
+    def test_manager_pages_do_not_contain_the_health_refresh_timer(self):
+        response = self.client.get(reverse("manager_web:resource-list"))
+        content = response.content.decode()
+        self.assertNotIn("30000", content)
+        self.assertNotIn("Auto-refresh", content)
+
+
+class HealthLegacyDashboardTests(HealthHtmlTestCase):
+    """The legacy dashboard route stays named and reversible but now redirects."""
+
+    def test_dashboard_route_is_still_named_and_reversible(self):
+        url = reverse("gaodcore_health:dashboard")
+        self.assertEqual(url, f"{PRIVATE_PREFIX}health/dashboard/")
+
+    def test_dashboard_redirects_to_the_modern_connector_health_list_for_staff(self):
+        self.client.force_login(self.staff_user)
+        response = self.client.get(reverse("gaodcore_health:dashboard"))
+        self.assertRedirects(response, reverse("gaodcore_health:connector_list"))
+
+    def test_dashboard_requires_staff_like_every_other_html_page(self):
+        response = self.client.get(reverse("gaodcore_health:dashboard"))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(f"{PRIVATE_PREFIX}admin/login/"))
+
+        self.client.force_login(self.regular_user)
+        response = self.client.get(reverse("gaodcore_health:dashboard"))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(f"{PRIVATE_PREFIX}admin/login/"))
+
+
+class SwaggerAndAdminLinksTests(HealthHtmlTestCase):
+    """Private Swagger, Manager and Django Admin links remain correct from Health pages."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.staff_user)
+
+    def test_health_pages_link_to_the_private_swagger_and_manager(self):
+        response = self.client.get(reverse("gaodcore_health:connector_list"))
+        content = response.content.decode()
+        self.assertIn(reverse("admin-schema-swagger-ui"), content)
+        self.assertIn(reverse("manager_web:resource-list"), content)

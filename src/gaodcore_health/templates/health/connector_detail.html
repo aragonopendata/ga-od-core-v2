@@ -1,121 +1,121 @@
 {% extends 'health/base.html' %}
+{% load i18n %}
 
-{% block title %}{{ connector.name }} - Connector Details{% endblock %}
+{% block health_title %}{{ connector.name }} - {% trans "Connector Details" %}{% endblock %}
 
-{% block content %}
-<button class="refresh-button" onclick="window.location.reload()">
-    🔄 Refresh Data
-</button>
+{% block health_content %}
+<div class="health-toolbar manager-toolbar">
+  <button class="manager-button" onclick="window.location.reload()">{% trans "Refresh Data" %}</button>
+</div>
 
 <!-- Connector Information -->
-<div class="detail-section">
-    <h2>📊 Connector Information</h2>
-    <div class="detail-fields">
-        <div class="field-row">
-            <span class="field-label">ID:</span>
-            <span class="field-value">{{ connector.id }}</span>
+<div class="health-detail-section">
+    <h2>{% trans "Connector Information" %}</h2>
+    <div class="health-detail-fields">
+        <div class="health-field-row">
+            <span class="health-field-label">{% trans "ID" %}</span>
+            <span class="health-field-value">{{ connector.id }}</span>
         </div>
-        <div class="field-row">
-            <span class="field-label">Name:</span>
-            <span class="field-value">{{ connector.name }}</span>
+        <div class="health-field-row">
+            <span class="health-field-label">{% trans "Name" %}</span>
+            <span class="health-field-value">{{ connector.name }}</span>
         </div>
-        <div class="field-row">
-            <span class="field-label">URI:</span>
-            <span class="field-value">{{ connector.uri }}</span>
+        <div class="health-field-row">
+            <span class="health-field-label">{% trans "URI" %}</span>
+            <span class="health-field-value">{{ connector.uri }}</span>
         </div>
-        <div class="field-row">
-            <span class="field-label">Enabled:</span>
-            <span class="field-value">
+        <div class="health-field-row">
+            <span class="health-field-label">{% trans "Enabled" %}</span>
+            <span class="health-field-value">
                 {% if connector.enabled %}
-                    ✅ Yes
+                    {% trans "Yes" %}
                 {% else %}
-                    ❌ No
+                    {% trans "No" %}
                 {% endif %}
             </span>
         </div>
-        <div class="field-row">
-            <span class="field-label">Created:</span>
-            <span class="field-value">{{ connector.created_at|date:"M d, Y H:i" }}</span>
+        <div class="health-field-row">
+            <span class="health-field-label">{% trans "Created at" %}</span>
+            <span class="health-field-value">{{ connector.created_at|date:"M d, Y H:i" }}</span>
         </div>
-        <div class="field-row">
-            <span class="field-label">Updated:</span>
-            <span class="field-value">{{ connector.updated_at|date:"M d, Y H:i" }}</span>
+        <div class="health-field-row">
+            <span class="health-field-label">{% trans "Updated at" %}</span>
+            <span class="health-field-value">{{ connector.updated_at|date:"M d, Y H:i" }}</span>
         </div>
     </div>
 </div>
 
 <!-- Health Information -->
-<div class="detail-section">
-    <h2>🏥 Health Information</h2>
+<div class="health-detail-section">
+    <h2>{% trans "Health Information" %}</h2>
     {% if connector_health_data.connectors %}
         {% for health in connector_health_data.connectors %}
-        <div class="detail-fields">
-            <div class="field-row">
-                <span class="field-label">Status:</span>
-                <span class="field-value">
-                    <span class="status-icon">
+        <div class="health-detail-fields">
+            <div class="health-field-row">
+                <span class="health-field-label">{% trans "Status" %}</span>
+                <span class="health-field-value">
+                    <span class="health-status-badge {{ health.status_class }}">
                         {% if health.status_class == 'healthy' %}
-                            ✅
+                            {% trans "Healthy" %}
                         {% elif health.status_class == 'unhealthy' %}
-                            ❌
+                            {% trans "Unhealthy" %}
                         {% else %}
-                            ⚠️
+                            {% trans "Unknown" %}
                         {% endif %}
                     </span>
-                    <span class="status-text {{ health.status_class }}">{{ health.status }}</span>
                 </span>
             </div>
-            <div class="field-row">
-                <span class="field-label">Last Check:</span>
-                <span class="field-value">
+            <div class="health-field-row">
+                <span class="health-field-label">{% trans "Last Check" %}</span>
+                <span class="health-field-value">
                     {% if health.last_check %}
                         {{ health.last_check|date:"M d, Y H:i:s" }}
                     {% else %}
-                        Never
+                        {% trans "Never" %}
                     {% endif %}
                 </span>
             </div>
-            <div class="field-row">
-                <span class="field-label">Response Time:</span>
-                <span class="field-value">
+            <div class="health-field-row">
+                <span class="health-field-label">{% trans "Response Time" %}</span>
+                <span class="health-field-value">
                     {% if health.response_time_ms %}
-                        {{ health.response_time_ms }}ms
+                        {% blocktrans with ms=health.response_time_ms %}{{ ms }}ms{% endblocktrans %}
                     {% else %}
-                        N/A
+                        {% trans "N/A" %}
                     {% endif %}
                 </span>
             </div>
             {% if health.error_message %}
-            <div class="field-row">
-                <span class="field-label">Error:</span>
-                <span class="field-value error-text">{{ health.error_message }}</span>
+            <div class="health-field-row">
+                <span class="health-field-label">{% trans "Error" %}</span>
+                <span class="health-field-value error-text">{{ health.error_message }}</span>
             </div>
             {% endif %}
         </div>
         {% endfor %}
     {% else %}
-        <p class="no-data">No health data available for this connector.</p>
+        <p class="health-no-data">{% trans "No health data available for this connector." %}</p>
     {% endif %}
 </div>
 
 <!-- Resources -->
-<div class="detail-section">
-    <h2>📋 Resources ({{ resource_health_data.total_count }})</h2>
+<div class="health-detail-section">
+    <h2>{% blocktrans with count=resource_health_data.total_count %}Resources ({{ count }}){% endblocktrans %}</h2>
 
     {% if resource_health_data.resources %}
-    <div class="health-table">
+    <div class="health-table manager-table-wrapper">
         <table>
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th>Last Check</th>
+                    <th scope="col">{% trans "ID" %}</th>
+                    <th scope="col">{% trans "Name" %}</th>
+                    <th scope="col">{% trans "Status" %}</th>
+                    <th scope="col">{% trans "Last Check" %}</th>
                 </tr>
             </thead>
             <tbody>
                 {% for resource in resource_health_data.resources %}
-                <tr class="table-row {{ resource.status_class }}"
+                <tr class="table-row"
                     onclick="window.location.href='{% url 'gaodcore_health:resource_detail' resource.id %}';">
                     <td>
                         <span class="item-id">{{ resource.id }}</span>
@@ -124,13 +124,13 @@
                         <span class="item-name">{{ resource.name }}</span>
                     </td>
                     <td>
-                        <span class="status-icon">
+                        <span class="health-status-badge {{ resource.status_class }}">
                             {% if resource.status_class == 'healthy' %}
-                                ✅
+                                {% trans "Healthy" %}
                             {% elif resource.status_class == 'unhealthy' %}
-                                ❌
+                                {% trans "Unhealthy" %}
                             {% else %}
-                                ⚠️
+                                {% trans "Unknown" %}
                             {% endif %}
                         </span>
                     </td>
@@ -139,7 +139,7 @@
                             {% if resource.last_check %}
                                 {{ resource.last_check|date:"M d, H:i" }}
                             {% else %}
-                                Never
+                                {% trans "Never" %}
                             {% endif %}
                         </span>
                     </td>
@@ -149,20 +149,7 @@
         </table>
     </div>
     {% else %}
-    <p class="no-data">No enabled resources found for this connector.</p>
+    <p class="health-no-data">{% trans "No enabled resources found for this connector." %}</p>
     {% endif %}
 </div>
-
-{% endblock %}
-
-{% block extra_js %}
-<script>
-    // Add click handler for resource table rows
-    document.querySelectorAll('.table-row').forEach(row => {
-        row.addEventListener('click', function() {
-            const url = this.getAttribute('onclick').match(/'([^']+)'/)[1];
-            window.location.href = url;
-        });
-    });
-</script>
 {% endblock %}
