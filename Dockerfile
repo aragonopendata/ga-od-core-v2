@@ -72,8 +72,11 @@ COPY ./src .
 COPY ./scripts ./scripts
 RUN chmod +x scripts/create_requests_view.sh
 
+# Compile translation catalogues into the image. django-admin (unlike manage.py)
+# does not load the project settings, so no runtime configuration is needed here.
+RUN django-admin compilemessages
+
 CMD bash -c "python manage.py migrate --noinput \
-    && python manage.py compilemessages \
     && python manage.py collectstatic --noinput \
     && python manage.py createcachetable \
     && gunicorn gaodcore_project.wsgi --bind :8000 --workers 9 --timeout 240 --max-requests 1000 --max-requests-jitter 100"
