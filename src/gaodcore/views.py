@@ -3,6 +3,7 @@ import io
 import json
 import logging
 import sys
+import warnings
 from json.decoder import JSONDecodeError
 from typing import Optional, Dict, Any, List, Callable
 
@@ -86,11 +87,10 @@ def _get_resource(resource_id: int):
         ) from err
 
 
-def get_response_xlsx(data: ReturnList) -> HttpResponse:
-    """Get resource XLSX with order column names."""
-    """output XLSX (Comma Separated Values) dynamically using Django views"""
-    """columns_order XlsxWriter can be used to write text, numbers, formulas and hyperlinks to multiple"""
-    """worksheets and it supports features such as formatting and many more, includin """
+def get_response_xlsx(
+    data: ReturnList, resource_config: Optional[ResourceConfig] = None
+) -> HttpResponse:
+    """Render resource data as XLSX and report hyperlinks skipped by Excel limits."""
 
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output)
@@ -98,19 +98,51 @@ def get_response_xlsx(data: ReturnList) -> HttpResponse:
 
     # column header names, you can use your own headers here
 
-    for row, item in enumerate(data):
-        for col, (key, value) in enumerate(item.items()):
-            # Write None values as blank cells, not NaN
-            if value is None:
-                worksheet.write_blank(row + 1, col, None)
-            else:
-                worksheet.write(row + 1, col, value)
-            if row == 0:
-                worksheet.write(row, col, key)
+    skipped_hyperlinks = 0
+    first_skipped_hyperlink = None
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r"Ignoring URL '.*' since it exceeds Excel's limit of 65,530 URLS per worksheet\.",
+            category=UserWarning,
+            module=r"xlsxwriter\.worksheet",
+        )
+        for row, item in enumerate(data):
+            for col, (key, value) in enumerate(item.items()):
+                # Write None values as blank cells, not NaN
+                if value is None:
+                    worksheet.write_blank(row + 1, col, None)
+                    write_result = 0
+                else:
+                    write_result = worksheet.write(row + 1, col, value)
+                if write_result == -4:
+                    worksheet.write_string(row + 1, col, str(value))
+                    skipped_hyperlinks += 1
+                    if first_skipped_hyperlink is None:
+                        first_skipped_hyperlink = (row + 2, col + 1, key)
+                if row == 0:
+                    worksheet.write(row, col, key)
 
     # Close the workbook before sending the data.
     workbook.close()
     output.seek(0)
+
+    if first_skipped_hyperlink is not None:
+        excel_row, excel_column, column_name = first_skipped_hyperlink
+        logger.warning(
+            "XLSX hyperlink limit reached; URLs remain as text: "
+            "resource_id=%s resource_name=%r object_location=%r schema=%r "
+            "skipped_hyperlinks=%s first_excel_row=%s first_excel_column=%s "
+            "column_name=%r",
+            getattr(resource_config, "id", None),
+            getattr(resource_config, "name", None),
+            getattr(resource_config, "object_location", None),
+            getattr(resource_config, "object_location_schema", None),
+            skipped_hyperlinks,
+            excel_row,
+            excel_column,
+            column_name,
+        )
 
     return HttpResponse(
         output,
@@ -408,7 +440,7 @@ class DownloadView(APIViewMixin):
                 resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
             )
             response = get_response_xlsx(
-                modify_header(data, columns, format_is_xlsx=True)
+                modify_header(data, columns, format_is_xlsx=True), resource_config
             )
         elif format in ("csv", "scsv"):
             data = get_return_list(data, format_is_xlsx=False)

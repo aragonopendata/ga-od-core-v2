@@ -1,10 +1,76 @@
+import io
 import json
 import os
+import warnings
+import zipfile
+from types import SimpleNamespace
 
 import pytest
 from django.test.client import Client
 
 from conftest import validate_error, compare_files, problem_of, field_messages, field_codes
+from gaodcore import views as gaodcore_views
+
+
+def test_xlsx_hyperlink_limit_logs_resource_context(monkeypatch):
+    original_workbook = gaodcore_views.xlsxwriter.Workbook
+
+    def workbook_with_exhausted_hyperlink_limit(*args, **kwargs):
+        workbook = original_workbook(*args, **kwargs)
+        original_add_worksheet = workbook.add_worksheet
+
+        def add_worksheet(*worksheet_args, **worksheet_kwargs):
+            worksheet = original_add_worksheet(*worksheet_args, **worksheet_kwargs)
+            worksheet.hlink_count = 65530
+            return worksheet
+
+        workbook.add_worksheet = add_worksheet
+        return workbook
+
+    monkeypatch.setattr(
+        gaodcore_views.xlsxwriter,
+        "Workbook",
+        workbook_with_exhausted_hyperlink_limit,
+    )
+    resource = SimpleNamespace(
+        id=42,
+        name="test resource",
+        object_location="public_view",
+        object_location_schema="public",
+    )
+    logged_warnings = []
+    monkeypatch.setattr(
+        gaodcore_views.logger,
+        "warning",
+        lambda message, *args: logged_warnings.append(message % args),
+    )
+
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        response = gaodcore_views.get_response_xlsx(
+            [
+                {"source_url": "https://example.com/one"},
+                {"source_url": "https://example.com/two"},
+            ],
+            resource,
+        )
+
+    assert response.status_code == 200
+    assert caught_warnings == []
+    with zipfile.ZipFile(io.BytesIO(response.content)) as workbook:
+        shared_strings = workbook.read("xl/sharedStrings.xml")
+    assert b"https://example.com/one" in shared_strings
+    assert b"https://example.com/two" in shared_strings
+    assert len(logged_warnings) == 1
+    warning_message = logged_warnings[0]
+    assert "XLSX hyperlink limit reached; URLs remain as text" in warning_message
+    assert "resource_id=42" in warning_message
+    assert "resource_name='test resource'" in warning_message
+    assert "object_location='public_view'" in warning_message
+    assert "schema='public'" in warning_message
+    assert "skipped_hyperlinks=2" in warning_message
+    assert "first_excel_row=2" in warning_message
+    assert "first_excel_column=1" in warning_message
+    assert "column_name='source_url'" in warning_message
 
 
 @pytest.fixture(params=["/GA_OD_Core/download", "/GA_OD_Core/preview"])
