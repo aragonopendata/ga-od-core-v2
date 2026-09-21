@@ -1,0 +1,33 @@
+{% extends "gaodcore_manager/account/account_base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Log in" %} | {% trans "GA OD Core Manager" %}{% endblock %}
+
+{% block account_content %}
+<h1 class="manager-account-card__title">{% trans "Log in" %}</h1>
+<p class="manager-account-card__subtitle">{% trans "GA OD Core Manager" %}</p>
+<form method="post" class="manager-form manager-account-form" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <ul class="manager-form__errors">
+      {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+  {% for field in form %}
+    <div class="manager-form__field">
+      {{ field.label_tag }}
+      {{ field }}
+      {% if field.help_text %}<p class="manager-form__help">{{ field.help_text }}</p>{% endif %}
+      {% if field.errors %}
+        <ul class="manager-form__errors">
+          {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  {% endfor %}
+  <input type="hidden" name="next" value="{{ next }}">
+  <div class="manager-form__actions manager-account-form__actions">
+    <button type="submit" class="manager-button manager-button--block">{% trans "Log in" %}</button>
+  </div>
+</form>
+{% endblock %}

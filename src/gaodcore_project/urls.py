@@ -33,6 +33,7 @@ urlpatterns = [
         include([
             path('', RedirectView.as_view(pattern_name='manager_web:resource-list'), name='admin-index'),
             path('admin/', admin.site.urls),
+            path('', include('gaodcore_manager.account_urls')),
             path('manager/', include('gaodcore_manager.urls')),
             path('web/manager/', include('gaodcore_manager.web_urls')),
             path('health/', include('gaodcore_health.urls')),

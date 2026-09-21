@@ -1,0 +1,10 @@
+{% extends "gaodcore_manager/account/account_base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Logged out" %} | {% trans "GA OD Core Manager" %}{% endblock %}
+
+{% block account_content %}
+<h1 class="manager-account-card__title">{% trans "Logged out" %}</h1>
+<p class="manager-account-card__subtitle">{% trans "You have been logged out." %}</p>
+<a href="{% url 'account:login' %}" class="manager-button manager-button--block">{% trans "Log in again" %}</a>
+{% endblock %}

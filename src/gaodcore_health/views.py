@@ -4,7 +4,6 @@ Views for health monitoring API endpoints.
 
 from datetime import timedelta
 
-from django.contrib.admin.views.decorators import staff_member_required
 from django.shortcuts import redirect
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -17,6 +16,7 @@ from rest_framework import status
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
+from gaodcore_manager.auth import staff_required
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from .models import HealthCheckResult, ResourceHealthCheckResult
 from .mixins import (
@@ -382,7 +382,7 @@ class ConnectorHealthDetailAPIView(APIView):
         return Response(serializer.data)
 
 
-@staff_member_required
+@staff_required
 def health_dashboard(request):
     """
     Legacy dashboard route (kept for backwards compatibility). The
@@ -396,7 +396,7 @@ def health_dashboard(request):
 # New ListView-based Health Monitoring Views
 
 
-@staff_member_required
+@staff_required
 def health_index(_request):
     """
     Redirect /health/ to /health/connectors/

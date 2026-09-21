@@ -10,6 +10,24 @@
 <body>
   <header class="manager-header">
     <a href="{% url 'manager_web:resource-list' %}" class="manager-header__title">{% block header_title %}{% trans "GA OD Core Manager" %}{% endblock %}</a>
+    {% if user.is_authenticated %}
+      <details class="manager-user-menu">
+        <summary class="manager-user-menu__button" aria-label="{% blocktrans with username=user.username %}Account menu for {{ username }}{% endblocktrans %}">
+          <svg class="manager-icon manager-user-menu__icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true" focusable="false">
+            <path d="M12 12c2.7 0 4.9-2.2 4.9-4.9S14.7 2.2 12 2.2 7.1 4.4 7.1 7.1 9.3 12 12 12zm0 2.5c-3.3 0-9.8 1.6-9.8 4.9v2.4h19.6v-2.4c0-3.3-6.5-4.9-9.8-4.9z"/>
+          </svg>
+          <span class="manager-user-menu__name">{{ user.username }}</span>
+        </summary>
+        <div class="manager-user-menu__panel" role="menu">
+          <a href="{% url 'account:profile' %}" role="menuitem">{% trans "Mi perfil" %}</a>
+          <a href="{% url 'account:password_change' %}" role="menuitem">{% trans "Cambiar contraseña" %}</a>
+          <form method="post" action="{% url 'account:logout' %}" class="manager-user-menu__logout-form">
+            {% csrf_token %}
+            <button type="submit" role="menuitem" class="manager-user-menu__logout-button">{% trans "Cerrar sesión" %}</button>
+          </form>
+        </div>
+      </details>
+    {% endif %}
   </header>
   {% block breadcrumbs %}{% endblock %}
   <div class="manager-tabs">

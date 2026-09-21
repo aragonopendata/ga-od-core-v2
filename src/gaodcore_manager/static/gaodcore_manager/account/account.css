@@ -1,0 +1,82 @@
+.manager-account-body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.manager-account-page {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+}
+
+.manager-account-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+  padding: 32px 28px;
+}
+
+.manager-account-card__title {
+  margin: 0 0 4px;
+  font-size: 22px;
+  text-align: center;
+  color: var(--text);
+}
+
+.manager-account-card__subtitle {
+  margin: 0 0 24px;
+  text-align: center;
+  color: var(--muted-text);
+  font-size: 13px;
+}
+
+.manager-account-form {
+  max-width: none;
+}
+
+.manager-account-form .manager-form__field input[type="text"],
+.manager-account-form .manager-form__field input[type="password"] {
+  padding: 9px 10px;
+  font-size: 14px;
+}
+
+.manager-account-form .manager-form__field input:focus {
+  outline: none;
+  border-color: var(--accent-dark);
+  box-shadow: 0 0 0 2px rgba(32, 80, 103, 0.2);
+}
+
+.manager-account-form__actions {
+  margin-top: 8px;
+}
+
+.manager-profile {
+  max-width: 480px;
+  margin: 0 0 20px;
+}
+
+.manager-profile__row {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.manager-profile__row dt {
+  flex: 0 0 140px;
+  font-weight: bold;
+  color: var(--muted-text);
+}
+
+.manager-profile__row dd {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,29 @@
+{% load i18n static %}{% get_current_language as LANGUAGE_CODE %}<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE|default:'es' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% trans "GA OD Core Manager" %}{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'gaodcore_manager/private_base.css' %}">
+  <link rel="stylesheet" href="{% static 'gaodcore_manager/manager.css' %}">
+  <link rel="stylesheet" href="{% static 'gaodcore_manager/account/account.css' %}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body class="manager-account-body">
+  <header class="manager-header">
+    <span class="manager-header__title">{% trans "GA OD Core Manager" %}</span>
+  </header>
+  <main class="manager-account-page">
+    <div class="manager-account-card">
+      {% if messages %}
+        <ul class="manager-messages">
+          {% for message in messages %}
+            <li class="manager-messages__item manager-messages__item--{{ message.level_tag }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% block account_content %}{% endblock %}
+    </div>
+  </main>
+</body>
+</html>

@@ -510,7 +510,7 @@ class HealthHtmlAccessControlTests(HealthHtmlTestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 302)
                 self.assertTrue(
-                    response.url.startswith(f"{PRIVATE_PREFIX}admin/login/")
+                    response.url.startswith(f"{PRIVATE_PREFIX}login/")
                 )
                 self.assertIn(f"next={url}", response.url)
 
@@ -521,7 +521,7 @@ class HealthHtmlAccessControlTests(HealthHtmlTestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 302)
                 self.assertTrue(
-                    response.url.startswith(f"{PRIVATE_PREFIX}admin/login/")
+                    response.url.startswith(f"{PRIVATE_PREFIX}login/")
                 )
 
     def test_staff_users_can_access_every_modern_html_page(self):
@@ -832,12 +832,12 @@ class HealthLegacyDashboardTests(HealthHtmlTestCase):
     def test_dashboard_requires_staff_like_every_other_html_page(self):
         response = self.client.get(reverse("gaodcore_health:dashboard"))
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.url.startswith(f"{PRIVATE_PREFIX}admin/login/"))
+        self.assertTrue(response.url.startswith(f"{PRIVATE_PREFIX}login/"))
 
         self.client.force_login(self.regular_user)
         response = self.client.get(reverse("gaodcore_health:dashboard"))
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.url.startswith(f"{PRIVATE_PREFIX}admin/login/"))
+        self.assertTrue(response.url.startswith(f"{PRIVATE_PREFIX}login/"))
 
 
 class SwaggerAndAdminLinksTests(HealthHtmlTestCase):

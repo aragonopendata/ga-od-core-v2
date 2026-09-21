@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count
 from django.db.models.functions import Lower
 from django.urls import reverse
@@ -8,6 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.generic import DetailView, ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
+from gaodcore_manager.auth import staff_required
 from gaodcore_manager.forms import ConnectorConfigForm, ResourceConfigForm
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 
@@ -17,7 +17,7 @@ class StaffManagerTemplateMixin:
 
     active_section = None
 
-    @method_decorator(staff_member_required)
+    @method_decorator(staff_required)
     def dispatch(self, *args, **kwargs):
         return super().dispatch(*args, **kwargs)
 

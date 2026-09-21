@@ -64,7 +64,7 @@ class TestAccessControl(WebManagerTestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 302)
-                self.assertTrue(response.url.startswith(f"{PRIVATE_PREFIX}admin/login/"))
+                self.assertTrue(response.url.startswith(f"{PRIVATE_PREFIX}login/"))
                 self.assertIn(f"next={url}", response.url)
 
     def test_non_staff_users_cannot_view_any_page(self):
@@ -73,7 +73,7 @@ class TestAccessControl(WebManagerTestCase):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 302)
-                self.assertTrue(response.url.startswith(f"{PRIVATE_PREFIX}admin/login/"))
+                self.assertTrue(response.url.startswith(f"{PRIVATE_PREFIX}login/"))
 
     def test_staff_users_receive_200_for_all_pages(self):
         self.client.force_login(self.staff_user)

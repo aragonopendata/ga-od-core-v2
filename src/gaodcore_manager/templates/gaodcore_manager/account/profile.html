@@ -1,0 +1,39 @@
+{% extends "gaodcore_manager/manager_base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "My profile" %} | {% trans "GA OD Core Manager" %}{% endblock %}
+
+{% block breadcrumbs %}
+  <nav class="manager-breadcrumbs" aria-label="{% trans 'Breadcrumb' %}">
+    <a href="{% url 'manager_web:resource-list' %}">{% trans "Manager" %}</a>
+    <span class="manager-breadcrumbs__sep">&rsaquo;</span>
+    <span aria-current="page">{% trans "My profile" %}</span>
+  </nav>
+{% endblock %}
+
+{% block manager_content %}
+<h1>{% trans "My profile" %}</h1>
+<dl class="manager-profile">
+  <div class="manager-profile__row">
+    <dt>{% trans "Username" %}</dt>
+    <dd>{{ user.username }}</dd>
+  </div>
+  <div class="manager-profile__row">
+    <dt>{% trans "First name" %}</dt>
+    <dd>{{ user.first_name|default:"—" }}</dd>
+  </div>
+  <div class="manager-profile__row">
+    <dt>{% trans "Last name" %}</dt>
+    <dd>{{ user.last_name|default:"—" }}</dd>
+  </div>
+  <div class="manager-profile__row">
+    <dt>{% trans "Email" %}</dt>
+    <dd>{{ user.email|default:"—" }}</dd>
+  </div>
+  <div class="manager-profile__row">
+    <dt>{% trans "Last login" %}</dt>
+    <dd>{{ user.last_login|date:"M d, Y H:i:s"|default:"—" }}</dd>
+  </div>
+</dl>
+<a href="{% url 'account:password_change' %}" class="manager-button">{% trans "Change password" %}</a>
+{% endblock %}

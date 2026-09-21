@@ -54,12 +54,12 @@ class TestPrivateBasePathResolves(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('manager_web:resource-list'))
 
-    def test_anonymous_user_following_the_private_root_reaches_admin_login_with_next(self):
-        """Anonymous users bounce through the manager, to the admin login, and back."""
+    def test_anonymous_user_following_the_private_root_reaches_the_custom_login_with_next(self):
+        """Anonymous users bounce through the manager, to the private interface's own login, and back."""
         response = self.client.get(PRIVATE_PREFIX, follow=True)
         self.assertEqual(response.status_code, 200)
         final_url, _status = response.redirect_chain[-1]
-        self.assertTrue(final_url.startswith(f'{PRIVATE_PREFIX}admin/login/'))
+        self.assertTrue(final_url.startswith(f'{PRIVATE_PREFIX}login/'))
         query = parse_qs(urlsplit(final_url).query)
         self.assertEqual(query['next'], [reverse('manager_web:resource-list')])
 
