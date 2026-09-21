@@ -1,6 +1,6 @@
 from django.contrib import messages
-from django.db.models import Count
-from django.db.models.functions import Lower
+from django.db.models import CharField, Count, Q
+from django.db.models.functions import Cast, Lower
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
@@ -32,14 +32,14 @@ class StaffManagerTemplateMixin:
 
 
 class SearchFilterListMixin:
-    """Adds a `?q=` name search and an `?enabled=` filter to a ListView, and
-    exposes the current values plus the querystring needed to keep them
-    across pagination links.
+    """Adds a `?q=` search across `search_fields` (plus the row id) and an
+    `?enabled=` filter to a ListView, and exposes the current values plus the
+    querystring needed to keep them across pagination links.
 
     The `?enabled=` filter defaults to only enabled rows; `?enabled=all`
     removes the filter."""
 
-    search_field = "name"
+    search_fields = ("name",)
     default_enabled_filter = "1"
 
     def get_enabled_filter(self):
@@ -49,7 +49,11 @@ class SearchFilterListMixin:
     def filter_queryset(self, queryset):
         query = self.request.GET.get("q", "").strip()
         if query:
-            queryset = queryset.filter(**{f"{self.search_field}__icontains": query})
+            queryset = queryset.annotate(id_as_text=Cast("id", output_field=CharField()))
+            search_query = Q(id_as_text__icontains=query)
+            for field in self.search_fields:
+                search_query |= Q(**{f"{field}__icontains": query})
+            queryset = queryset.filter(search_query)
         enabled = self.get_enabled_filter()
         if enabled in ("1", "0"):
             queryset = queryset.filter(enabled=(enabled == "1"))
@@ -71,6 +75,7 @@ class ResourceConfigListView(SearchFilterListMixin, StaffManagerTemplateMixin, L
     context_object_name = "resources"
     active_section = "resources"
     paginate_by = 50
+    search_fields = ("name", "connector_config__name")
 
     def get_connector_filter(self):
         """Returns the requested `connector` value, or "" for all connectors."""

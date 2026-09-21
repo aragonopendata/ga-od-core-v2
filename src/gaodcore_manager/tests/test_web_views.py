@@ -306,6 +306,26 @@ class TestResourceList(WebManagerTestCase):
         names = [resource.name for resource in response.context["resources"]]
         self.assertEqual(names, ["test-resource"])
 
+    def test_resource_list_search_by_partial_id(self):
+        ResourceConfig.objects.filter(pk=211).delete()
+        matching_resource = ResourceConfig.objects.create(
+            id=211, name="id-search-resource", connector_config=self.connector, enabled=True, object_location="t"
+        )
+        response = self.client.get(reverse("manager_web:resource-list"), {"q": "11"})
+        resources = list(response.context["resources"])
+        self.assertIn(matching_resource, resources)
+
+    def test_resource_list_search_by_connector_name(self):
+        other_connector = ConnectorConfig.objects.create(
+            name="searchable-connector", uri="postgresql://x/y", enabled=True
+        )
+        matching_resource = ResourceConfig.objects.create(
+            name="unrelated-name", connector_config=other_connector, enabled=True, object_location="t"
+        )
+        response = self.client.get(reverse("manager_web:resource-list"), {"q": "searchable-connector"})
+        names = [resource.name for resource in response.context["resources"]]
+        self.assertEqual(names, [matching_resource.name])
+
     def test_resource_list_defaults_to_enabled_only(self):
         ResourceConfig.objects.create(
             name="disabled-resource", connector_config=self.connector, enabled=False, object_location="t"
@@ -537,6 +557,15 @@ class TestConnectorList(WebManagerTestCase):
         response = self.client.get(reverse("manager_web:connector-list"), {"q": "test-connector"})
         names = [connector.name for connector in response.context["connectors"]]
         self.assertEqual(names, ["test-connector"])
+
+    def test_connector_list_search_by_partial_id(self):
+        ConnectorConfig.objects.filter(pk=211).delete()
+        matching_connector = ConnectorConfig.objects.create(
+            id=211, name="id-search-connector", uri="postgresql://x/y", enabled=True
+        )
+        response = self.client.get(reverse("manager_web:connector-list"), {"q": "11"})
+        connectors = list(response.context["connectors"])
+        self.assertIn(matching_connector, connectors)
 
     def test_connector_list_defaults_to_enabled_only(self):
         ConnectorConfig.objects.create(name="disabled-connector", uri="postgresql://x/y", enabled=False)
