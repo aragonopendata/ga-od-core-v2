@@ -701,10 +701,15 @@ def validate_resource(
     uri: str,
     object_location: Optional[str],
     object_location_schema: Optional[str],
+    limit: Optional[int] = None,
     timeout: Optional[int] = None,
 ) -> Iterable[Dict[str, Any]]:
     """Validate if resource is available . Return data of resource, a iterable of
-    dictionaries."""
+    dictionaries.
+
+    @param limit: maximum number of rows to fetch. The manual manager check passes
+        1, since proving the resource is queryable does not need the whole result.
+    """
 
     def _validate_resource_internal():
         _validate_max_rows_allowed(
@@ -721,6 +726,7 @@ def validate_resource(
             like="",
             fields=[],
             sort=[],
+            limit=limit,
             timeout=timeout,
         )
 

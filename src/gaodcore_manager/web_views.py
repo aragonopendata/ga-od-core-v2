@@ -1,15 +1,25 @@
+import logging
+
 from django.contrib import messages
 from django.db.models import CharField, Count, Q
 from django.db.models.functions import Cast, Lower
+from django.http import HttpResponseRedirect
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
+from django.views import View
 from django.views.generic import DetailView, ListView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
+from rest_framework.exceptions import APIException
 
+from exceptions import ErrorCodes
+from gaodcore_manager import validators
 from gaodcore_manager.auth import staff_required
 from gaodcore_manager.forms import ConnectorConfigForm, ResourceConfigForm
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
+
+logger = logging.getLogger(__name__)
 
 
 class StaffManagerTemplateMixin:
@@ -286,3 +296,154 @@ class ConnectorConfigDeleteView(ManagerDeleteViewMixin, DeleteView):
     # Deleting a connector cascades to its resources; the web UI warns about it in
     # the confirmation modal.
     success_message = _('The connector "%(name)s" has been deleted successfully.')
+
+
+class ManagerCheckViewMixin(StaffManagerTemplateMixin):
+    """Shared plumbing for the manual "check" actions of the private manager.
+
+    The check always performs real external I/O: unlike the automatic probe run
+    while saving, it is an explicit user action, so
+    `GAODCORE_VALIDATE_EXTERNAL_CONNECTIONS` does not apply here. Disabled
+    objects can be checked too.
+
+    Nothing is persisted; the outcome is reported through the messages
+    framework and the request always ends in a redirect back to the detail page
+    (POST/Redirect/GET).
+    """
+
+    http_method_names = ["post"]
+    model = None
+    detail_url_name = None
+    success_message = None
+    #: Maps a known `ErrorCodes` value to the user facing message of this view.
+    error_messages = {}
+    #: Used for an APIException whose code is unknown or not a single string.
+    generic_error_message = None
+    unexpected_error_message = None
+    #: Discriminates connector from resource checks in the log records.
+    check_kind = None
+
+    def run_check(self, obj):
+        """Perform the external check, raising APIException on a known failure."""
+        raise NotImplementedError
+
+    def post(self, request, *args, **kwargs):
+        obj = get_object_or_404(self.model, pk=kwargs["pk"])
+        try:
+            self.run_check(obj)
+        except APIException as exc:
+            message = self.error_messages.get(
+                _api_exception_code(exc), self.generic_error_message
+            )
+            messages.error(request, message % {"name": obj.name})
+        except Exception as exc:  # pylint: disable=broad-except
+            # Only non-sensitive identifiers are logged: the connectors layer
+            # already emits its own diagnostics, and neither the URI, the
+            # credentials nor the raw exception text may reach the logs here.
+            logger.error(
+                "Unexpected %s check failure: object_id=%s error_type=%s",
+                self.check_kind,
+                obj.pk,
+                type(exc).__name__,
+            )
+            messages.error(request, self.unexpected_error_message % {"name": obj.name})
+        else:
+            messages.success(request, self.success_message % {"name": obj.name})
+        return HttpResponseRedirect(reverse(self.detail_url_name, kwargs={"pk": obj.pk}))
+
+
+def _api_exception_code(exc):
+    """Return the single error code of `exc`, or None when there is not exactly one.
+
+    `ValidationError` wraps its detail in a list, so `get_codes()` returns a
+    one-element list for the validator failures; `ServiceUnavailable` returns a
+    plain string. Anything else (a dict of per-field codes, several codes) has
+    no single stable code and falls back to the generic message.
+    """
+    codes = exc.get_codes()
+    if isinstance(codes, (list, tuple)) and len(codes) == 1:
+        codes = codes[0]
+    return codes if isinstance(codes, str) else None
+
+
+class ConnectorConfigCheckView(ManagerCheckViewMixin, View):
+    model = ConnectorConfig
+    active_section = "connectors"
+    detail_url_name = "manager_web:connector-detail"
+    check_kind = "connector"
+    success_message = _('The connector "%(name)s" is available.')
+    generic_error_message = _('The connection check for connector "%(name)s" failed.')
+    unexpected_error_message = _(
+        'An unexpected error occurred while checking connector "%(name)s". '
+        "Consult the application logs."
+    )
+    error_messages = {
+        ErrorCodes.CONNECTION_UNAVAILABLE: _(
+            'Could not connect to connector "%(name)s". '
+            "Check its credentials, server, and port."
+        ),
+        ErrorCodes.SCHEMA_NOT_IMPLEMENTED: _(
+            'The connection type configured for "%(name)s" is not supported.'
+        ),
+        ErrorCodes.MIME_TYPE_NOT_ALLOWED: _(
+            'The HTTP origin configured for "%(name)s" did not return an allowed '
+            "JSON content type."
+        ),
+    }
+
+    def run_check(self, obj):
+        validators.uri_validator(obj.uri)
+
+
+class ResourceConfigCheckView(ManagerCheckViewMixin, View):
+    model = ResourceConfig
+    active_section = "resources"
+    detail_url_name = "manager_web:resource-detail"
+    check_kind = "resource"
+    success_message = _('The resource "%(name)s" is available and can be queried.')
+    generic_error_message = _('The check for resource "%(name)s" failed.')
+    unexpected_error_message = _(
+        'An unexpected error occurred while checking resource "%(name)s". '
+        "Consult the application logs."
+    )
+    error_messages = {
+        ErrorCodes.CONNECTION_UNAVAILABLE: _(
+            'Could not connect to the connector used by resource "%(name)s". '
+            "Check the connector configuration."
+        ),
+        ErrorCodes.RESOURCE_UNAVAILABLE: _(
+            "The connection is available, but the object configured for resource "
+            '"%(name)s" could not be accessed.'
+        ),
+        ErrorCodes.SCHEMA_NOT_IMPLEMENTED: _(
+            'The connection type configured for "%(name)s" is not supported.'
+        ),
+        ErrorCodes.MIME_TYPE_NOT_ALLOWED: _(
+            'The HTTP origin configured for "%(name)s" did not return an allowed '
+            "JSON content type."
+        ),
+        ErrorCodes.TOO_MANY_ROWS: _(
+            'Resource "%(name)s" responds, but it exceeds the allowed row limit.'
+        ),
+        ErrorCodes.REQUIRED: _(
+            'Resource "%(name)s" has an invalid configuration. '
+            "Review its object location and schema."
+        ),
+        ErrorCodes.INVALID_FIELD: _(
+            'Resource "%(name)s" has an invalid configuration. '
+            "Review its object location and schema."
+        ),
+    }
+
+    def run_check(self, obj):
+        result = validators.resource_validator(
+            obj.connector_config.uri,
+            obj.object_location,
+            obj.object_location_schema,
+            # Proving the resource is queryable needs one row at most; without
+            # this the shared validator would materialize the whole table.
+            limit=1,
+        )
+        # Some origins only fail while the rows are produced, so the lazy
+        # iterable must be consumed. The rows themselves are never rendered.
+        list(result)

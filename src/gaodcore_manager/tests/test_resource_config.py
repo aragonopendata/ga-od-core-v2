@@ -296,3 +296,47 @@ def test_resource_config_connection_unavailable_code(mocker, auth_client, reques
         "application/json",
         error_code="CONNECTION_UNAVAILABLE",
     )
+
+
+POSTGRESQL_LIMIT_URI = "postgresql://username:password@example.invalid:5432/gaodcore"
+
+
+def test_resource_validator_forwards_an_explicit_limit(mocker):
+    """The manual manager check asks for a single row through the shared validator."""
+    probe = mocker.patch.object(validators, "validate_resource", return_value=[])
+
+    validators.resource_validator(
+        POSTGRESQL_LIMIT_URI, "some_table", "public", limit=1
+    )
+
+    probe.assert_called_once_with(
+        uri=POSTGRESQL_LIMIT_URI,
+        object_location="some_table",
+        object_location_schema="public",
+        limit=1,
+    )
+
+
+def test_resource_validator_stays_unlimited_by_default(mocker):
+    """The REST validator and validation on save keep fetching the whole resource."""
+    probe = mocker.patch.object(validators, "validate_resource", return_value=[])
+
+    validators.resource_validator(POSTGRESQL_LIMIT_URI, "some_table", "public")
+
+    probe.assert_called_once_with(
+        uri=POSTGRESQL_LIMIT_URI,
+        object_location="some_table",
+        object_location_schema="public",
+        limit=None,
+    )
+
+
+def test_resource_persistence_validator_does_not_limit(mocker):
+    """Saving a resource must still validate against the full result set."""
+    probe = mocker.patch.object(validators, "validate_resource", return_value=[])
+
+    validators.resource_persistence_validator(
+        POSTGRESQL_LIMIT_URI, "some_table", "public"
+    )
+
+    assert probe.call_args.kwargs["limit"] is None

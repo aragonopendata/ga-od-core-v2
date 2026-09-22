@@ -7,6 +7,10 @@
 <h1>{{ connector.name }}</h1>
 <div class="manager-toolbar">
   <a class="manager-button" href="{% url 'manager_web:resource-list' %}?connector={{ connector.pk }}&enabled=all">{% trans "View resources" %}</a>
+  <form method="post" action="{% url 'manager_web:connector-check' pk=connector.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="manager-button">{% trans "Check connection" %}</button>
+  </form>
   <a class="manager-button" href="{% url 'manager_web:connector-update' pk=connector.pk %}">{% trans "Edit" %}</a>
   {% include "gaodcore_manager/_delete_button.html" with delete_url_name="manager_web:connector-delete" edit_url_name="manager_web:connector-update" object=connector is_connector=True resource_count=resource_count %}
 </div>

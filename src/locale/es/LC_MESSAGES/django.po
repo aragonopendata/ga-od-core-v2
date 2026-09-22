@@ -822,6 +822,79 @@ msgstr "El conector \"%(name)s\" se ha actualizado correctamente."
 msgid "The connector \"%(name)s\" has been deleted successfully."
 msgstr "El conector \"%(name)s\" se ha eliminado correctamente."
 
+#: gaodcore_manager/templates/gaodcore_manager/connectorconfig_detail.html:12
+msgid "Check connection"
+msgstr "Comprobar conexión"
+
+#: gaodcore_manager/templates/gaodcore_manager/resourceconfig_detail.html:11
+msgid "Check resource"
+msgstr "Comprobar recurso"
+
+#: gaodcore_manager/web_views.py:345
+#, python-format
+msgid "The connector \"%(name)s\" is available."
+msgstr "El conector \"%(name)s\" está disponible."
+
+#: gaodcore_manager/web_views.py:346
+#, python-format
+msgid "The connection check for connector \"%(name)s\" failed."
+msgstr "La comprobación de conexión del conector \"%(name)s\" ha fallado."
+
+#: gaodcore_manager/web_views.py:347
+#, python-format
+msgid "An unexpected error occurred while checking connector \"%(name)s\". Consult the application logs."
+msgstr "Se ha producido un error inesperado al comprobar el conector \"%(name)s\". Consulta los registros de la aplicación."
+
+#: gaodcore_manager/web_views.py:352
+#, python-format
+msgid "Could not connect to connector \"%(name)s\". Check its credentials, server, and port."
+msgstr "No se ha podido conectar con el conector \"%(name)s\". Comprueba sus credenciales, servidor y puerto."
+
+#: gaodcore_manager/web_views.py:356 gaodcore_manager/web_views.py:389
+#, python-format
+msgid "The connection type configured for \"%(name)s\" is not supported."
+msgstr "El tipo de conexión configurado para \"%(name)s\" no está soportado."
+
+#: gaodcore_manager/web_views.py:359 gaodcore_manager/web_views.py:392
+#, python-format
+msgid "The HTTP origin configured for \"%(name)s\" did not return an allowed JSON content type."
+msgstr "El origen HTTP configurado para \"%(name)s\" no ha devuelto un tipo de contenido JSON permitido."
+
+#: gaodcore_manager/web_views.py:374
+#, python-format
+msgid "The resource \"%(name)s\" is available and can be queried."
+msgstr "El recurso \"%(name)s\" está disponible y se puede consultar."
+
+#: gaodcore_manager/web_views.py:375
+#, python-format
+msgid "The check for resource \"%(name)s\" failed."
+msgstr "La comprobación del recurso \"%(name)s\" ha fallado."
+
+#: gaodcore_manager/web_views.py:376
+#, python-format
+msgid "An unexpected error occurred while checking resource \"%(name)s\". Consult the application logs."
+msgstr "Se ha producido un error inesperado al comprobar el recurso \"%(name)s\". Consulta los registros de la aplicación."
+
+#: gaodcore_manager/web_views.py:381
+#, python-format
+msgid "Could not connect to the connector used by resource \"%(name)s\". Check the connector configuration."
+msgstr "No se ha podido conectar con el conector utilizado por el recurso \"%(name)s\". Comprueba la configuración del conector."
+
+#: gaodcore_manager/web_views.py:385
+#, python-format
+msgid "The connection is available, but the object configured for resource \"%(name)s\" could not be accessed."
+msgstr "La conexión está disponible, pero no se ha podido acceder al objeto configurado para el recurso \"%(name)s\"."
+
+#: gaodcore_manager/web_views.py:396
+#, python-format
+msgid "Resource \"%(name)s\" responds, but it exceeds the allowed row limit."
+msgstr "El recurso \"%(name)s\" responde, pero supera el límite de filas permitido."
+
+#: gaodcore_manager/web_views.py:399 gaodcore_manager/web_views.py:403
+#, python-format
+msgid "Resource \"%(name)s\" has an invalid configuration. Review its object location and schema."
+msgstr "El recurso \"%(name)s\" tiene una configuración no válida. Revisa la ubicación del objeto y su esquema."
+
 #~ msgid "Type of error (connection_error, timeout, unknown_error, etc.)"
 #~ msgstr "Tipo de error (connection_error, timeout, unknown_error, etc.)"
 

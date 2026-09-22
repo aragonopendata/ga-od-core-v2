@@ -95,9 +95,16 @@ def resource_persistence_validator(
 
 
 def resource_validator(
-    uri: str, object_location: str, object_location_schema: Optional[str]
+    uri: str,
+    object_location: str,
+    object_location_schema: Optional[str],
+    *,
+    limit: Optional[int] = None,
 ) -> Iterable[Dict[str, Any]]:
     """Validate if resource is available.
+
+    @param limit: maximum number of rows to fetch; `None` keeps the unlimited
+        behavior used by the REST validator and by validation on save.
     @return: A iterable of dictionaries. Keys of dictionaries are the name of resource columns.
     """
     resource_local_validator(uri, object_location, object_location_schema)
@@ -107,6 +114,7 @@ def resource_validator(
             uri=uri,
             object_location=object_location,
             object_location_schema=object_location_schema,
+            limit=limit,
         )
     except NotImplementedSchemaError as err:
         raise ValidationError(

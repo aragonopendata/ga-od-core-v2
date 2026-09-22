@@ -31,13 +31,18 @@ POSTGRESQL_URI = "postgresql://username:password@example.invalid:5432/gaodcore"
 def probes(monkeypatch):
     """Replaces both external probes by call counters."""
 
-    calls = {"uri": 0, "resource": 0}
+    # `resource_limits` records the row limit of each probe, so the tests can
+    # pin that only the manual manager check asks for a single row.
+    calls = {"uri": 0, "resource": 0, "resource_limits": []}
 
     def fake_validate_uri(uri):
         calls["uri"] += 1
 
-    def fake_validate_resource(uri, object_location, object_location_schema):
+    def fake_validate_resource(
+        uri, object_location, object_location_schema, limit=None
+    ):
         calls["resource"] += 1
+        calls["resource_limits"].append(limit)
         return [{"id": 1}]
 
     monkeypatch.setattr(validators, "validate_uri", fake_validate_uri)
@@ -256,3 +261,5 @@ def test_validator_endpoint_ignores_flag(
     )
     assert response.status_code == 200
     assert probes["resource"] == 1
+    # The REST validator keeps validating the whole resource, unlimited.
+    assert probes["resource_limits"] == [None]

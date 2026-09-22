@@ -6,6 +6,10 @@
 {% block manager_content %}
 <h1>{{ resource.name }}</h1>
 <div class="manager-toolbar">
+  <form method="post" action="{% url 'manager_web:resource-check' pk=resource.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="manager-button">{% trans "Check resource" %}</button>
+  </form>
   <a class="manager-button" href="{% url 'manager_web:resource-update' pk=resource.pk %}">{% trans "Edit" %}</a>
   {% include "gaodcore_manager/_delete_button.html" with delete_url_name="manager_web:resource-delete" edit_url_name="manager_web:resource-update" object=resource is_connector=False %}
 </div>
