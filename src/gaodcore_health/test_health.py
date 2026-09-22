@@ -2,7 +2,6 @@
 Tests for health monitoring functionality.
 """
 
-import asyncio
 import re
 from datetime import timedelta
 from unittest.mock import patch, MagicMock
@@ -22,8 +21,9 @@ from gaodcore_health.models import (
     ResourceHealthCheckResult,
 )
 from gaodcore_health.health_check import (
-    check_connector_health,
-    check_all_connectors_health,
+    check_connector_health_sync,
+    check_all_connectors_health_sync,
+    check_all_resources_health_sync,
     check_and_send_alerts,
     cleanup_old_health_results,
     get_connector_health_summary,
@@ -145,13 +145,13 @@ class HealthCheckFunctionTests(TransactionTestCase):
         """Test successful connector health check."""
         mock_validate.return_value = None
 
-        result = asyncio.run(check_connector_health(self.connector))
+        result = check_connector_health_sync(self.connector, timeout=7)
 
         self.assertEqual(result.connector, self.connector)
         self.assertTrue(result.is_healthy)
         self.assertIsNotNone(result.response_time_ms)
         self.assertIsNone(result.error_message)
-        mock_validate.assert_called_once_with(self.connector.uri)
+        mock_validate.assert_called_once_with(self.connector.uri, timeout=7)
 
     @patch("gaodcore_health.health_check.validate_uri")
     def test_check_connector_health_failure(self, mock_validate):
@@ -160,7 +160,7 @@ class HealthCheckFunctionTests(TransactionTestCase):
 
         mock_validate.side_effect = DriverConnectionError("Connection failed")
 
-        result = asyncio.run(check_connector_health(self.connector))
+        result = check_connector_health_sync(self.connector, timeout=7)
 
         self.assertEqual(result.connector, self.connector)
         self.assertFalse(result.is_healthy)
@@ -180,25 +180,109 @@ class HealthCheckFunctionTests(TransactionTestCase):
 
         mock_validate.return_value = None
 
-        results = asyncio.run(check_all_connectors_health(concurrency_limit=2))
+        results = check_all_connectors_health_sync(concurrency_limit=2, timeout=9)
 
         self.assertEqual(len(results), 2)
         self.assertTrue(all(result.is_healthy for result in results))
+
+        # Timeout must be propagated down to the low level validation
+        self.assertEqual(mock_validate.call_count, 2)
+        for call in mock_validate.call_args_list:
+            self.assertEqual(call.kwargs["timeout"], 9)
 
         # Check that results were saved to database
         saved_results = HealthCheckResult.objects.all()
         self.assertEqual(saved_results.count(), 2)
 
+    @patch("gaodcore_health.health_check.validate_resource_health")
+    def test_check_all_resources_health_sync(self, mock_validate_resource):
+        """Aggregated resource check runs, propagates timeout and persists results."""
+        mock_validate_resource.return_value = None
+
+        resource_one = ResourceConfig.objects.create(
+            name="Test Resource 1",
+            connector_config=self.connector,
+            object_location="table_one",
+            enabled=True,
+        )
+        resource_two = ResourceConfig.objects.create(
+            name="Test Resource 2",
+            connector_config=self.connector,
+            object_location="table_two",
+            enabled=True,
+        )
+
+        results = check_all_resources_health_sync(concurrency_limit=2, timeout=11)
+
+        self.assertEqual(len(results), 2)
+        self.assertTrue(all(result.is_healthy for result in results))
+        self.assertEqual(
+            {result.resource_id for result in results},
+            {resource_one.id, resource_two.id},
+        )
+
+        # The timeout must reach the underlying validation for every resource
+        self.assertEqual(mock_validate_resource.call_count, 2)
+        for call in mock_validate_resource.call_args_list:
+            self.assertEqual(call.kwargs["timeout"], 11)
+
+        # Results are persisted in the database
+        self.assertEqual(ResourceHealthCheckResult.objects.count(), 2)
+        self.assertEqual(
+            ResourceHealthCheckResult.objects.filter(is_healthy=True).count(), 2
+        )
+
+    @patch("gaodcore_health.health_check.validate_resource_health")
+    def test_check_all_resources_health_sync_failure_is_persisted(
+        self, mock_validate_resource
+    ):
+        """A failing resource is stored as unhealthy with its error details."""
+        from connectors import DriverConnectionError
+
+        mock_validate_resource.side_effect = DriverConnectionError(
+            "Resource connection failed"
+        )
+
+        ResourceConfig.objects.create(
+            name="Broken Resource",
+            connector_config=self.connector,
+            object_location="broken_table",
+            enabled=True,
+        )
+
+        results = check_all_resources_health_sync(concurrency_limit=1, timeout=5)
+
+        self.assertEqual(len(results), 1)
+        self.assertFalse(results[0].is_healthy)
+        self.assertEqual(results[0].error_message, "Resource connection failed")
+        self.assertEqual(results[0].error_type, "connection_error")
+
+        saved = ResourceHealthCheckResult.objects.get()
+        self.assertFalse(saved.is_healthy)
+        self.assertEqual(saved.error_type, "connection_error")
+
+    @patch("gaodcore_health.health_check.validate_resource_health")
+    def test_check_all_resources_health_sync_without_resources(
+        self, mock_validate_resource
+    ):
+        """No enabled resources means no checks and no persisted results."""
+        results = check_all_resources_health_sync(concurrency_limit=1, timeout=5)
+
+        self.assertEqual(results, [])
+        mock_validate_resource.assert_not_called()
+        self.assertEqual(ResourceHealthCheckResult.objects.count(), 0)
+
     def test_cleanup_old_health_results(self):
         """Test cleaning up old health check results."""
         # Create old results
         old_time = timezone.now() - timedelta(days=35)
-        HealthCheckResult.objects.create(
+        old_result = HealthCheckResult.objects.create(
             connector=self.connector,
             is_healthy=True,
             response_time_ms=100,
-            check_time=old_time,
         )
+        # `check_time` uses auto_now_add, so it must be backdated with an update
+        HealthCheckResult.objects.filter(pk=old_result.pk).update(check_time=old_time)
 
         # Create recent results
         HealthCheckResult.objects.create(
@@ -405,8 +489,14 @@ class HealthCheckManagementCommandTests(TestCase):
             enabled=True,
         )
 
-    @patch("gaodcore_health.health_check.check_all_connectors_health")
-    def test_health_check_command_basic(self, mock_check):
+    @patch(
+        "gaodcore_health.management.commands.health_check.check_all_resources_health_sync",
+        return_value=[],
+    )
+    @patch(
+        "gaodcore_health.management.commands.health_check.check_all_connectors_health_sync"
+    )
+    def test_health_check_command_basic(self, mock_check, mock_check_resources):
         """Test basic health check command execution."""
         from django.core.management import call_command
         from io import StringIO
@@ -424,8 +514,32 @@ class HealthCheckManagementCommandTests(TestCase):
         self.assertIn("Health Check Summary", output)
         self.assertIn("Total Connectors: 1", output)
         mock_check.assert_called_once()
+        mock_check_resources.assert_called_once()
 
-    @patch("gaodcore_health.health_check.check_specific_connector_health")
+    @patch(
+        "gaodcore_health.management.commands.health_check.check_all_resources_health_sync",
+        return_value=[],
+    )
+    @patch(
+        "gaodcore_health.management.commands.health_check.check_all_connectors_health_sync",
+        return_value=[],
+    )
+    def test_health_check_command_propagates_timeout(
+        self, mock_check, mock_check_resources
+    ):
+        """The --timeout option must reach both aggregated sync checks."""
+        from django.core.management import call_command
+        from io import StringIO
+
+        out = StringIO()
+        call_command("health_check", "--timeout", "3", "--concurrency", "2", stdout=out)
+
+        mock_check.assert_called_once_with(2, timeout=3)
+        mock_check_resources.assert_called_once_with(2, timeout=3)
+
+    @patch(
+        "gaodcore_health.management.commands.health_check.check_specific_connector_health_sync"
+    )
     def test_health_check_command_specific_connector(self, mock_check):
         """Test health check command for specific connector."""
         from django.core.management import call_command
@@ -446,7 +560,7 @@ class HealthCheckManagementCommandTests(TestCase):
         output = out.getvalue()
         self.assertIn(f"Connector: {self.connector.name}", output)
         self.assertIn("✓ HEALTHY", output)
-        mock_check.assert_called_once_with(self.connector.id)
+        mock_check.assert_called_once_with(self.connector.id, timeout=None)
 
     def test_health_report_command(self):
         """Test health report command."""
