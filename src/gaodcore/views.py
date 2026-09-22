@@ -244,7 +244,13 @@ class DownloadView(APIViewMixin):
             ),
             OpenApiParameter(
                 "delimiter",
-                description="Delimiter for CSV format. Use ';' for semicolon-separated values. Default is ','.",
+                description=(
+                    "Delimiter for CSV format. Must be exactly one character "
+                    "(and not '\\r' or '\\n'), otherwise the request is rejected "
+                    "with a 400 error. Use ';' for semicolon-separated values. "
+                    "Default is ',' (or ';' for the scsv format). Ignored for "
+                    "non-CSV formats."
+                ),
                 type=OpenApiTypes.STR,
             ),
             OpenApiParameter(
@@ -314,6 +320,7 @@ class DownloadView(APIViewMixin):
         like = self._get_like(request)
         sort = self._get_sort(request)
         format = self._get_format(request)
+        delimiter = self._get_delimiter(request, format)
 
         resource_config = _get_resource(resource_id=resource_id)
         logger.info("Downloading resource: %s", resource_config)
@@ -447,11 +454,6 @@ class DownloadView(APIViewMixin):
             update_resource_size(
                 resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
             )
-            separador = request.query_params.get("delimiter", None)
-            if separador:
-                delimiter = separador
-            else:
-                delimiter = ";" if format == "scsv" else ","
             response = get_response_csv(modify_header(data, columns), delimiter=delimiter)
         elif featureCollection:
             response = Response(data)
@@ -729,6 +731,37 @@ class DownloadView(APIViewMixin):
             ) from err
 
         return format
+
+    @staticmethod
+    def _get_delimiter(request: Request, format: str) -> Optional[str]:
+        """Get and validate the CSV delimiter from query string.
+
+        Only applies to the "csv" and "scsv" formats; for any other format the
+        parameter is ignored (not validated) to keep today's behavior of silently
+        accepting it. Validated early, before any data is fetched, so an invalid
+        value fails fast instead of costing a full query first.
+
+        @param request: Django response instance.
+        @param format: resolved response format (e.g. "csv", "scsv", "json", "xlsx").
+        @return: delimiter to use, or None when the format is not csv/scsv.
+        """
+        if format not in ("csv", "scsv"):
+            return None
+
+        default_delimiter = ";" if format == "scsv" else ","
+        delimiter = request.query_params.get("delimiter", None)
+
+        if not delimiter:
+            return default_delimiter
+
+        if len(delimiter) != 1 or delimiter in ("\r", "\n"):
+            raise ValidationError(
+                "Invalid delimiter: it must be a single character (and not a "
+                "line break).",
+                ErrorCodes.INVALID_DELIMITER,
+            )
+
+        return delimiter
 
 
 class ShowColumnsView(XLSXFileMixin, APIViewMixin):

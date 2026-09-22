@@ -17,6 +17,7 @@ from enum import Enum
 from http import HTTPStatus
 from io import StringIO
 from sqlite3 import Date
+from time import monotonic
 from typing import Optional, Dict, List, Any, Iterable, Union, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -78,6 +79,21 @@ _RESOURCE_MAX_ROWS_EXCEL = 1048576
 
 # TODO: move to config.yaml (e.g. common_config.http_connector_timeout_seconds)
 DEFAULT_HTTP_TIMEOUT_SECONDS = 10
+
+# TODO: move to config.yaml (e.g. common_config.oracle_call_timeout_seconds)
+#
+# Oracle has no timeout unless one is set explicitly here: unlike PostgreSQL and
+# MySQL, the driver applies no default, so an unresponsive instance blocks the
+# worker until gunicorn kills it (--timeout 240 in the Dockerfile).
+#
+# ORACLE_CALL_TIMEOUT_SECONDS bounds a single round trip to the database, not the
+# total query duration. A query streaming many rows performs many round trips and
+# is not capped by this value; what it does cap is any individual stall, which is
+# the failure it exists to catch (a server that stops answering mid-query, or one
+# that never answers at all). It is deliberately below gunicorn's 240s so a stalled
+# query surfaces as a clean 503 with room to serialize the response, rather than a
+# SIGKILLed worker.
+ORACLE_CALL_TIMEOUT_SECONDS = 180
 
 
 class MimeType(Enum):
@@ -1056,6 +1072,7 @@ def get_session_data(
             session.close()
             engine.dispose()
     else:
+        query_started_at = monotonic()
         try:
             data = (
                 session.query(model)
@@ -1080,6 +1097,25 @@ def get_session_data(
         except SortFieldNoExistsError as err:
             logger.warning("Sort Field No Exists Error. - %s ", err)
             raise ValidationError(err.message, ErrorCodes.INVALID_SORT) from err
+        except sqlalchemy.exc.OperationalError as err:
+            # Driver-level failure, which is where a timeout surfaces: oracledb
+            # raises DPY-4011/DPY-4024 on call_timeout and SQLAlchemy wraps it here.
+            # Logged at ERROR with the object location and elapsed time so the
+            # offending resource is identifiable from the logs alone - a timeout
+            # kills the request before any access-log line is written, so this is
+            # the only record of which resource was responsible.
+            logger.error(
+                "Resource query failed on %s (object_location=%r, schema=%r) "
+                "after %.1fs: %s",
+                mask_uri(uri),
+                object_location,
+                object_location_schema,
+                monotonic() - query_started_at,
+                err,
+            )
+            raise ServiceUnavailable(
+                "Query error", code=ErrorCodes.QUERY_ERROR
+            ) from err
         except Exception as err:
             logger.warning("Problem in resource query: %s", err)
             raise ServiceUnavailable(
@@ -1557,14 +1593,28 @@ def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
         _DEFAULT_CONNECT_TIMEOUT = 10
         connect_timeout = timeout if timeout is not None else _DEFAULT_CONNECT_TIMEOUT
         connect_args = {}
+        engine_kwargs = {}
         if uri_parsed.scheme in ["postgresql", "mysql"]:
             connect_args["connect_timeout"] = connect_timeout
         elif uri_parsed.scheme in ["mssql+pyodbc", "mssql"]:
             connect_args["timeout"] = connect_timeout
-        # oracle+oracledb: timeout handled at TNS/freetds level, not connect_args
+        elif uri_parsed.scheme == "oracle+oracledb":
+            # Bound both phases explicitly. A previous version of this branch
+            # deferred to "TNS/freetds level" configuration, but no sqlnet.ora or
+            # TNS_ADMIN exists in this deployment (the freetds.conf in the
+            # Dockerfile governs MSSQL only), so Oracle ran with no timeout at all.
+            connect_args["tcp_connect_timeout"] = connect_timeout
+            # oracledb takes call_timeout in milliseconds.
+            connect_args["call_timeout"] = ORACLE_CALL_TIMEOUT_SECONDS * 1000
+            # Validate pooled connections before use: a connection dropped by the
+            # server is otherwise only discovered mid-query, surfacing as the
+            # DPY-1001 "not connected to database" errors seen during worker teardown.
+            engine_kwargs["pool_pre_ping"] = True
         # sqlite: file operations are local, no network timeout needed
 
-        return create_engine(uri, max_identifier_length=128, connect_args=connect_args)
+        return create_engine(
+            uri, max_identifier_length=128, connect_args=connect_args, **engine_kwargs
+        )
     if uri_parsed.scheme in _HTTP_SCHEMAS:
         return _get_engine_from_api(uri, timeout=timeout)
     raise NotImplementedSchemaError(

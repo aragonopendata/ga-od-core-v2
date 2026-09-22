@@ -186,6 +186,9 @@ def get_return_list(data: Iterable[dict], format_is_xlsx: bool = False) -> Retur
 
 
 def modify_header(return_list, columns_name, format_is_xlsx=False):
+    if not return_list:
+        return return_list
+
     if len(columns_name) > 0 and len(columns_name) == len(list(return_list[0].keys())):
         df = pd.DataFrame(return_list)
         columns_modification_dict = dict(zip(list(return_list[0].keys()), columns_name))

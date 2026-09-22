@@ -122,6 +122,39 @@ def test_download_field_columns(endpoint: str, client: Client, full_example):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    "accept",
+    ["application/json", "text/csv", "application/xlsx"],
+)
+def test_download_field_columns_empty_result(
+    endpoint: str, client: Client, full_example, accept: str
+):
+    """
+    A ``columns`` rename request whose filters match zero rows must not crash
+    (regression for the IndexError previously raised by modify_header on an
+    empty result set), for every export format.
+    """
+    download_response = client.get(
+        endpoint,
+        {
+            "resource_id": full_example.resources.table.id,
+            "fields": ["id", "name"],
+            "columns": ["identifier", "full_name"],
+            "filters": '{"id": -999}',
+        },
+        HTTP_ACCEPT=accept,
+    )
+
+    assert download_response.status_code == 200
+    if accept == "application/json":
+        assert download_response.json() == []
+    elif accept == "text/csv":
+        assert download_response.content == b""
+    elif accept == "application/xlsx":
+        assert download_response.content != b""
+
+
+@pytest.mark.django_db
 def test_download_fields(endpoint: str, client: Client, full_example):
     download_response = client.get(
         endpoint,
@@ -635,6 +668,130 @@ def test_download_error_is_never_serialized_as_data(accept_error, client: Client
     problem = problem_of(response)
     assert problem["error_code"] == "VALIDATION_ERROR"
     assert field_codes(problem) == ["RESOURCE_UNAVAILABLE"]
+
+
+@pytest.mark.django_db
+def test_download_delimiter_multi_char_error(endpoint: str, client: Client):
+    """A multi-character delimiter on a CSV download is a 400, not the 500 crash
+    that ``csv.writer`` used to raise (regression)."""
+    download_response = client.get(
+        endpoint,
+        {"resource_id": 1, "delimiter": "||"},
+        HTTP_ACCEPT="text/csv",
+    )
+
+    assert download_response.status_code == 400
+    validate_error(
+        download_response,
+        "Invalid delimiter: it must be a single character (and not a line break).",
+        "text/csv",
+        field_error_code="INVALID_DELIMITER",
+    )
+
+
+@pytest.mark.django_db
+def test_download_delimiter_newline_error(endpoint: str, client: Client):
+    """``\\n`` is a single character but corrupts the row structure, so it is rejected."""
+    download_response = client.get(
+        endpoint,
+        {"resource_id": 1, "delimiter": "\n"},
+        HTTP_ACCEPT="text/csv",
+    )
+
+    assert download_response.status_code == 400
+    validate_error(
+        download_response,
+        "Invalid delimiter: it must be a single character (and not a line break).",
+        "text/csv",
+        field_error_code="INVALID_DELIMITER",
+    )
+
+
+@pytest.mark.django_db
+def test_download_delimiter_validated_before_data_access(endpoint: str, client: Client):
+    """The delimiter is validated while parsing the query string, before the resource
+    is even looked up: an invalid delimiter on a non-existent resource still reports
+    INVALID_DELIMITER, not RESOURCE_UNAVAILABLE."""
+    download_response = client.get(
+        endpoint,
+        {"resource_id": 96, "delimiter": "||"},
+        HTTP_ACCEPT="text/csv",
+    )
+
+    assert download_response.status_code == 400
+    validate_error(
+        download_response,
+        "Invalid delimiter: it must be a single character (and not a line break).",
+        "text/csv",
+        field_error_code="INVALID_DELIMITER",
+    )
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("bad_format", ["application/json", "application/xlsx"])
+def test_download_delimiter_multi_char_ignored_for_non_csv(
+    endpoint: str, client: Client, full_example, bad_format: str
+):
+    """A multi-character delimiter is only meaningful for csv/scsv: it must not break
+    json or xlsx downloads, which today silently ignore the parameter."""
+    download_response = client.get(
+        endpoint,
+        {"resource_id": full_example.resources.table.id, "delimiter": "||"},
+        HTTP_ACCEPT=bad_format,
+    )
+
+    assert download_response.status_code == 200
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("delimiter", [";", "|"])
+def test_download_delimiter_single_char(
+    endpoint: str, client: Client, full_example, delimiter: str
+):
+    download_response = client.get(
+        endpoint,
+        {"resource_id": full_example.resources.table.id, "delimiter": delimiter},
+        HTTP_ACCEPT="text/csv",
+    )
+
+    assert download_response.status_code == 200
+    content = download_response.content.decode()
+    header_line = content.splitlines()[0]
+    assert delimiter in header_line
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("accept,expected_default", [("text/csv", ","), ("text/scsv", ";")])
+def test_download_delimiter_default(
+    endpoint: str, client: Client, full_example, accept: str, expected_default: str
+):
+    """Without an explicit delimiter, csv keeps using ',' and scsv keeps using ';'."""
+    download_response = client.get(
+        endpoint,
+        {"resource_id": full_example.resources.table.id},
+        HTTP_ACCEPT=accept,
+    )
+
+    assert download_response.status_code == 200
+    header_line = download_response.content.decode().splitlines()[0]
+    assert expected_default in header_line
+
+
+@pytest.mark.django_db
+def test_download_delimiter_empty_falls_back_to_default(
+    endpoint: str, client: Client, full_example
+):
+    """``?delimiter=`` (empty string) preserves today's behavior: fall back to the
+    default rather than erroring."""
+    download_response = client.get(
+        endpoint,
+        {"resource_id": full_example.resources.table.id, "delimiter": ""},
+        HTTP_ACCEPT="text/csv",
+    )
+
+    assert download_response.status_code == 200
+    header_line = download_response.content.decode().splitlines()[0]
+    assert "," in header_line
 
 
 @pytest.mark.django_db

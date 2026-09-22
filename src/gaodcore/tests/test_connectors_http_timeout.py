@@ -12,6 +12,7 @@ import pytest
 from connectors import (
     DriverConnectionError,
     DEFAULT_HTTP_TIMEOUT_SECONDS,
+    ORACLE_CALL_TIMEOUT_SECONDS,
     _get_engine,
     _get_engine_from_api,
 )
@@ -144,3 +145,37 @@ def test_http_default_does_not_override_database_timeouts(monkeypatch, uri, time
 
     expected = {} if timeout is None else {timeout_key: timeout}
     assert create_engine.call_args.kwargs["connect_args"] == expected
+
+
+@pytest.mark.parametrize("timeout", [None, 45])
+def test_oracle_bounds_connect_and_call_phases(monkeypatch, timeout):
+    """Oracle must bound both phases: the TCP handshake and each round trip.
+
+    Regression test for workers hanging until gunicorn's --timeout killed them.
+    The Oracle branch previously set no timeout at all, deferring to TNS
+    configuration that does not exist in this deployment.
+    """
+    create_engine = Mock()
+    monkeypatch.setattr("connectors.create_engine", create_engine)
+
+    _get_engine("oracle://user:pass@example.invalid:1521/ORCL", timeout=timeout)
+
+    connect_args = create_engine.call_args.kwargs["connect_args"]
+    # The connect phase honours an explicit timeout, else the 10s shared default.
+    assert connect_args["tcp_connect_timeout"] == (10 if timeout is None else timeout)
+    # The query phase is always bounded, in milliseconds, independently of the
+    # connect timeout, and must stay under gunicorn's 240s worker timeout.
+    assert connect_args["call_timeout"] == ORACLE_CALL_TIMEOUT_SECONDS * 1000
+    assert ORACLE_CALL_TIMEOUT_SECONDS < 240
+    # Stale pooled connections are evicted rather than surfacing as DPY-1001.
+    assert create_engine.call_args.kwargs["pool_pre_ping"] is True
+
+
+def test_non_oracle_engines_keep_default_pooling(monkeypatch):
+    """pool_pre_ping is scoped to Oracle; other drivers keep SQLAlchemy defaults."""
+    create_engine = Mock()
+    monkeypatch.setattr("connectors.create_engine", create_engine)
+
+    _get_engine("postgresql://example.invalid/test")
+
+    assert "pool_pre_ping" not in create_engine.call_args.kwargs
