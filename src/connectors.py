@@ -28,6 +28,7 @@ from geoalchemy2 import functions as GeoFunc
 from rest_framework.exceptions import ValidationError
 
 from exceptions import ServiceUnavailable, ErrorCodes
+from log_sanitizer import mask_uri
 from sqlalchemy import (
     create_engine,
     Table,
@@ -1369,7 +1370,7 @@ def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
     except NetworkConnectionError as err:
         # Network connectivity failed - don't attempt database connection
         logger.warning(
-            "Network connectivity check failed for URI: %s... - %s", uri[:50], str(err)
+            "Network connectivity check failed for URI: %s - %s", mask_uri(uri), str(err)
         )
         raise DriverConnectionError("Network connectivity failed.") from err
 
@@ -1380,7 +1381,7 @@ def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
     except sqlalchemy.exc.DatabaseError as err:
         # Log connection failure as warning - expected in health checks
         logger.warning(
-            "Connection not available for URI: %s... - %s", uri[:50], str(err)
+            "Connection not available for URI: %s - %s", mask_uri(uri), str(err)
         )
         raise DriverConnectionError("Connection not available.") from err
 
@@ -1471,13 +1472,13 @@ def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
         # body bytes are fetched - a non-2xx origin response is rejected without
         # waiting on a slow/large error body.
         logger.warning(
-            "HTTP connector received error status %s from %s", err.code, uri
+            "HTTP connector received error status %s from %s", err.code, mask_uri(uri)
         )
         err.close()
         raise DriverConnectionError("The url could not be reached.") from err
     except URLError as err:
         # Connection-level failures (DNS, refused, TLS, connect-phase timeout).
-        logger.warning("HTTP connector failed to reach %s: %s", uri, err.reason)
+        logger.warning("HTTP connector failed to reach %s: %s", mask_uri(uri), err.reason)
         raise DriverConnectionError("The url could not be reached.") from err
     except TimeoutError as err:
         # A 200 response whose body then stalls mid-read raises a bare
@@ -1486,7 +1487,7 @@ def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
         logger.warning(
             "HTTP connector timed out after %ss while reading response: %s",
             timeout,
-            uri,
+            mask_uri(uri),
         )
         raise DriverConnectionError("The url could not be reached.") from err
     if data:

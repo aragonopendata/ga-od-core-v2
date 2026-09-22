@@ -3,6 +3,7 @@
 import logging
 
 from rest_framework.views import APIView
+from log_sanitizer import redact_query_params
 from serializers import DictSerializer
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,10 @@ class APIViewMixin(APIView):
     def initial(self, request, *args, **kwargs):
         """Log every incoming request before it reaches the handler (or a cached response short-circuits it)."""
         logger.info(
-            "%s %s params=%s", request.method, request.path, request.query_params.dict()
+            "%s %s params=%s",
+            request.method,
+            request.path,
+            redact_query_params(request.query_params.dict()),
         )
         super().initial(request, *args, **kwargs)
 

@@ -12,6 +12,7 @@ class ConnectorConfigSerializer(serializers.ModelSerializer):
         model = ConnectorConfig
         fields = "__all__"
         read_only_fields = ["id", "created_at", "updated_at"]
+        extra_kwargs = {"uri": {"write_only": True}}
 
     def validate_uri(self, uri: str):
         # On update, only a changed URI justifies an external probe. Metadata only
@@ -20,6 +21,19 @@ class ConnectorConfigSerializer(serializers.ModelSerializer):
             return uri
         uri_persistence_validator(uri)
         return uri
+
+
+class ValidatorRequestSerializer(serializers.Serializer):
+    """Validates the body of a POST to ValidatorView.
+
+    Kept separate from ``ValidatorView.get_serializer`` (which builds a
+    ``DictSerializer`` from the response for rendering) - this one only
+    validates the incoming request body.
+    """
+
+    uri = serializers.CharField(required=True)
+    object_location = serializers.CharField(required=False, allow_blank=True)
+    object_location_schema = serializers.CharField(required=False, allow_blank=True)
 
 
 class ResourceConfigSerializer(serializers.ModelSerializer):

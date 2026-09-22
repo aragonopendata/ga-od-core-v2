@@ -26,6 +26,7 @@ from rest_framework.utils.serializer_helpers import ReturnList
 
 from connectors import TooManyRowsErrorExcel
 from exceptions import BadGateway, ErrorCodes
+from log_sanitizer import mask_uri
 from serializers import DictSerializer
 
 logger = logging.getLogger(__name__)
@@ -222,7 +223,7 @@ def download(
     download_check() before any body bytes are read, even if that body is slow
     or never finishes.
     """
-    logger.info("Calling external service: %s", url)
+    logger.info("Calling external service: %s", mask_uri(url))
     start = time.monotonic()
     try:
         with requests.get(
@@ -230,7 +231,7 @@ def download(
         ) as response:
             logger.info(
                 "External service responded: %s -> %s (%.0fms)",
-                url,
+                mask_uri(url),
                 response.status_code,
                 (time.monotonic() - start) * 1000,
             )
@@ -243,12 +244,14 @@ def download(
         # instead (requests/urllib3 map a read timeout past the initial response
         # to ConnectionError), which is why that is caught separately below.
         logger.warning(
-            "External service timed out after %ss: %s", EXTERNAL_SERVICE_TIMEOUT_SECONDS, url
+            "External service timed out after %ss: %s",
+            EXTERNAL_SERVICE_TIMEOUT_SECONDS,
+            mask_uri(url),
         )
         raise BadGateway() from err
     except requests.exceptions.ConnectionError as err:
         # Covers both refused/reset connections and body-read timeouts (see above).
-        logger.warning("External service connection failed: %s - %s", url, err)
+        logger.warning("External service connection failed: %s - %s", mask_uri(url), err)
         raise BadGateway() from err
 
 
@@ -290,7 +293,7 @@ async def download_async(
     while awaiting response.json(), which is why both are covered by the same
     try/except below.
     """
-    logger.info("Calling external service: %s", url)
+    logger.info("Calling external service: %s", mask_uri(url))
     start = time.monotonic()
     try:
         async with session.get(
@@ -300,7 +303,7 @@ async def download_async(
         ) as response:
             logger.info(
                 "External service responded: %s -> %s (%.0fms)",
-                url,
+                mask_uri(url),
                 response.status,
                 (time.monotonic() - start) * 1000,
             )
@@ -312,7 +315,9 @@ async def download_async(
                 return {}
     except asyncio.TimeoutError as err:
         logger.warning(
-            "External service timed out after %ss: %s", EXTERNAL_SERVICE_TIMEOUT_SECONDS, url
+            "External service timed out after %ss: %s",
+            EXTERNAL_SERVICE_TIMEOUT_SECONDS,
+            mask_uri(url),
         )
         raise BadGateway() from err
     except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError) as err:

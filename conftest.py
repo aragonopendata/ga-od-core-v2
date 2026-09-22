@@ -100,7 +100,21 @@ class ConnectorData:
 
 @pytest.fixture
 def auth_client(client, django_user_model):
-    user = django_user_model.objects.create_user(username=USERNAME, password=PASSWORD)
+    user = django_user_model.objects.create_user(
+        username=USERNAME, password=PASSWORD, is_staff=True
+    )
+    client.force_login(user)
+    return client
+
+
+NON_STAFF_USERNAME = "non_staff_user"
+
+
+@pytest.fixture
+def non_staff_client(client, django_user_model):
+    user = django_user_model.objects.create_user(
+        username=NON_STAFF_USERNAME, password=PASSWORD, is_staff=False
+    )
     client.force_login(user)
     return client
 
@@ -111,7 +125,7 @@ def create_connector_ga_od_core(client, test_name: str, uri: str) -> ConnectorDa
         "enabled": True,
         "uri": uri
     }).json()
-    return ConnectorData(**data)
+    return ConnectorData(**{**data, "uri": uri})
 
 
 def create_table_view(uri: str, test_name: str):
