@@ -31,6 +31,7 @@ from rest_framework.exceptions import ValidationError
 from exceptions import ServiceUnavailable, ErrorCodes
 from log_sanitizer import mask_uri
 from sqlalchemy import (
+    event,
     create_engine,
     Table,
     MetaData,
@@ -1594,6 +1595,7 @@ def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
         connect_timeout = timeout if timeout is not None else _DEFAULT_CONNECT_TIMEOUT
         connect_args = {}
         engine_kwargs = {}
+        oracle_call_timeout = None
         if uri_parsed.scheme in ["postgresql", "mysql"]:
             connect_args["connect_timeout"] = connect_timeout
         elif uri_parsed.scheme in ["mssql+pyodbc", "mssql"]:
@@ -1604,17 +1606,25 @@ def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
             # TNS_ADMIN exists in this deployment (the freetds.conf in the
             # Dockerfile governs MSSQL only), so Oracle ran with no timeout at all.
             connect_args["tcp_connect_timeout"] = connect_timeout
-            # oracledb takes call_timeout in milliseconds.
-            connect_args["call_timeout"] = ORACLE_CALL_TIMEOUT_SECONDS * 1000
             # Validate pooled connections before use: a connection dropped by the
             # server is otherwise only discovered mid-query, surfacing as the
             # DPY-1001 "not connected to database" errors seen during worker teardown.
             engine_kwargs["pool_pre_ping"] = True
+            oracle_call_timeout = ORACLE_CALL_TIMEOUT_SECONDS * 1000
         # sqlite: file operations are local, no network timeout needed
 
-        return create_engine(
+        engine = create_engine(
             uri, max_identifier_length=128, connect_args=connect_args, **engine_kwargs
         )
+        if oracle_call_timeout is not None:
+            # call_timeout is a Connection attribute in oracledb, not a connect()
+            # argument (passing it through connect_args raises TypeError), so it is
+            # applied to each pooled connection as it is opened. Milliseconds.
+            @event.listens_for(engine, "connect")
+            def _set_oracle_call_timeout(dbapi_connection, _connection_record):
+                dbapi_connection.call_timeout = oracle_call_timeout
+
+        return engine
     if uri_parsed.scheme in _HTTP_SCHEMAS:
         return _get_engine_from_api(uri, timeout=timeout)
     raise NotImplementedSchemaError(

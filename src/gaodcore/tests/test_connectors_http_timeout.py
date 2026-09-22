@@ -143,7 +143,9 @@ def test_http_default_does_not_override_database_timeouts(monkeypatch, uri, time
 
     _get_engine(uri, timeout=timeout)
 
-    expected = {} if timeout is None else {timeout_key: timeout}
+    # Without an explicit timeout the shared 10s connect default applies, never
+    # the HTTP default.
+    expected = {timeout_key: 10 if timeout is None else timeout}
     assert create_engine.call_args.kwargs["connect_args"] == expected
 
 
@@ -157,15 +159,35 @@ def test_oracle_bounds_connect_and_call_phases(monkeypatch, timeout):
     """
     create_engine = Mock()
     monkeypatch.setattr("connectors.create_engine", create_engine)
+    registered = []
 
-    _get_engine("oracle://user:pass@example.invalid:1521/ORCL", timeout=timeout)
+    def fake_listens_for(target, identifier):
+        def decorate(fn):
+            registered.append((target, identifier, fn))
+            return fn
+
+        return decorate
+
+    monkeypatch.setattr("connectors.event.listens_for", fake_listens_for)
+
+    engine = _get_engine(
+        "oracle+oracledb://user:pass@example.invalid:1521/ORCL", timeout=timeout
+    )
 
     connect_args = create_engine.call_args.kwargs["connect_args"]
     # The connect phase honours an explicit timeout, else the 10s shared default.
     assert connect_args["tcp_connect_timeout"] == (10 if timeout is None else timeout)
-    # The query phase is always bounded, in milliseconds, independently of the
-    # connect timeout, and must stay under gunicorn's 240s worker timeout.
-    assert connect_args["call_timeout"] == ORACLE_CALL_TIMEOUT_SECONDS * 1000
+    # call_timeout is a Connection attribute in oracledb, not a connect() argument:
+    # passing it through connect_args raises TypeError (regression).
+    assert "call_timeout" not in connect_args
+    # It is applied to each connection as it is opened, in milliseconds, and must
+    # stay under gunicorn's 240s worker timeout.
+    assert len(registered) == 1
+    target, identifier, on_connect = registered[0]
+    assert (target, identifier) == (engine, "connect")
+    dbapi_connection = Mock()
+    on_connect(dbapi_connection, Mock())
+    assert dbapi_connection.call_timeout == ORACLE_CALL_TIMEOUT_SECONDS * 1000
     assert ORACLE_CALL_TIMEOUT_SECONDS < 240
     # Stale pooled connections are evicted rather than surfacing as DPY-1001.
     assert create_engine.call_args.kwargs["pool_pre_ping"] is True
