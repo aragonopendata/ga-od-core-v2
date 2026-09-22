@@ -138,6 +138,62 @@ class TestNotFilterPropagation:
                 column_names=CAR_COLUMNS,
             )
 
+    def test_not_filter_value_is_bound_not_interpolated(self):
+        result = process_filters_args(
+            [{"$not": {"brand": {"$eq": "Tesla"}}}],
+            column_names=CAR_COLUMNS,
+        )
+        assert len(result) == 1
+        clause = result[0]
+        assert isinstance(clause, TextClause)
+        assert "NOT" in clause.text
+        # The raw value never appears in the SQL text...
+        assert "Tesla" not in clause.text
+        # ...it is carried as a compiled bound parameter instead.
+        compiled = clause.compile(compile_kwargs={"literal_binds": False})
+        assert "Tesla" not in str(compiled)
+        assert "Tesla" in compiled.params.values()
+
+    def test_not_filter_malicious_value_is_bound_not_interpolated(self):
+        malicious = "Tesla'; DROP TABLE cars;--"
+        result = process_filters_args(
+            [{"$not": {"brand": {"$eq": malicious}}}],
+            column_names=CAR_COLUMNS,
+        )
+        assert len(result) == 1
+        clause = result[0]
+        assert malicious not in clause.text
+        compiled = clause.compile(compile_kwargs={"literal_binds": False})
+        assert malicious not in str(compiled)
+        assert malicious in compiled.params.values()
+
+    def test_not_filter_over_and_combines_with_and(self):
+        result = process_filters_args(
+            [{"$not": {"$and": [{"brand": {"$eq": "Tesla"}}, {"year": {"$eq": 2020}}]}}],
+            column_names=CAR_COLUMNS,
+        )
+        assert len(result) == 1
+        combined = str(result[0])
+        assert "NOT" in combined
+        assert "AND" in combined
+
+    def test_not_filter_over_or_combines_with_or(self):
+        result = process_filters_args(
+            [{"$not": {"$or": [{"brand": {"$eq": "Tesla"}}, {"brand": {"$eq": "Opel"}}]}}],
+            column_names=CAR_COLUMNS,
+        )
+        assert len(result) == 1
+        combined = str(result[0])
+        assert "NOT" in combined
+        assert "OR" in combined
+
+    def test_not_filter_over_unknown_field_still_validates(self):
+        with pytest.raises(ValidationError, match="Unknown field"):
+            process_filters_args(
+                [{"$not": {"$and": [{"brand": {"$eq": "Tesla"}}, {"hack": {"$eq": 1}}]}}],
+                column_names=CAR_COLUMNS,
+            )
+
 
 class TestAndOrFilterPropagation:
     def test_and_filter_validates_all_nested_fields(self):
@@ -268,6 +324,28 @@ class TestSqliteIntegration:
         assert len(rows) == 1
         assert rows[0].name == "Corsa"
 
+    def test_not_filter_over_and_returns_correct_rows(self, sqlite_session):
+        session, table, column_names = sqlite_session
+        clauses = process_filters_args(
+            [{"$not": {"$and": [{"brand": {"$eq": "Tesla"}}, {"year": {"$eq": 2020}}]}}],
+            column_names=column_names,
+        )
+        rows = session.query(table).filter(*clauses).all()
+        # Excludes only the Tesla/2020 row (Model S); Model 3 (Tesla/2021) and
+        # Corsa (Opel/2019) don't satisfy both conditions, so NOT(AND) keeps them.
+        assert len(rows) == 2
+        assert {r.name for r in rows} == {"Model 3", "Corsa"}
+
+    def test_not_filter_over_or_returns_correct_rows(self, sqlite_session):
+        session, table, column_names = sqlite_session
+        clauses = process_filters_args(
+            [{"$not": {"$or": [{"brand": {"$eq": "Tesla"}}, {"brand": {"$eq": "Opel"}}]}}],
+            column_names=column_names,
+        )
+        rows = session.query(table).filter(*clauses).all()
+        # Every row is either Tesla or Opel, so NOT(OR) excludes them all.
+        assert len(rows) == 0
+
     def test_string_value_with_special_chars_bound_safely(self, sqlite_session):
         session, table, column_names = sqlite_session
         clauses = process_filters_args(
@@ -276,6 +354,21 @@ class TestSqliteIntegration:
         )
         rows = session.query(table).filter(*clauses).all()
         assert len(rows) == 0
+
+        all_rows = session.query(table).all()
+        assert len(all_rows) == 3
+
+    def test_not_filter_malicious_value_bound_safely(self, sqlite_session):
+        session, table, column_names = sqlite_session
+        malicious = "Tesla'; DROP TABLE cars;--"
+        clauses = process_filters_args(
+            [{"$not": {"brand": {"$eq": malicious}}}],
+            column_names=column_names,
+        )
+        # The malicious value matches no row, so NOT(brand = malicious) is true
+        # for every row - the table is untouched by the injection attempt.
+        rows = session.query(table).filter(*clauses).all()
+        assert len(rows) == 3
 
         all_rows = session.query(table).all()
         assert len(all_rows) == 3

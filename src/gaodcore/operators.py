@@ -5,6 +5,7 @@ from typing import Callable, Any
 from rest_framework.exceptions import ValidationError
 from exceptions import ErrorCodes
 from sqlalchemy import text, not_, and_, or_
+from sqlalchemy.sql.elements import TextClause
 import logging
 
 logger = logging.getLogger(__name__)
@@ -133,8 +134,23 @@ def filter_lte(field: str, filter: dict, schema: str, column_names: frozenset = 
     return _build_bind_clause(field, "<=", filter["$lte"], schema)
 
 
+def _negate_clause(clause):
+    """Negate a filter clause, whether it's a plain-text comparison or a
+    composed boolean clause (from $and/$or).
+
+    sqlalchemy.not_() requires a ColumnElement and raises AssertionError on a
+    bare TextClause (as produced by _build_bind_clause), so a TextClause is
+    negated by wrapping its SQL text in "NOT (...)" and reattaching its
+    original bound parameters - preserving their names, values and types -
+    rather than passing it to not_() directly.
+    """
+    if isinstance(clause, TextClause):
+        negated = text(f"NOT ({clause.text})")
+        return negated.bindparams(*clause.get_children())
+    return not_(clause)
+
+
 def filter_not(filter: dict, column_names: frozenset = frozenset()) -> text:
     clauses = process_filters_args([filter], column_names=column_names)
-    if len(clauses) == 1:
-        return not_(clauses[0])
-    return not_(and_(*clauses))
+    expression = clauses[0] if len(clauses) == 1 else and_(*clauses)
+    return _negate_clause(expression)
