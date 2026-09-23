@@ -413,7 +413,10 @@ class DownloadView(APIViewMixin):
             featureCollection = False
 
         if featureCollection:
-            logger.info("Downloading resource in geojson format. FeatureCollection")
+            logger.info(
+                "Downloading resource %s in geojson format. FeatureCollection",
+                resource_id,
+            )
             data = _get_data_public_error(
                 get_resource_data_feature,
                 uri=resource_config.connector_config.uri,
@@ -427,7 +430,7 @@ class DownloadView(APIViewMixin):
                 sort=sort,
             )
         else:
-            logger.info("Downloading resource in json format.")
+            logger.info("Downloading resource %s in json format.", resource_id)
             data = _get_data_public_error(
                 get_resource_data,
                 uri=resource_config.connector_config.uri,

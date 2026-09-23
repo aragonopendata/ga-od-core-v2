@@ -986,10 +986,11 @@ def get_resource_data_feature(
 
         properties = dict(zip([column.name for column in columnsProperties], item))
 
-        # create feature
+        # create feature. ST_AsGeoJSON(NULL) is NULL: RFC 7946 §3.2 allows an
+        # unlocated feature with a null geometry, so keep the row.
         featureType = {
             "type": "Feature",
-            "geometry": json.loads(geometry),
+            "geometry": json.loads(geometry) if geometry is not None else None,
             "properties": properties,
         }
         featuresTot.append(featureType)
