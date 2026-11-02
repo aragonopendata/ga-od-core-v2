@@ -97,6 +97,9 @@ DEFAULT_HTTP_TIMEOUT_SECONDS = 10
 # SIGKILLed worker.
 ORACLE_CALL_TIMEOUT_SECONDS = 180
 
+# Fallback when the ORACLE_ARRAYSIZE Django setting is absent.
+DEFAULT_ORACLE_ARRAYSIZE = 5000
+
 
 class MimeType(Enum):
     """Enum with some mimetype and his different values."""
@@ -1646,6 +1649,15 @@ def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
             # DPY-1001 "not connected to database" errors seen during worker teardown.
             engine_kwargs["pool_pre_ping"] = True
             oracle_call_timeout = ORACLE_CALL_TIMEOUT_SECONDS * 1000
+            # The oracledb default (100 rows per round trip) makes large tables
+            # cost thousands of network trips; the dialect applies this value to
+            # every cursor it creates. Read lazily to avoid importing settings
+            # at module import time.
+            from django.conf import settings
+
+            engine_kwargs["arraysize"] = getattr(
+                settings, "ORACLE_ARRAYSIZE", DEFAULT_ORACLE_ARRAYSIZE
+            )
         # sqlite: file operations are local, no network timeout needed
 
         engine = create_engine(

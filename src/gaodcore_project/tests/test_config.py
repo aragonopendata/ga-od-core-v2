@@ -24,3 +24,11 @@ def test_download_timing_log_can_be_disabled():
 def test_config_tst_yaml_loads_with_timing_enabled():
     config = Config.get_config()
     assert config.common_config.download_timing_log is True
+
+
+def test_oracle_arraysize_defaults_to_5000():
+    assert CommonConfig(**_common_data()).oracle_arraysize == 5000
+
+
+def test_oracle_arraysize_can_be_overridden():
+    assert CommonConfig(**_common_data(), oracle_arraysize=250).oracle_arraysize == 250

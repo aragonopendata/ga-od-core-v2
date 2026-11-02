@@ -9,6 +9,9 @@ common_config:
   cache_ttl: 300
   # Optional. Log one `download_timing` line per download/preview request (default: true).
   download_timing_log: true
+  # Optional. Rows fetched per network round trip by Oracle cursors (default: 5000).
+  # Higher values cut round trips on large tables at the cost of memory per cursor.
+  oracle_arraysize: 5000
   databases:
     default:
       ENGINE: django.db.backends.postgresql

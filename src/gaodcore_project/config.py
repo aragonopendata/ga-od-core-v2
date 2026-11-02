@@ -6,7 +6,7 @@ from typing import Optional, Dict, List, Union
 from urllib.parse import urljoin
 from sys import platform
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 try:
     _CONFIG_PATH = os.environ['CONFIG_PATH']
@@ -116,6 +116,7 @@ class CommonConfig(BaseModel):
     cache_ttl: int
     health_monitoring: HealthMonitoringConfig = HealthMonitoringConfig()
     download_timing_log: bool = True
+    oracle_arraysize: int = Field(default=5000, ge=1)
 
 
 class Config(BaseModel):

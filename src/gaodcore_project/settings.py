@@ -45,6 +45,9 @@ CSRF_TRUSTED_ORIGINS = CONFIG.common_config.csrf_trusted_origins
 # Emit one ``download_timing`` INFO line per download/preview request (config key ``download_timing_log``).
 DOWNLOAD_TIMING_LOG = CONFIG.common_config.download_timing_log
 
+# Rows fetched per round trip by oracledb cursors (config key ``oracle_arraysize``).
+ORACLE_ARRAYSIZE = CONFIG.common_config.oracle_arraysize
+
 # Application definition
 
 INSTALLED_APPS = [

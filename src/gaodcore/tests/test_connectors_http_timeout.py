@@ -201,3 +201,28 @@ def test_non_oracle_engines_keep_default_pooling(monkeypatch):
     _get_engine("postgresql://example.invalid/test")
 
     assert "pool_pre_ping" not in create_engine.call_args.kwargs
+
+
+def test_oracle_engine_receives_arraysize_from_settings(monkeypatch, settings):
+    """The Oracle engine passes the configured arraysize to the dialect."""
+    create_engine = Mock()
+    monkeypatch.setattr("connectors.create_engine", create_engine)
+    monkeypatch.setattr("connectors.event.listens_for", lambda *a: (lambda fn: fn))
+    settings.ORACLE_ARRAYSIZE = 1234
+    _get_engine("oracle://user:pass@example.invalid:1521/ORCL")
+    assert create_engine.call_args.kwargs["arraysize"] == 1234
+
+
+def test_oracle_engine_arraysize_defaults_to_5000(monkeypatch):
+    create_engine = Mock()
+    monkeypatch.setattr("connectors.create_engine", create_engine)
+    monkeypatch.setattr("connectors.event.listens_for", lambda *a: (lambda fn: fn))
+    _get_engine("oracle+oracledb://user:pass@example.invalid:1521/ORCL")
+    assert create_engine.call_args.kwargs["arraysize"] == 5000
+
+
+def test_non_oracle_engines_get_no_arraysize(monkeypatch):
+    create_engine = Mock()
+    monkeypatch.setattr("connectors.create_engine", create_engine)
+    _get_engine("postgresql://user:pass@example.invalid:5432/db")
+    assert "arraysize" not in create_engine.call_args.kwargs
