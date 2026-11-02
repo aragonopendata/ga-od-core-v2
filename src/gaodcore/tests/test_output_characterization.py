@@ -261,7 +261,7 @@ def test_rich_xlsx_cells(client, rich_resource, endpoint):
 
 
 # --------------------------------------------------------------------------------------------------------------------
-# columns (modify_header, pandas) and fields.
+# columns (modify_header) and fields.
 # --------------------------------------------------------------------------------------------------------------------
 
 NULLABLE_COLUMNS = ["id", "maybe", "flag_n", "dec", "s"]
@@ -295,33 +295,44 @@ def test_without_columns_nulls_stay_empty_and_ints_stay_ints(client, nullable_re
     ]
 
 
+def _renamed_like_plain(client, fmt, header_from, header_to):
+    """The plain response of the same request with only the header replaced."""
+    plain = _get(client, DOWNLOAD, fmt).content
+    return plain.replace(header_from, header_to, 1)
+
+
 @pytest.mark.django_db
-def test_columns_rename_csv_goes_through_pandas(client, nullable_resource):
-    # QUIRK: pandas turns the int column with a NULL into float: 10 -> 10.0 and NULL -> nan.
+def test_columns_rename_csv_keeps_values_of_plain_output(client, nullable_resource):
+    # With columns the body is exactly the plain one: only the header changes (10 stays 10, NULL stays empty).
+    assert _get(client, DOWNLOAD, "csv", **RENAMED).content == _renamed_like_plain(
+        client, "csv", b"id,maybe,flag_n,dec,s", b"a,b,c,d,e"
+    )
     assert _get(client, DOWNLOAD, "csv", **RENAMED).content == (
-        b"a,b,c,d,e\r\n1,10.0,True,1.5,x\r\n2,nan,,2,\r\n3,30.0,False,,z\r\n"
+        b"a,b,c,d,e\r\n1,10,True,1.5,x\r\n2,,,2,\r\n3,30,False,,z\r\n"
     )
     assert _get(client, DOWNLOAD, "scsv", **RENAMED).content == (
-        b"a;b;c;d;e\r\n1;10.0;True;1.5;x\r\n2;nan;;2;\r\n3;30.0;False;;z\r\n"
+        b"a;b;c;d;e\r\n1;10;True;1.5;x\r\n2;;;2;\r\n3;30;False;;z\r\n"
     )
 
 
 @pytest.mark.django_db
-def test_columns_rename_xml(client, nullable_resource):
-    # QUIRK: same as CSV, the XML shows 10.0 and the text "nan".
-    assert _get(client, DOWNLOAD, "xml", **RENAMED).content == (
-        b'<?xml version="1.0" encoding="utf-8"?>\n<root>'
-        b"<list-item><a>1</a><b>10.0</b><c>True</c><d>1.5</d><e>x</e></list-item>"
-        b"<list-item><a>2</a><b>nan</b><c></c><d>2</d><e></e></list-item>"
-        b"<list-item><a>3</a><b>30.0</b><c>False</c><d></d><e>z</e></list-item></root>"
-    )
+def test_columns_rename_xml_keeps_values_of_plain_output(client, nullable_resource):
+    plain = _get(client, DOWNLOAD, "xml").content
+    expected = plain
+    for old, new in zip(NULLABLE_COLUMNS, "abcde"):
+        expected = expected.replace(f"<{old}>".encode(), f"<{new}>".encode()).replace(
+            f"</{old}>".encode(), f"</{new}>".encode()
+        )
+    assert _get(client, DOWNLOAD, "xml", **RENAMED).content == expected
+    assert b"nan" not in expected and b"10.0" not in expected
 
 
 @pytest.mark.django_db
-def test_columns_rename_json_with_nullable_int_column_fails(client, nullable_resource):
-    # QUIRK: the NaN produced by pandas cannot be rendered by the strict JSON renderer: the request crashes (500).
-    with pytest.raises(ValueError, match="Out of range float values are not JSON compliant"):
-        _get(client, DOWNLOAD, "json", **RENAMED)
+def test_columns_rename_json_with_nullable_int_column_keeps_values(client, nullable_resource):
+    plain = json.loads(_get(client, DOWNLOAD, "json").content)
+    renamed = json.loads(_get(client, DOWNLOAD, "json", **RENAMED).content)
+    assert renamed == [dict(zip("abcde", row.values())) for row in plain]
+    assert [row["b"] for row in renamed] == [10, None, 30]
 
 
 @pytest.mark.django_db

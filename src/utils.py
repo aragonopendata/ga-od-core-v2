@@ -12,7 +12,6 @@ import math
 
 import aiohttp
 import aiohttp.client_exceptions
-import pandas as pd
 import requests
 import requests.auth
 from django.utils.duration import duration_iso_string
@@ -258,18 +257,24 @@ def get_return_list(data: Iterable[dict], format_is_xlsx: bool = False) -> Retur
 
 
 def modify_header(return_list, columns_name, format_is_xlsx=False):
+    """Rename the keys of every record to ``columns_name``, keeping column order and values untouched.
+
+    The names are matched by position against the keys of the first record. The records are replaced in
+    ``return_list`` one by one (the caller owns the list and its dicts), so no second copy of the data is held.
+    ``format_is_xlsx`` is kept for the callers: the rows were already normalized for XLSX with the original
+    names, and values must be the same with and without ``columns``, so nothing is re-applied here.
+    """
     if not return_list:
         return return_list
 
-    if len(columns_name) > 0 and len(columns_name) == len(list(return_list[0].keys())):
-        df = pd.DataFrame(return_list)
-        columns_modification_dict = dict(zip(list(return_list[0].keys()), columns_name))
-        df = df.rename(columns=columns_modification_dict)
-        modified_data = df.to_dict("records")
-        # Re-apply XLSX formatting after pandas processing if needed
-        if format_is_xlsx:
-            modified_data = _fix_null_values_for_xlsx(modified_data, format_is_xlsx=True)
-        return modified_data
+    if len(columns_name) > 0 and len(columns_name) == len(return_list[0]):
+        old_names = list(return_list[0])
+        if old_names == list(columns_name):
+            return return_list
+        mapping = dict(zip(old_names, columns_name))
+        for index, record in enumerate(return_list):
+            return_list[index] = {mapping.get(key, key): value for key, value in record.items()}
+        return return_list
     elif len(columns_name) > 0:
         raise ValidationError(
             "El número de columnas tiene que ser igual al numero de fields o al número total de columnas por defecto",
