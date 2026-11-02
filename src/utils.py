@@ -3,7 +3,6 @@
 import asyncio
 import datetime
 import decimal
-import json
 import logging
 import time
 import uuid
@@ -84,7 +83,9 @@ def serializerJsonEncoder(o):
         return o
 
 
-def _fix_null_values_for_xlsx(data: List[Dict[str, Any]], format_is_xlsx: bool = False) -> List[Dict[str, Any]]:
+def _fix_null_values_for_xlsx(
+    data: List[Dict[str, Any]], format_is_xlsx: bool = False, inplace: bool = False
+) -> List[Dict[str, Any]]:
     """
     Fix null value representation for XLSX compatibility.
 
@@ -98,6 +99,7 @@ def _fix_null_values_for_xlsx(data: List[Dict[str, Any]], format_is_xlsx: bool =
     Args:
         data: List of dictionaries containing the data
         format_is_xlsx: Boolean indicating if the output format is XLSX
+        inplace: reuse the record dicts instead of building copies (lower peak memory); the caller must own them
     """
     if not data:
         return data
@@ -140,7 +142,7 @@ def _fix_null_values_for_xlsx(data: List[Dict[str, Any]], format_is_xlsx: bool =
     # Fix null values and ensure proper types based on field types
     fixed_data = []
     for record in data:
-        fixed_record = {}
+        fixed_record = record if inplace else {}
         for field, value in record.items():
             # Handle None and NaN values (pandas converts None to NaN)
             if value is None or (isinstance(value, float) and math.isnan(value)):
@@ -165,6 +167,76 @@ def _fix_null_values_for_xlsx(data: List[Dict[str, Any]], format_is_xlsx: bool =
     return fixed_data
 
 
+_JSON_SCALARS = (str, int, float, bool, type(None))
+
+
+def _json_key(key):
+    """Reproduce how ``json.dumps`` turns a dict key into a string."""
+    if isinstance(key, str):
+        return str.__str__(key)  # exact str is returned as is; subclasses become plain str
+    if isinstance(key, float):
+        if key != key:
+            return "NaN"
+        if key == math.inf:
+            return "Infinity"
+        if key == -math.inf:
+            return "-Infinity"
+        return float.__repr__(key)
+    if key is True:
+        return "true"
+    if key is False:
+        return "false"
+    if key is None:
+        return "null"
+    if isinstance(key, int):
+        return int.__repr__(key)
+    tp = type(key)
+    name = tp.__name__ if tp.__module__ == "builtins" else f"{tp.__module__}.{tp.__name__}"
+    raise TypeError(f"keys must be str, int, float, bool or None, not {name}")
+
+
+def _to_json_compatible(o, markers=None):
+    """Single-pass equivalent of ``json.loads(json.dumps(o, default=serializerJsonEncoder))``.
+
+    Same values and Python types, without building the intermediate JSON string:
+    non-string keys become strings, tuples become lists, floats (including NaN/inf) are kept as
+    ``json.dumps`` does with ``allow_nan=True``, and objects the encoder cannot handle raise
+    ``ValueError`` (as the JSON round trip does today).
+    """
+    t = type(o)
+    if t is str or t is int or t is float or t is bool or o is None:
+        return o
+    if isinstance(o, str):
+        return str.__str__(o)
+    if isinstance(o, bool):  # pragma: no cover - bool cannot be subclassed
+        return bool(o)
+    if isinstance(o, int):
+        return int(int.__repr__(o))
+    if isinstance(o, float):
+        return float(float.__repr__(o)) if o == o and o not in (math.inf, -math.inf) else float(o)
+    if isinstance(o, (dict, list, tuple)):
+        if markers is None:
+            markers = set()
+        oid = id(o)
+        if oid in markers:
+            raise ValueError("Circular reference detected")
+        markers.add(oid)
+        try:
+            if isinstance(o, dict):
+                result = {}
+                for k, v in o.items():
+                    result[_json_key(k)] = _to_json_compatible(v, markers)
+                return result
+            return [_to_json_compatible(v, markers) for v in o]
+        finally:
+            markers.discard(oid)
+    converted = serializerJsonEncoder(o)
+    if converted is o:
+        # json.dumps would call default() again on the same object and fail the circular check.
+        raise ValueError("Circular reference detected")
+    return _to_json_compatible(converted, markers)
+
+
 def get_return_list(data: Iterable[dict], format_is_xlsx: bool = False) -> ReturnList:
     """From a iterable of dicts convert to Django ReturnList. ReturnList is a object that must be send to render
     by Django."""
@@ -174,10 +246,10 @@ def get_return_list(data: Iterable[dict], format_is_xlsx: bool = False) -> Retur
     #  This is required to fixit and find a better solution. :(
     # a new presonal serializers DjangoJSONEncoder, similar django.core.serializers.json include GeoJson serializar))
 
-    parsed_data = json.loads(json.dumps(list(data), default=serializerJsonEncoder))
+    parsed_data = [_to_json_compatible(row) for row in data]
 
     # Fix null values for XLSX compatibility after JSON serialization
-    parsed_data = _fix_null_values_for_xlsx(parsed_data, format_is_xlsx)
+    parsed_data = _fix_null_values_for_xlsx(parsed_data, format_is_xlsx, inplace=True)
 
     for item in parsed_data:
         return_list.append(item)
