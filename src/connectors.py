@@ -30,6 +30,7 @@ from rest_framework.exceptions import ValidationError
 
 from exceptions import ServiceUnavailable, ErrorCodes
 from log_sanitizer import mask_uri
+from phase_timing import PhaseTimer, phase
 from sqlalchemy import (
     event,
     create_engine,
@@ -775,6 +776,7 @@ def validator_max_excel_allowed(
     sort: List[OrderBy],
     limit: Optional[int] = None,
     offset: int = 0,
+    timer: Optional[PhaseTimer] = None,
 ):
     """Validate if resource  have less rows than allowed."""
 
@@ -788,6 +790,7 @@ def validator_max_excel_allowed(
         sort,
         limit,
         offset,
+        timer=timer,
     )
     return len(data) <= _RESOURCE_MAX_ROWS_EXCEL
 
@@ -839,18 +842,20 @@ def get_GeoJson_resource(
     object_location: Optional[str],
     object_location_schema: Optional[str],
     timeout: Optional[int] = None,
+    timer: Optional[PhaseTimer] = None,
 ) -> Boolean:
     """From resource return if is GeoJson resource
 
     @param cache: if not exists connection save on cache.
     @return: True or False GeoJosn Resource
     """
-    engine = _get_engine(uri, timeout=timeout)
-    model = _get_model(
-        engine=engine,
-        object_location=object_location,
-        object_location_schema=object_location_schema,
-    )
+    with phase(timer, "connect"):
+        engine = _get_engine(uri, timeout=timeout)
+        model = _get_model(
+            engine=engine,
+            object_location=object_location,
+            object_location_schema=object_location_schema,
+        )
     geoJson = False
 
     for column in model.columns:
@@ -874,20 +879,22 @@ def get_resource_data_feature(
     limit: Optional[int] = None,
     offset: int = 0,
     timeout: Optional[int] = None,
+    timer: Optional[PhaseTimer] = None,
 ):
     """data like GeoJSON .Encoding data a variety of geographic data structures."""
     """Data like Feature_Collection_"""
 
     """Not posible to implement GeoFunc.ST_AsGeoJSON(rows) with model, postgis version  is < 3.0 """
 
-    engine = _get_engine(uri, timeout=timeout)
-    session_maker = sessionmaker(bind=engine)
+    with phase(timer, "connect"):
+        engine = _get_engine(uri, timeout=timeout)
+        session_maker = sessionmaker(bind=engine)
 
-    model = _get_model(
-        engine=engine,
-        object_location=object_location,
-        object_location_schema=object_location_schema,
-    )
+        model = _get_model(
+            engine=engine,
+            object_location=object_location,
+            object_location_schema=object_location_schema,
+        )
     column_dict = {column.key: column for column in model.columns}
     # columns = _get_columns(column_dict, fields)
     filters_args = _process_like_filter(like, model)
@@ -914,6 +921,7 @@ def get_resource_data_feature(
     # version of Postgress not allowed _ Postgres and A GeoJson  only _
     # https://www.postgresql.org/docs/9.2/functions-json.html"
     # https://www.postgresql.org/docs/current/functions-json.html -> to convert columns to a json in a query
+    query_started = monotonic()
     try:
         if parsed.scheme in ["mssql+pyodbc"]:
             data = (
@@ -938,6 +946,10 @@ def get_resource_data_feature(
             )
     except sqlalchemy.exc.ProgrammingError as err:
         raise NoObjectError("Object not available.") from err
+    finally:
+        if timer is not None:
+            timer.add("query", monotonic() - query_started)
+    normalize_started = monotonic()
     columnsProperties = _get_columns(column_dict, propertiesField)
 
     # Serializar Feature Collection
@@ -996,6 +1008,8 @@ def get_resource_data_feature(
         featuresTot.append(featureType)
 
     wrapped = {"type": "FeatureCollection", "features": featuresTot}
+    if timer is not None:
+        timer.add("normalize", monotonic() - normalize_started)
 
     session.close()
     engine.dispose()
@@ -1014,6 +1028,7 @@ def get_session_data(
     limit: Optional[int] = None,
     offset: int = 0,
     timeout: Optional[int] = None,
+    timer: Optional[PhaseTimer] = None,
 ):
     """
     Retrieve data from a resource based on the provided parameters.
@@ -1043,15 +1058,16 @@ def get_session_data(
     # cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')
     # mssql no order no limit no offset
 
-    engine = _get_engine(uri, timeout=timeout)
-    session_maker = sessionmaker(bind=engine)
-    parsed = urlparse(uri)
+    with phase(timer, "connect"):
+        engine = _get_engine(uri, timeout=timeout)
+        session_maker = sessionmaker(bind=engine)
+        parsed = urlparse(uri)
 
-    model = _get_model(
-        engine=engine,
-        object_location=object_location,
-        object_location_schema=object_location_schema,
-    )
+        model = _get_model(
+            engine=engine,
+            object_location=object_location,
+            object_location_schema=object_location_schema,
+        )
 
     column_dict = {column.key: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
@@ -1066,6 +1082,7 @@ def get_session_data(
     session = session_maker()
 
     if parsed.scheme in ["mssql+pyodbc"]:
+        mssql_query_started = monotonic()
         try:
             data = (
                 session.query(model)
@@ -1077,6 +1094,8 @@ def get_session_data(
         except sqlalchemy.exc.ProgrammingError as err:
             raise NoObjectError("Object not available.") from err
         finally:
+            if timer is not None:
+                timer.add("query", monotonic() - mssql_query_started)
             session.close()
             engine.dispose()
     else:
@@ -1130,6 +1149,8 @@ def get_session_data(
                 "Query error", code=ErrorCodes.QUERY_ERROR
             ) from err
         finally:
+            if timer is not None:
+                timer.add("query", monotonic() - query_started_at)
             session.close()
             engine.dispose()
 
@@ -1176,6 +1197,7 @@ def get_resource_data(
     limit: Optional[int] = None,
     offset: int = 0,
     timeout: Optional[int] = None,
+    timer: Optional[PhaseTimer] = None,
 ) -> Iterable[Dict[str, Any]]:
     """Return a iterable of dictionaries with data of resource."""
 
@@ -1190,7 +1212,10 @@ def get_resource_data(
         limit,
         offset,
         timeout,
+        timer=timer,
     )
+
+    normalize_started = monotonic()
 
     """ When no typing objects are present, as when executing plain SQL strings, adefault "outputtypehandler" is
     present which will generally return numeric values which specify precision and scale as Python ``Decimal`` objects
@@ -1228,17 +1253,20 @@ def get_resource_data(
         dataTemp.append(tuple(dataTempTuplas))
         dataTempTuplas.clear()
     data = dataTemp
+    if timer is not None:
+        timer.add("normalize", monotonic() - normalize_started)
 
     # FIXME:
     #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
 
-    engine = _get_engine(uri, timeout=timeout)
-    session_maker = sessionmaker(bind=engine)
-    model = _get_model(
-        engine=engine,
-        object_location=object_location,
-        object_location_schema=object_location_schema,
-    )
+    with phase(timer, "connect"):
+        engine = _get_engine(uri, timeout=timeout)
+        session_maker = sessionmaker(bind=engine)
+        model = _get_model(
+            engine=engine,
+            object_location=object_location,
+            object_location_schema=object_location_schema,
+        )
 
     column_dict = {column.key: column for column in model.columns}
     columns = _get_columns(column_dict, fields)

@@ -226,6 +226,11 @@ LOGGING = {
         },
     },
     "handlers": {
+        "timing_console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+            "level": "INFO",
+        },
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
@@ -265,6 +270,13 @@ LOGGING = {
         "gaodcore": {
             "handlers": ["console"],
             "level": os.getenv("DJANGO_LOG_LEVEL", "WARNING"),
+            "propagate": False,
+        },
+        # One INFO line per download/preview request with per-phase timings. It has its own handler so it is
+        # emitted even when DJANGO_LOG_LEVEL stays at WARNING.
+        "gaodcore.download_timing": {
+            "handlers": ["timing_console"],
+            "level": "INFO",
             "propagate": False,
         },
     },

@@ -2,8 +2,10 @@ import csv
 import io
 import json
 import logging
+import resource
 import sys
 import warnings
+from time import monotonic
 from json.decoder import JSONDecodeError
 from typing import Optional, Dict, Any, List, Callable
 
@@ -35,12 +37,14 @@ from connectors import (
     get_GeoJson_resource,
     update_resource_size,
 )
+from phase_timing import PhaseTimer, phase
 from gaodcore.negotations import LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list, modify_header
 from views import APIViewMixin
 
 logger = logging.getLogger(__name__)
+timing_logger = logging.getLogger("gaodcore.download_timing")
 
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
 
@@ -179,6 +183,78 @@ class DownloadView(APIViewMixin):
 
     content_negotiation_class = LegacyContentNegotiation
 
+    def dispatch(self, request, *args, **kwargs):
+        """Run the request and log one ``download_timing`` line with the time spent in each phase."""
+        timer = PhaseTimer()
+        self._timer = timer
+        timer.attrs["endpoint"] = "download" if self.is_download_endpoint(request) else "preview"
+        raw_id = request.GET.get("resource_id") or request.GET.get("view_id") or ""
+        if raw_id.isdigit():
+            timer.attrs["resource_id"] = raw_id
+        try:
+            response = super().dispatch(request, *args, **kwargs)
+        except BaseException:
+            self._log_timing(timer, None)
+            raise
+        if getattr(response, "is_rendered", True):
+            self._log_timing(timer, response)
+        else:
+            # DRF responses are rendered lazily by Django after the view returns; time the render and log after it.
+            original_render = response.render
+
+            def timed_render():
+                started = monotonic()
+                try:
+                    return original_render()
+                finally:
+                    timer.add("render", monotonic() - started)
+                    self._log_timing(timer, response)
+
+            response.render = timed_render
+        return response
+
+    @staticmethod
+    def _log_timing(timer: PhaseTimer, response) -> None:
+        """Emit the single-line phase timing log. Never raises, so it cannot alter the response or the error.
+
+        Fields (seconds, 3 decimals): t_connect = engine creation + reflection, summed over every engine built in the
+        request (``connects`` counts them); t_query = the SQL/API query; t_normalize = value normalization and
+        serialization (including get_return_list and modify_header); t_render = renderer / XLSX / CSV build.
+        ``bytes=-1`` means unknown (streaming response or no response). ``maxrss_kb`` is the worker peak RSS.
+        """
+        if timer.emitted:
+            return
+        timer.emitted = True
+        try:
+            if response is None:
+                status, size = "-", -1
+            else:
+                status = response.status_code
+                if getattr(response, "streaming", False) or not getattr(response, "is_rendered", True):
+                    size = -1
+                else:
+                    size = len(response.content)
+            attrs = timer.attrs
+            timing_logger.info(
+                "download_timing resource_id=%s endpoint=%s format=%s status=%s rows=%s connects=%s "
+                "t_connect=%.3f t_query=%.3f t_normalize=%.3f t_render=%.3f t_total=%.3f bytes=%s maxrss_kb=%s",
+                attrs.get("resource_id", "-"),
+                attrs.get("endpoint", "-"),
+                attrs.get("format", "-"),
+                status,
+                attrs.get("rows", -1),
+                timer.counts.get("connect", 0),
+                timer.times.get("connect", 0.0),
+                timer.times.get("query", 0.0),
+                timer.times.get("normalize", 0.0),
+                timer.times.get("render", 0.0),
+                monotonic() - timer.started_at,
+                size,
+                resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+            )
+        except Exception:  # noqa: BLE001 - diagnostics must never break the request
+            timing_logger.warning("download_timing could not be logged", exc_info=True)
+
     @extend_schema(
         tags=["default"],
         parameters=[
@@ -310,7 +386,9 @@ class DownloadView(APIViewMixin):
         This method allows get serialized public data from databases or APIs of Gobierno de Aragón. If JSON format is
         chosen and any field type returned by the function is "shape", the answer format will be GEOJSON. If data is
         in Geojson format, "fields" and "columns" parameters will not work."""
+        timer = self._timer
         resource_id = self._get_resource_id(request)
+        timer.attrs["resource_id"] = resource_id
         offset = self._get_offset(request)
         limit = self._get_limit(request)
         fields = self._get_fields(request)
@@ -321,6 +399,7 @@ class DownloadView(APIViewMixin):
         sort = self._get_sort(request)
         format = self._get_format(request)
         delimiter = self._get_delimiter(request, format)
+        timer.attrs["format"] = format
 
         resource_config = _get_resource(resource_id=resource_id)
         logger.info("Downloading resource: %s", resource_config)
@@ -338,6 +417,7 @@ class DownloadView(APIViewMixin):
                     offset=offset,
                     fields=fields,
                     sort=sort,
+                    timer=timer,
                 ):
                     raise ValidationError(
                         "An xlsx cannot be generated with so many lines, please request it in another format",
@@ -384,6 +464,7 @@ class DownloadView(APIViewMixin):
                 uri=resource_config.connector_config.uri,
                 object_location=resource_config.object_location,
                 object_location_schema=resource_config.object_location_schema,
+                timer=timer,
             )
         except DriverConnectionError as err:
             logger.warning("Connection is not available. : %s", err)
@@ -428,6 +509,7 @@ class DownloadView(APIViewMixin):
                 offset=offset,
                 fields=fields,
                 sort=sort,
+                timer=timer,
             )
         else:
             logger.info("Downloading resource %s in json format.", resource_id)
@@ -442,31 +524,44 @@ class DownloadView(APIViewMixin):
                 offset=offset,
                 fields=fields,
                 sort=sort,
+                timer=timer,
             )
 
         if format == "xlsx":
-            data = get_return_list(data, format_is_xlsx=True)
+            with phase(timer, "normalize"):
+                data = get_return_list(data, format_is_xlsx=True)
+            timer.attrs["rows"] = len(data)
             update_resource_size(
                 resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
             )
-            response = get_response_xlsx(
-                modify_header(data, columns, format_is_xlsx=True), resource_config
-            )
+            with phase(timer, "normalize"):
+                modified = modify_header(data, columns, format_is_xlsx=True)
+            with phase(timer, "render"):
+                response = get_response_xlsx(modified, resource_config)
         elif format in ("csv", "scsv"):
-            data = get_return_list(data, format_is_xlsx=False)
+            with phase(timer, "normalize"):
+                data = get_return_list(data, format_is_xlsx=False)
+            timer.attrs["rows"] = len(data)
             update_resource_size(
                 resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
             )
-            response = get_response_csv(modify_header(data, columns), delimiter=delimiter)
+            with phase(timer, "normalize"):
+                modified = modify_header(data, columns)
+            with phase(timer, "render"):
+                response = get_response_csv(modified, delimiter=delimiter)
         elif featureCollection:
+            timer.attrs["rows"] = len(data.get("features", ()))
             response = Response(data)
         else:
-            data = get_return_list(data, format_is_xlsx=False)
+            with phase(timer, "normalize"):
+                data = get_return_list(data, format_is_xlsx=False)
+            timer.attrs["rows"] = len(data)
             update_resource_size(
                 resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
             )
 
-            response = Response(modify_header(data, columns))
+            with phase(timer, "normalize"):
+                response = Response(modify_header(data, columns))
 
         if self.is_download_endpoint(request) or format == "xlsx":
             filename = (

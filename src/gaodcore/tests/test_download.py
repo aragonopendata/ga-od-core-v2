@@ -803,3 +803,70 @@ def test_download_body_status_matches_http_status(accept_error, client: Client):
     if accept_error == "text/html":
         return
     assert problem_of(response)["status"] == response.status_code == 400
+
+
+@pytest.fixture
+def timing_caplog():
+    """Capture the timing logger, which does not propagate to root (so the stock caplog cannot see it)."""
+    import logging
+
+    class _ListHandler(logging.Handler):
+        def __init__(self):
+            super().__init__(logging.INFO)
+            self.records = []
+
+        def emit(self, record):
+            self.records.append(record)
+
+    handler = _ListHandler()
+    timing_logger = gaodcore_views.timing_logger
+    timing_logger.addHandler(handler)
+    yield handler
+    timing_logger.removeHandler(handler)
+
+
+def _timing_lines(caplog):
+    return [r.getMessage() for r in caplog.records if r.getMessage().startswith("download_timing ")]
+
+
+def _timing_fields(line):
+    return dict(part.split("=", 1) for part in line.split()[1:])
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("fmt", ["json", "csv", "xlsx"])
+def test_download_timing_log(endpoint: str, fmt: str, client: Client, full_example, timing_caplog):
+    caplog = timing_caplog
+    response = client.get(
+        endpoint,
+        {"resource_id": full_example.resources.table.id, "formato": fmt, "sort": ["id"]},
+    )
+    assert response.status_code == 200
+
+    lines = _timing_lines(caplog)
+    assert len(lines) == 1
+    fields = _timing_fields(lines[0])
+    assert fields["resource_id"] == str(full_example.resources.table.id)
+    assert fields["endpoint"] == endpoint.rsplit("/", 1)[1]
+    assert fields["format"] == fmt
+    assert fields["status"] == "200"
+    assert fields["rows"] == "2"
+    assert int(fields["connects"]) >= 1
+    for key in ("t_connect", "t_query", "t_normalize", "t_render", "t_total"):
+        assert float(fields[key]) >= 0
+    assert fields["bytes"] == str(len(response.content))
+    assert int(fields["maxrss_kb"]) > 0
+
+
+@pytest.mark.django_db
+def test_download_timing_log_on_error(client: Client, full_example, timing_caplog):
+    caplog = timing_caplog
+    response = client.get("/GA_OD_Core/download", {"resource_id": full_example.resources.table.id, "formato": "dj"})
+    assert response.status_code == 400
+
+    lines = _timing_lines(caplog)
+    assert len(lines) == 1
+    fields = _timing_fields(lines[0])
+    assert fields["status"] == "400"
+    assert fields["rows"] == "-1"
+    assert fields["bytes"] == str(len(response.content))
