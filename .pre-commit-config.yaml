@@ -1,3 +1,5 @@
+# Output snapshots are compared byte for byte: no whitespace or end-of-file fixes.
+exclude: ^src/gaodcore/tests/fixtures_output/
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
