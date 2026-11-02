@@ -181,7 +181,8 @@ class DownloadView(APIViewMixin):
     response type is selected and the view has a shape field the response will be in GEOJSON format"""
 
     _PREVIEW_LIMIT = 1000
-    _DOWNLOAD_ENDPOINT = ("/GA_OD_Core/download", "/GA_OD_Core/download")
+    # Set with ``as_view(is_preview=True)`` in urls.py; independent of the URL prefix and the query string.
+    is_preview = False
 
     content_negotiation_class = LegacyContentNegotiation
 
@@ -571,12 +572,7 @@ class DownloadView(APIViewMixin):
         )
 
     def is_download_endpoint(self, request: Request):
-        return any(
-            (
-                request.get_full_path().startswith(endpoint)
-                for endpoint in self._DOWNLOAD_ENDPOINT
-            )
-        )
+        return not self.is_preview
 
     @staticmethod
     def _get_fields(request: Request):
@@ -694,10 +690,6 @@ class DownloadView(APIViewMixin):
                 raise ValidationError(
                     "Value of limit is not a number.", ErrorCodes.NOT_A_NUMBER
                 ) from err
-
-            if request.get_full_path().startswith("/preview"):
-                if limit > self._PREVIEW_LIMIT:
-                    limit = self._PREVIEW_LIMIT
         elif page_size:
             try:
                 limit = int(page_size)
@@ -706,9 +698,9 @@ class DownloadView(APIViewMixin):
                     "Value of _pageSize is not a number.", ErrorCodes.NOT_A_NUMBER
                 ) from err
 
-            if request.get_full_path().startswith("/preview"):
-                if page_size > self._PREVIEW_LIMIT:
-                    limit = self._PREVIEW_LIMIT
+        if self.is_preview and (limit is None or limit <= 0 or limit > self._PREVIEW_LIMIT):
+            # A preview is always bounded: no limit, zero, negative or too large end up at the cap.
+            limit = self._PREVIEW_LIMIT
 
         return limit
 
