@@ -78,7 +78,6 @@ _SQLALCHEMY_MAP_TYPE = {
     datetime: DateTime,
     time: Time,
 }
-_RESOURCE_MAX_ROWS_EXCEL = 1048576
 
 # TODO: move to config.yaml (e.g. common_config.http_connector_timeout_seconds)
 DEFAULT_HTTP_TIMEOUT_SECONDS = 10
@@ -843,37 +842,6 @@ def validate_resource_mssql(
     engine.dispose()
 
     return (dict(zip([column.key for column in columns], row)) for row in data)
-
-
-def validator_max_excel_allowed(
-    uri: str,
-    object_location: Optional[str],
-    object_location_schema: Optional[str],
-    filters: Dict[str, str],
-    like: Union[str, Dict],
-    fields: List[str],
-    sort: List[OrderBy],
-    limit: Optional[int] = None,
-    offset: int = 0,
-    timer: Optional[PhaseTimer] = None,
-    resource: Optional[OpenResource] = None,
-):
-    """Validate if resource  have less rows than allowed."""
-
-    data = get_session_data(
-        uri,
-        object_location,
-        object_location_schema,
-        filters,
-        like,
-        fields,
-        sort,
-        limit,
-        offset,
-        timer=timer,
-        resource=resource,
-    )
-    return len(data) <= _RESOURCE_MAX_ROWS_EXCEL
 
 
 def _validate_max_rows_allowed(

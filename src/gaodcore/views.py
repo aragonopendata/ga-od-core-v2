@@ -33,7 +33,6 @@ from connectors import (
     FieldNoExistsError,
     SortFieldNoExistsError,
     MimeTypeError,
-    validator_max_excel_allowed,
     TooManyRowsErrorExcel,
     get_resource_data_feature,
     get_GeoJson_resource,
@@ -456,37 +455,11 @@ class DownloadView(APIViewMixin):
                 logger.info(
                     "Downloading resource in xlsx format: %s", resource_config
                 )
-                try:
-                    if not validator_max_excel_allowed(
-                        uri=resource_config.connector_config.uri,
-                        object_location=resource_config.object_location,
-                        object_location_schema=resource_config.object_location_schema,
-                        filters=filters,
-                        like=like,
-                        limit=limit,
-                        offset=offset,
-                        fields=fields,
-                        sort=sort,
-                        timer=timer,
-                        resource=shared,
-                    ):
-                        raise ValidationError(
-                            "An xlsx cannot be generated with so many lines, please request it in another format",
-                            ErrorCodes.TOO_MANY_ROWS,
-                        ) from TooManyRowsErrorExcel
-                except FieldNoExistsError as err:
-                    # The Excel pre-check queries the resource too, so a bad "fields" or
-                    # "sort" must fail the same way it does for every other format.
-                    raise ValidationError(str(err), ErrorCodes.INVALID_FIELD) from err
-                except SortFieldNoExistsError as err:
-                    raise ValidationError(str(err), ErrorCodes.INVALID_SORT) from err
-                except NoObjectError as err:
-                    logger.warning(
-                        "Object is not available during Excel validation: %s", err
-                    )
-                    raise ServiceUnavailable(
-                        "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
-                    ) from err
+                # One query, bounded to max + 1 rows: seeing one row over the maximum is enough to reject
+                # the request without reading the whole resource. A user limit <= max never gets rejected.
+                limit = _RESOURCE_MAX_ROWS_EXCEL + 1 if limit is None else min(
+                    limit, _RESOURCE_MAX_ROWS_EXCEL + 1
+                )
 
             reourceGeojon = get_GeoJson_resource(
                 uri=resource_config.connector_config.uri,
@@ -533,6 +506,14 @@ class DownloadView(APIViewMixin):
                 )
 
         if format == "xlsx":
+            # Reject before normalizing, serializing or rendering a file that will not be returned.
+            # MSSQL ignores limit/offset in SQL for now, so the row count is what decides there.
+            data = list(data)
+            if len(data) > _RESOURCE_MAX_ROWS_EXCEL:
+                raise ValidationError(
+                    "An xlsx cannot be generated with so many lines, please request it in another format",
+                    ErrorCodes.TOO_MANY_ROWS,
+                ) from TooManyRowsErrorExcel
             with phase(timer, "normalize"):
                 data = get_return_list(data, format_is_xlsx=True)
             timer.attrs["rows"] = len(data)

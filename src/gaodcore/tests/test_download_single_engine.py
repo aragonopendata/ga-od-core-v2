@@ -162,3 +162,111 @@ def test_http_resource_is_downloaded_once_per_request(fmt, client):
 
     assert response.status_code == 200
     assert len(requests) == 1
+
+
+# --- XLSX: a single query bounded to max + 1 rows ---------------------------------------------------------------
+
+@pytest.fixture
+def many_rows_uri(tmp_path):
+    uri = f"sqlite:///{tmp_path / 'many.db'}"
+    engine = create_engine(uri)
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE things (id INTEGER PRIMARY KEY, name TEXT)"))
+        conn.execute(
+            text("INSERT INTO things (id, name) VALUES (:id, :name)"),
+            [{"id": i, "name": f"n{i}"} for i in range(1, 11)],
+        )
+    engine.dispose()
+    return uri
+
+
+@pytest.fixture
+def select_counter():
+    """Record the SELECT statements run on the resource table (reflection PRAGMAs excluded)."""
+    from sqlalchemy import event
+
+    statements = []
+    real_get_engine = connectors._get_engine
+
+    def get_engine(*args, **kwargs):
+        engine = real_get_engine(*args, **kwargs)
+
+        @event.listens_for(engine, "before_cursor_execute")
+        def _record(conn, cursor, statement, parameters, context, executemany):
+            if statement.lstrip().upper().startswith("SELECT") and "FROM things" in statement:
+                statements.append((statement, parameters))
+
+        return engine
+
+    with patch.object(connectors, "_get_engine", side_effect=get_engine):
+        yield statements
+
+
+def _xlsx_get(client, uri, **params):
+    with (
+        patch.object(gaodcore_views, "_get_resource", return_value=_resource_config(uri)),
+        patch.object(gaodcore_views, "_RESOURCE_MAX_ROWS_EXCEL", 5),
+    ):
+        return client.get(ENDPOINT, {"resource_id": 1, "formato": "xlsx", "sort": ["id"], **params})
+
+
+@pytest.mark.django_db
+def test_xlsx_above_maximum_is_rejected_with_one_query(client, many_rows_uri, select_counter):
+    response = _xlsx_get(client, many_rows_uri)
+
+    assert response.status_code == 400
+    assert response.json() == {
+        "type": "https://opendata.aragon.es/problems/validation-error",
+        "title": "Validation error",
+        "status": 400,
+        "detail": "The request contains invalid fields.",
+        "error_code": "VALIDATION_ERROR",
+        "errors": {
+            "non_field_errors": [
+                {
+                    "message": "An xlsx cannot be generated with so many lines, please request it in another format",
+                    "code": "TOO_MANY_ROWS",
+                }
+            ]
+        },
+    }
+    assert len(select_counter) == 1
+    assert 6 in select_counter[0][1]  # LIMIT max + 1
+
+
+@pytest.mark.django_db
+def test_xlsx_above_maximum_is_rejected_before_normalizing(client, many_rows_uri):
+    with patch.object(gaodcore_views, "get_return_list") as normalize:
+        response = _xlsx_get(client, many_rows_uri)
+
+    assert response.status_code == 400
+    normalize.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_xlsx_below_maximum_returns_file_with_one_query(client, many_rows_uri, select_counter):
+    response = _xlsx_get(client, many_rows_uri, limit=5)
+
+    assert response.status_code == 200, response.content
+    assert "spreadsheetml" in response["Content-Type"]
+    assert len(select_counter) == 1
+
+
+@pytest.mark.django_db
+def test_xlsx_limit_above_maximum_is_capped_and_rejected(client, many_rows_uri, select_counter):
+    response = _xlsx_get(client, many_rows_uri, limit=8)
+
+    assert response.status_code == 400
+    assert "TOO_MANY_ROWS" in response.content.decode()
+    assert len(select_counter) == 1
+    assert 6 in select_counter[0][1] and 8 not in select_counter[0][1]
+
+
+@pytest.mark.django_db
+def test_xlsx_offset_counts_only_rows_after_the_offset(client, many_rows_uri):
+    # 10 rows, offset 5 -> 5 rows, exactly the maximum: allowed (same as before the change).
+    ok = _xlsx_get(client, many_rows_uri, offset=5)
+    assert ok.status_code == 200, ok.content
+    # offset 4 -> 6 rows: rejected.
+    rejected = _xlsx_get(client, many_rows_uri, offset=4)
+    assert rejected.status_code == 400
