@@ -101,3 +101,42 @@ def test_download_limit_is_not_capped(client, big_resource):
 def test_preview_not_a_number_still_errors(client, big_resource):
     response = client.get(PREVIEW, {"resource_id": 1, "limit": "abc"})
     assert response.status_code == 400
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("endpoint", [DOWNLOAD, PREVIEW])
+def test_accept_html_without_format_returns_json_not_browsable_api(client, big_resource, endpoint):
+    response = client.get(endpoint, {"resource_id": 1, "limit": 5}, HTTP_ACCEPT="text/html")
+    assert response.status_code == 200
+    assert "text/html" not in response["Content-Type"]
+    assert "application/json" in response["Content-Type"]
+    assert len(json.loads(response.content)) == 5
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("endpoint", [DOWNLOAD, PREVIEW])
+def test_explicit_formats_unchanged(client, big_resource, endpoint):
+    csv_response = client.get(f"{endpoint}.csv", {"resource_id": 1, "limit": 3})
+    assert csv_response.status_code == 200
+    assert "text/csv" in csv_response["Content-Type"]
+    assert csv_response.content.decode().splitlines()[0].replace('"', "") in ("id,name", "name,id")
+    xlsx_response = client.get(endpoint, {"resource_id": 1, "limit": 3, "format": "xlsx"})
+    assert xlsx_response.status_code == 200
+    assert "spreadsheetml" in xlsx_response["Content-Type"]
+
+
+def test_public_data_views_do_not_use_browsable_api():
+    from rest_framework.renderers import BrowsableAPIRenderer
+    from rest_framework.settings import api_settings
+
+    expected = [r for r in api_settings.DEFAULT_RENDERER_CLASSES if r is not BrowsableAPIRenderer]
+    for view in (gaodcore_views.DownloadView, gaodcore_views.ShowColumnsView, gaodcore_views.ResourcesView):
+        assert list(view.renderer_classes) == expected
+    assert BrowsableAPIRenderer in api_settings.DEFAULT_RENDERER_CLASSES
+
+
+@pytest.mark.django_db
+def test_swagger_ui_still_renders_html(client):
+    response = client.get("/GA_OD_Core/ui/")
+    assert response.status_code == 200
+    assert "text/html" in response["Content-Type"]

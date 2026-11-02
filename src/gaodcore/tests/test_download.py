@@ -8,8 +8,16 @@ from types import SimpleNamespace
 import pytest
 from django.test.client import Client
 
-from conftest import validate_error, compare_files, problem_of, field_messages, field_codes
+from conftest import validate_error as _validate_error, compare_files, problem_of, field_messages, field_codes
 from gaodcore import views as gaodcore_views
+
+
+def validate_error(response, error_description, mime_type, **kwargs):
+    """Shared error contract; the Browsable API is not offered here, so text/html gets the default problem JSON."""
+    if mime_type == "text/html":
+        mime_type = "application/json"
+    return _validate_error(response, error_description, mime_type, **kwargs)
+
 
 
 def test_xlsx_hyperlink_limit_logs_resource_context(monkeypatch):
@@ -653,8 +661,8 @@ def test_download_error_is_never_serialized_as_data(accept_error, client: Client
     assert response.status_code == 400
 
     if accept_error == "text/html":
-        # The browsable API is the one consumer that still gets HTML.
-        assert response["Content-Type"].startswith("text/html")
+        # The Browsable API is not offered on public data views: no HTML, default renderer problem document.
+        assert response["Content-Type"] == "application/problem+json"
         return
 
     assert response["Content-Type"] == "application/problem+json"

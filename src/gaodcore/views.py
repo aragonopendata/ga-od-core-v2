@@ -19,8 +19,10 @@ from drf_spectacular.types import OpenApiTypes
 from rest_framework.exceptions import ValidationError
 
 from exceptions import ServiceUnavailable, ErrorCodes
+from rest_framework.renderers import BrowsableAPIRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.settings import api_settings
 from rest_framework.utils.serializer_helpers import ReturnList
 
 from connectors import (
@@ -40,7 +42,7 @@ from connectors import (
     open_resource,
 )
 from phase_timing import PhaseTimer, phase
-from gaodcore.negotations import LegacyContentNegotiation
+from gaodcore.negotations import HtmlFallbackContentNegotiation, LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list, modify_header
 from views import APIViewMixin
@@ -49,6 +51,13 @@ logger = logging.getLogger(__name__)
 timing_logger = logging.getLogger("gaodcore.download_timing")
 
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
+
+
+# Same renderers and order as the global DRF setting, minus the Browsable API: a browser asking for text/html would
+# otherwise get the whole dataset rendered as HTML (CPU spikes / OOM). Explicit formats are unaffected.
+PUBLIC_DATA_RENDERER_CLASSES = tuple(
+    renderer for renderer in api_settings.DEFAULT_RENDERER_CLASSES if renderer is not BrowsableAPIRenderer
+)
 
 
 def _get_data_public_error(func: Callable, *args, **kwargs) -> List[Dict[str, Any]]:
@@ -185,6 +194,7 @@ class DownloadView(APIViewMixin):
     is_preview = False
 
     content_negotiation_class = LegacyContentNegotiation
+    renderer_classes = PUBLIC_DATA_RENDERER_CLASSES
 
     def dispatch(self, request, *args, **kwargs):
         """Run the request and log one ``download_timing`` line with the time spent in each phase."""
@@ -844,6 +854,9 @@ class ShowColumnsView(XLSXFileMixin, APIViewMixin):
     """This view allows to get datatype of each column from a resource. If the view has a shape file download and
     preview endpoints' response will be in geojson format if JSON response type is selected-"""
 
+    content_negotiation_class = HtmlFallbackContentNegotiation
+    renderer_classes = PUBLIC_DATA_RENDERER_CLASSES
+
     @staticmethod
     @extend_schema(
         tags=["default"],
@@ -885,6 +898,9 @@ class ResourcesView(XLSXFileMixin, APIViewMixin):  # pylint: disable=too-few-pub
     """
     Devuelve el listado de todas las vistas que se pueden consultar.
     This view allow to get a list of public resources."""
+
+    content_negotiation_class = HtmlFallbackContentNegotiation
+    renderer_classes = PUBLIC_DATA_RENDERER_CLASSES
 
     @staticmethod
     @extend_schema(tags=["default"])

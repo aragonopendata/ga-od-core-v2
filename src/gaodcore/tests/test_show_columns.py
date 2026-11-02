@@ -1,7 +1,15 @@
 from django.test import Client
 import pytest
 
-from conftest import validate_error
+from conftest import validate_error as _validate_error
+
+
+def validate_error(response, error_description, mime_type, **kwargs):
+    """Shared error contract; the Browsable API is not offered here, so text/html gets the default problem JSON."""
+    if mime_type == "text/html":
+        mime_type = "application/json"
+    return _validate_error(response, error_description, mime_type, **kwargs)
+
 
 
 @pytest.mark.xfail(reason="This test fails the case [api-json]")
