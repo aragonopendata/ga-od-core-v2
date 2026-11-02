@@ -1033,6 +1033,36 @@ def get_session_data(
     timeout: Optional[int] = None,
     timer: Optional[PhaseTimer] = None,
 ):
+    """Retrieve the rows of a resource. See ``_get_session_data_and_columns``."""
+    data, _column_names = _get_session_data_and_columns(
+        uri,
+        object_location,
+        object_location_schema,
+        filters,
+        like,
+        fields,
+        sort,
+        limit,
+        offset,
+        timeout,
+        timer,
+    )
+    return data
+
+
+def _get_session_data_and_columns(
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    filters: Dict[str, Union[str, dict]],
+    like: Union[str, Dict],
+    fields: List[str],
+    sort: List[OrderBy],
+    limit: Optional[int] = None,
+    offset: int = 0,
+    timeout: Optional[int] = None,
+    timer: Optional[PhaseTimer] = None,
+):
     """
     Retrieve data from a resource based on the provided parameters.
 
@@ -1051,7 +1081,8 @@ def get_session_data(
     @param limit: An optional limit on the number of rows to return.
     @param offset: The number of rows to skip before starting to return rows.
 
-    @return: An iterable of tuples containing the data of the resource.
+    @return: A tuple ``(data, column_names)``: the rows of the resource and the names of the selected columns, in
+             the order of the rows' values. The names are known even when there are no rows.
 
     @raises sqlalchemy.exc.CompileError: If the query compilation fails.
     @raises sqlalchemy.exc.ProgrammingError: If there is a programming error in the query.
@@ -1157,7 +1188,7 @@ def get_session_data(
             session.close()
             engine.dispose()
 
-    return data
+    return data, [column.key for column in columns]
 
 
 def _process_filters_oracle_dates(filters):
@@ -1204,7 +1235,7 @@ def get_resource_data(
 ) -> Iterable[Dict[str, Any]]:
     """Return a iterable of dictionaries with data of resource."""
 
-    data = get_session_data(
+    data, column_names = _get_session_data_and_columns(
         uri,
         object_location,
         object_location_schema,
@@ -1259,25 +1290,7 @@ def get_resource_data(
     if timer is not None:
         timer.add("normalize", monotonic() - normalize_started)
 
-    # FIXME:
-    #  check https://docs.sqlalchemy.org/en/13/orm/query.html#sqlalchemy.orm.query.Query.yield_per
-
-    with phase(timer, "connect"):
-        engine = _get_engine(uri, timeout=timeout)
-        session_maker = sessionmaker(bind=engine)
-        model = _get_model(
-            engine=engine,
-            object_location=object_location,
-            object_location_schema=object_location_schema,
-        )
-
-    column_dict = {column.key: column for column in model.columns}
-    columns = _get_columns(column_dict, fields)
-    session = session_maker()
-    session.close()
-    engine.dispose()
-
-    return (dict(zip([column.key for column in columns], row)) for row in data)
+    return (dict(zip(column_names, row)) for row in data)
 
 
 def update_resource_size(resource_id, registries, size):
