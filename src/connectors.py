@@ -736,6 +736,29 @@ def _acquire_resource(
     )
 
 
+@contextlib.contextmanager
+def _owned_resource(
+    resource: Optional[OpenResource],
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int],
+    timer: Optional[PhaseTimer],
+):
+    """Yield a resource and dispose its engine on exit only when it was created here.
+
+    A shared resource passed in by the caller is never disposed: its owner (``open_resource``) does it.
+    """
+    resource, owned = _acquire_resource(
+        resource, uri, object_location, object_location_schema, timeout, timer
+    )
+    try:
+        yield resource
+    finally:
+        if owned:
+            resource.engine.dispose()
+
+
 def get_resource_columns(
     uri: str,
     object_location: Optional[str],
@@ -819,27 +842,28 @@ def validate_resource_mssql(
     """Validate if resource is available . Return data of resource, a iterable of
     dictionaries."""
     engine = _get_engine(uri)
-    session_maker = sessionmaker(bind=engine)
+    try:
+        session_maker = sessionmaker(bind=engine)
 
-    model = _get_model(
-        engine=engine,
-        object_location=object_location,
-        object_location_schema=object_location_schema,
-    )
+        model = _get_model(
+            engine=engine,
+            object_location=object_location,
+            object_location_schema=object_location_schema,
+        )
 
-    column_dict = {column.key: column for column in model.columns}
-    columns = _get_columns(column_dict, [])
-    session = session_maker()
-
-    data = (
-        session.query(model)
-        .order_by(*_get_sort_methods(column_dict, []))
-        .with_entities(*[model.c[col.key].label(col.key) for col in model.columns])
-        .all()
-    )
-
-    session.close()
-    engine.dispose()
+        column_dict = {column.key: column for column in model.columns}
+        columns = _get_columns(column_dict, [])
+        with session_maker() as session:
+            data = (
+                session.query(model)
+                .order_by(*_get_sort_methods(column_dict, []))
+                .with_entities(
+                    *[model.c[col.key].label(col.key) for col in model.columns]
+                )
+                .all()
+            )
+    finally:
+        engine.dispose()
 
     return (dict(zip([column.key for column in columns], row)) for row in data)
 
@@ -852,25 +876,25 @@ def _validate_max_rows_allowed(
 ):
     """Validate if resource is aviable."""
     engine = _get_engine(uri, timeout=timeout)
-    session_maker = sessionmaker(bind=engine)
-
-    model = _get_model(
-        engine=engine,
-        object_location=object_location,
-        object_location_schema=object_location_schema,
-    )
-
-    session = session_maker()
     try:
-        session.query(
-            *[model.c[col.key].label(col.key) for col in model.columns]
-        ).count()
-    except sqlalchemy.exc.ProgrammingError as err:
-        logging.exception("Object not available.")
-        raise NoObjectError("Object not available.") from err
+        session_maker = sessionmaker(bind=engine)
 
-    session.close()
-    engine.dispose()
+        model = _get_model(
+            engine=engine,
+            object_location=object_location,
+            object_location_schema=object_location_schema,
+        )
+
+        with session_maker() as session:
+            try:
+                session.query(
+                    *[model.c[col.key].label(col.key) for col in model.columns]
+                ).count()
+            except sqlalchemy.exc.ProgrammingError as err:
+                logging.exception("Object not available.")
+                raise NoObjectError("Object not available.") from err
+    finally:
+        engine.dispose()
 
 
 # Add feature to sanitize text include control characters
@@ -899,20 +923,16 @@ def get_GeoJson_resource(
     @param resource: shared engine and model; when omitted one is created and disposed here.
     @return: True or False GeoJosn Resource
     """
-    resource, owned = _acquire_resource(
-        resource, uri, object_location, object_location_schema, timeout, timer
-    )
     geoJson = False
 
-    try:
+    with _owned_resource(
+        resource, uri, object_location, object_location_schema, timeout, timer
+    ) as resource:
         for column in resource.model.columns:
             if str(column.type).startswith("geometry") or str(column.type).startswith(
                 "geography"
             ):
                 geoJson = True
-    finally:
-        if owned:
-            resource.engine.dispose()
     return geoJson
 
 
@@ -935,16 +955,43 @@ def get_resource_data_feature(
 
     """Not posible to implement GeoFunc.ST_AsGeoJSON(rows) with model, postgis version  is < 3.0 """
 
-    resource, owned = _acquire_resource(
+    with _owned_resource(
         resource, uri, object_location, object_location_schema, timeout, timer
-    )
+    ) as resource:
+        return _build_feature_collection(
+            resource, uri, filters, like, sort, limit, offset, timer
+        )
+
+
+def _build_feature_collection(
+    resource: OpenResource,
+    uri: str,
+    filters: Dict[str, str],
+    like: Union[str, Dict],
+    sort: List[OrderBy],
+    limit: Optional[int],
+    offset: int,
+    timer: Optional[PhaseTimer],
+):
+    """Query and normalize the rows as a FeatureCollection. The engine is not disposed here."""
     engine, model = resource.engine, resource.model
     session_maker = sessionmaker(bind=engine)
     column_dict = {column.key: column for column in model.columns}
     # columns = _get_columns(column_dict, fields)
     filters_args = _process_like_filter(like, model)
+    # The session is closed on every path, including a failed query or normalization.
     session = session_maker()
+    try:
+        return _query_feature_collection(
+            session, model, uri, column_dict, filters, filters_args, sort, limit, offset, timer
+        )
+    finally:
+        session.close()
 
+
+def _query_feature_collection(
+    session, model, uri, column_dict, filters, filters_args, sort, limit, offset, timer
+):
     parsed = urlparse(uri)
 
     # Get Column Geom - other fields in Properties
@@ -1056,10 +1103,6 @@ def get_resource_data_feature(
     if timer is not None:
         timer.add("normalize", monotonic() - normalize_started)
 
-    session.close()
-    if owned:
-        engine.dispose()
-
     return wrapped
 
 
@@ -1140,9 +1183,28 @@ def _get_session_data_and_columns(
     # cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')
     # mssql no order no limit no offset
 
-    resource, owned = _acquire_resource(
+    with _owned_resource(
         resource, uri, object_location, object_location_schema, timeout, timer
-    )
+    ) as resource:
+        return _query_session_data(
+            resource, uri, object_location, object_location_schema, filters, like, fields, sort, limit, offset, timer
+        )
+
+
+def _query_session_data(
+    resource: OpenResource,
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    filters,
+    like,
+    fields,
+    sort,
+    limit,
+    offset,
+    timer,
+):
+    """Run the query on a shared resource, closing the session on every path. The engine is not disposed here."""
     engine, model = resource.engine, resource.model
     session_maker = sessionmaker(bind=engine)
     parsed = urlparse(uri)
@@ -1175,8 +1237,6 @@ def _get_session_data_and_columns(
             if timer is not None:
                 timer.add("query", monotonic() - mssql_query_started)
             session.close()
-            if owned:
-                engine.dispose()
     else:
         query_started_at = monotonic()
         try:
@@ -1231,8 +1291,6 @@ def _get_session_data_and_columns(
             if timer is not None:
                 timer.add("query", monotonic() - query_started_at)
             session.close()
-            if owned:
-                engine.dispose()
 
     return data, [column.key for column in columns]
 
