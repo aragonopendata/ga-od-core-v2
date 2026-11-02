@@ -1,3 +1,4 @@
+import contextlib
 import csv
 import io
 import json
@@ -37,6 +38,7 @@ from connectors import (
     get_resource_data_feature,
     get_GeoJson_resource,
     update_resource_size,
+    open_resource,
 )
 from phase_timing import PhaseTimer, phase
 from gaodcore.negotations import LegacyContentNegotiation
@@ -258,6 +260,43 @@ class DownloadView(APIViewMixin):
         except Exception:  # noqa: BLE001 - diagnostics must never break the request
             timing_logger.warning("download_timing could not be logged", exc_info=True)
 
+    def _open_shared_resource(
+        self, stack, resource_config, resource_id, timer, is_xlsx: bool
+    ):
+        """Open the resource (engine + reflected table) on ``stack`` and map connection errors to HTTP errors."""
+        context = " during Excel validation" if is_xlsx else ""
+        try:
+            return stack.enter_context(
+                open_resource(
+                    uri=resource_config.connector_config.uri,
+                    object_location=resource_config.object_location,
+                    object_location_schema=resource_config.object_location_schema,
+                    timer=timer,
+                )
+            )
+        except DriverConnectionError as err:
+            logger.warning("Connection is not available%s: %s", context, err)
+            logger.warning(
+                "Resource: %s - Location: %s - Schema: %s",
+                resource_id,
+                resource_config.object_location,
+                resource_config.object_location_schema,
+            )
+            raise ServiceUnavailable(
+                "Connection is not available.", code=ErrorCodes.CONNECTION_UNAVAILABLE
+            ) from err
+        except NoObjectError as err:
+            logger.warning("Object is not available%s: %s", context, err)
+            logger.warning(
+                "Resource: %s - Location: %s - Schema: %s",
+                resource_id,
+                resource_config.object_location,
+                resource_config.object_location_schema,
+            )
+            raise ServiceUnavailable(
+                "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
+            ) from err
+
     @extend_schema(
         tags=["default"],
         parameters=[
@@ -407,10 +446,63 @@ class DownloadView(APIViewMixin):
         resource_config = _get_resource(resource_id=resource_id)
         logger.info("Downloading resource: %s", resource_config)
 
-        if format == "xlsx":
-            logger.info("Downloading resource in xlsx format: %s", resource_config)
-            try:
-                if not validator_max_excel_allowed(
+        with contextlib.ExitStack() as stack:
+            # One engine and one reflected table per request, shared by every step below
+            # and disposed once when the stack closes, also on errors.
+            shared = self._open_shared_resource(
+                stack, resource_config, resource_id, timer, format == "xlsx"
+            )
+            if format == "xlsx":
+                logger.info(
+                    "Downloading resource in xlsx format: %s", resource_config
+                )
+                try:
+                    if not validator_max_excel_allowed(
+                        uri=resource_config.connector_config.uri,
+                        object_location=resource_config.object_location,
+                        object_location_schema=resource_config.object_location_schema,
+                        filters=filters,
+                        like=like,
+                        limit=limit,
+                        offset=offset,
+                        fields=fields,
+                        sort=sort,
+                        timer=timer,
+                        resource=shared,
+                    ):
+                        raise ValidationError(
+                            "An xlsx cannot be generated with so many lines, please request it in another format",
+                            ErrorCodes.TOO_MANY_ROWS,
+                        ) from TooManyRowsErrorExcel
+                except FieldNoExistsError as err:
+                    # The Excel pre-check queries the resource too, so a bad "fields" or
+                    # "sort" must fail the same way it does for every other format.
+                    raise ValidationError(str(err), ErrorCodes.INVALID_FIELD) from err
+                except SortFieldNoExistsError as err:
+                    raise ValidationError(str(err), ErrorCodes.INVALID_SORT) from err
+                except NoObjectError as err:
+                    logger.warning(
+                        "Object is not available during Excel validation: %s", err
+                    )
+                    raise ServiceUnavailable(
+                        "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
+                    ) from err
+
+            reourceGeojon = get_GeoJson_resource(
+                uri=resource_config.connector_config.uri,
+                object_location=resource_config.object_location,
+                object_location_schema=resource_config.object_location_schema,
+                timer=timer,
+                resource=shared,
+            )
+            featureCollection = bool(reourceGeojon and format == "json")
+            if featureCollection:
+                logger.info(
+                    "Downloading resource %s in geojson format. FeatureCollection",
+                    resource_id,
+                )
+                data = _get_data_public_error(
+                    get_resource_data_feature,
                     uri=resource_config.connector_config.uri,
                     object_location=resource_config.object_location,
                     object_location_schema=resource_config.object_location_schema,
@@ -421,114 +513,24 @@ class DownloadView(APIViewMixin):
                     fields=fields,
                     sort=sort,
                     timer=timer,
-                ):
-                    raise ValidationError(
-                        "An xlsx cannot be generated with so many lines, please request it in another format",
-                        ErrorCodes.TOO_MANY_ROWS,
-                    ) from TooManyRowsErrorExcel
-            except FieldNoExistsError as err:
-                # The Excel pre-check queries the resource too, so a bad "fields" or
-                # "sort" must fail the same way it does for every other format.
-                raise ValidationError(str(err), ErrorCodes.INVALID_FIELD) from err
-            except SortFieldNoExistsError as err:
-                raise ValidationError(str(err), ErrorCodes.INVALID_SORT) from err
-            except DriverConnectionError as err:
-                logger.warning(
-                    "Connection is not available during Excel validation: %s", err
+                    resource=shared,
                 )
-                logger.warning(
-                    "Resource: %s - Location: %s - Schema: %s",
-                    resource_id,
-                    resource_config.object_location,
-                    resource_config.object_location_schema,
+            else:
+                logger.info("Downloading resource %s in json format.", resource_id)
+                data = _get_data_public_error(
+                    get_resource_data,
+                    uri=resource_config.connector_config.uri,
+                    object_location=resource_config.object_location,
+                    object_location_schema=resource_config.object_location_schema,
+                    filters=filters,
+                    like=like,
+                    limit=limit,
+                    offset=offset,
+                    fields=fields,
+                    sort=sort,
+                    timer=timer,
+                    resource=shared,
                 )
-                raise ServiceUnavailable(
-                    "Connection is not available.",
-                    code=ErrorCodes.CONNECTION_UNAVAILABLE,
-                ) from err
-            except NoObjectError as err:
-                logger.warning(
-                    "Object is not available during Excel validation: %s", err
-                )
-                logger.warning(
-                    "Resource: %s - Location: %s - Schema: %s",
-                    resource_id,
-                    resource_config.object_location,
-                    resource_config.object_location_schema,
-                )
-                raise ServiceUnavailable(
-                    "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
-                ) from err
-        #    raise ValidationError({'error' : 'An xlsx cannot be generated with so many lines, please request
-        #    it in another format'})
-
-        try:
-            reourceGeojon = get_GeoJson_resource(
-                uri=resource_config.connector_config.uri,
-                object_location=resource_config.object_location,
-                object_location_schema=resource_config.object_location_schema,
-                timer=timer,
-            )
-        except DriverConnectionError as err:
-            logger.warning("Connection is not available. : %s", err)
-            logger.warning(
-                "Resource: %s - Location: %s - Schema: %s",
-                resource_id,
-                resource_config.object_location,
-                resource_config.object_location_schema,
-            )
-            raise ServiceUnavailable(
-                "Connection is not available.", code=ErrorCodes.CONNECTION_UNAVAILABLE
-            ) from err
-        except NoObjectError as err:
-            logger.warning("Object is not available. : %s", err)
-            logger.warning(
-                "Resource: %s - Location: %s - Schema: %s",
-                resource_id,
-                resource_config.object_location,
-                resource_config.object_location_schema,
-            )
-            raise ServiceUnavailable(
-                "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
-            ) from err
-        if reourceGeojon and format == "json":
-            featureCollection = True
-        else:
-            featureCollection = False
-
-        if featureCollection:
-            logger.info(
-                "Downloading resource %s in geojson format. FeatureCollection",
-                resource_id,
-            )
-            data = _get_data_public_error(
-                get_resource_data_feature,
-                uri=resource_config.connector_config.uri,
-                object_location=resource_config.object_location,
-                object_location_schema=resource_config.object_location_schema,
-                filters=filters,
-                like=like,
-                limit=limit,
-                offset=offset,
-                fields=fields,
-                sort=sort,
-                timer=timer,
-            )
-        else:
-            logger.info("Downloading resource %s in json format.", resource_id)
-            data = _get_data_public_error(
-                get_resource_data,
-                uri=resource_config.connector_config.uri,
-                object_location=resource_config.object_location,
-                object_location_schema=resource_config.object_location_schema,
-                filters=filters,
-                like=like,
-                limit=limit,
-                offset=offset,
-                fields=fields,
-                sort=sort,
-                timer=timer,
-            )
 
         if format == "xlsx":
             with phase(timer, "normalize"):

@@ -1,5 +1,6 @@
 """Module that deal with external resources."""
 
+import contextlib
 import csv
 import decimal
 import json
@@ -661,6 +662,81 @@ def _get_model(
             raise DriverConnectionError("Connection not available.") from err
 
 
+@dataclass
+class OpenResource:
+    """An engine and the reflected table of a resource, shared across the steps of a request."""
+
+    engine: Engine
+    model: Table
+
+
+def _create_engine_and_model(
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int],
+    timer: Optional[PhaseTimer],
+) -> OpenResource:
+    """Create the engine and reflect the table inside the ``connect`` phase.
+
+    The engine is disposed here only if the reflection fails; otherwise the caller owns it.
+    """
+    with phase(timer, "connect"):
+        engine = _get_engine(uri, timeout=timeout)
+        try:
+            model = _get_model(
+                engine=engine,
+                object_location=object_location,
+                object_location_schema=object_location_schema,
+            )
+        except BaseException:
+            engine.dispose()
+            raise
+    return OpenResource(engine=engine, model=model)
+
+
+@contextlib.contextmanager
+def open_resource(
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int] = None,
+    timer: Optional[PhaseTimer] = None,
+):
+    """Create the engine and reflect the table once, and dispose the engine once on exit.
+
+    Pass the yielded object as ``resource=`` to the data functions so a request makes a single connection
+    (a single download for HTTP connectors) and a single reflection. The engine must not be disposed between
+    steps: the in-memory SQLite engine used for HTTP resources would lose its data.
+    """
+    resource = _create_engine_and_model(
+        uri, object_location, object_location_schema, timeout, timer
+    )
+    try:
+        yield resource
+    finally:
+        resource.engine.dispose()
+
+
+def _acquire_resource(
+    resource: Optional[OpenResource],
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    timeout: Optional[int],
+    timer: Optional[PhaseTimer],
+) -> Tuple[OpenResource, bool]:
+    """Return ``(resource, owned)``: the shared one, or a new one the caller must dispose."""
+    if resource is not None:
+        return resource, False
+    return (
+        _create_engine_and_model(
+            uri, object_location, object_location_schema, timeout, timer
+        ),
+        True,
+    )
+
+
 def get_resource_columns(
     uri: str,
     object_location: Optional[str],
@@ -780,6 +856,7 @@ def validator_max_excel_allowed(
     limit: Optional[int] = None,
     offset: int = 0,
     timer: Optional[PhaseTimer] = None,
+    resource: Optional[OpenResource] = None,
 ):
     """Validate if resource  have less rows than allowed."""
 
@@ -794,6 +871,7 @@ def validator_max_excel_allowed(
         limit,
         offset,
         timer=timer,
+        resource=resource,
     )
     return len(data) <= _RESOURCE_MAX_ROWS_EXCEL
 
@@ -846,28 +924,27 @@ def get_GeoJson_resource(
     object_location_schema: Optional[str],
     timeout: Optional[int] = None,
     timer: Optional[PhaseTimer] = None,
+    resource: Optional[OpenResource] = None,
 ) -> Boolean:
     """From resource return if is GeoJson resource
 
-    @param cache: if not exists connection save on cache.
+    @param resource: shared engine and model; when omitted one is created and disposed here.
     @return: True or False GeoJosn Resource
     """
-    with phase(timer, "connect"):
-        engine = _get_engine(uri, timeout=timeout)
-        model = _get_model(
-            engine=engine,
-            object_location=object_location,
-            object_location_schema=object_location_schema,
-        )
+    resource, owned = _acquire_resource(
+        resource, uri, object_location, object_location_schema, timeout, timer
+    )
     geoJson = False
 
-    for column in model.columns:
-        if str(column.type).startswith("geometry") or str(column.type).startswith(
-            "geography"
-        ):
-            geoJson = True
-
-    engine.dispose()
+    try:
+        for column in resource.model.columns:
+            if str(column.type).startswith("geometry") or str(column.type).startswith(
+                "geography"
+            ):
+                geoJson = True
+    finally:
+        if owned:
+            resource.engine.dispose()
     return geoJson
 
 
@@ -883,21 +960,18 @@ def get_resource_data_feature(
     offset: int = 0,
     timeout: Optional[int] = None,
     timer: Optional[PhaseTimer] = None,
+    resource: Optional[OpenResource] = None,
 ):
     """data like GeoJSON .Encoding data a variety of geographic data structures."""
     """Data like Feature_Collection_"""
 
     """Not posible to implement GeoFunc.ST_AsGeoJSON(rows) with model, postgis version  is < 3.0 """
 
-    with phase(timer, "connect"):
-        engine = _get_engine(uri, timeout=timeout)
-        session_maker = sessionmaker(bind=engine)
-
-        model = _get_model(
-            engine=engine,
-            object_location=object_location,
-            object_location_schema=object_location_schema,
-        )
+    resource, owned = _acquire_resource(
+        resource, uri, object_location, object_location_schema, timeout, timer
+    )
+    engine, model = resource.engine, resource.model
+    session_maker = sessionmaker(bind=engine)
     column_dict = {column.key: column for column in model.columns}
     # columns = _get_columns(column_dict, fields)
     filters_args = _process_like_filter(like, model)
@@ -1015,7 +1089,8 @@ def get_resource_data_feature(
         timer.add("normalize", monotonic() - normalize_started)
 
     session.close()
-    engine.dispose()
+    if owned:
+        engine.dispose()
 
     return wrapped
 
@@ -1032,6 +1107,7 @@ def get_session_data(
     offset: int = 0,
     timeout: Optional[int] = None,
     timer: Optional[PhaseTimer] = None,
+    resource: Optional[OpenResource] = None,
 ):
     """Retrieve the rows of a resource. See ``_get_session_data_and_columns``."""
     data, _column_names = _get_session_data_and_columns(
@@ -1046,6 +1122,7 @@ def get_session_data(
         offset,
         timeout,
         timer,
+        resource,
     )
     return data
 
@@ -1062,6 +1139,7 @@ def _get_session_data_and_columns(
     offset: int = 0,
     timeout: Optional[int] = None,
     timer: Optional[PhaseTimer] = None,
+    resource: Optional[OpenResource] = None,
 ):
     """
     Retrieve data from a resource based on the provided parameters.
@@ -1080,6 +1158,8 @@ def _get_session_data_and_columns(
     @param sort: A list of OrderBy objects to sort the result.
     @param limit: An optional limit on the number of rows to return.
     @param offset: The number of rows to skip before starting to return rows.
+    @param resource: Shared engine and model. When omitted they are created here and the engine is disposed here;
+                     a shared engine is never disposed by this function.
 
     @return: A tuple ``(data, column_names)``: the rows of the resource and the names of the selected columns, in
              the order of the rows' values. The names are known even when there are no rows.
@@ -1092,16 +1172,12 @@ def _get_session_data_and_columns(
     # cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')
     # mssql no order no limit no offset
 
-    with phase(timer, "connect"):
-        engine = _get_engine(uri, timeout=timeout)
-        session_maker = sessionmaker(bind=engine)
-        parsed = urlparse(uri)
-
-        model = _get_model(
-            engine=engine,
-            object_location=object_location,
-            object_location_schema=object_location_schema,
-        )
+    resource, owned = _acquire_resource(
+        resource, uri, object_location, object_location_schema, timeout, timer
+    )
+    engine, model = resource.engine, resource.model
+    session_maker = sessionmaker(bind=engine)
+    parsed = urlparse(uri)
 
     column_dict = {column.key: column for column in model.columns}
     columns = _get_columns(column_dict, fields)
@@ -1131,7 +1207,8 @@ def _get_session_data_and_columns(
             if timer is not None:
                 timer.add("query", monotonic() - mssql_query_started)
             session.close()
-            engine.dispose()
+            if owned:
+                engine.dispose()
     else:
         query_started_at = monotonic()
         try:
@@ -1186,7 +1263,8 @@ def _get_session_data_and_columns(
             if timer is not None:
                 timer.add("query", monotonic() - query_started_at)
             session.close()
-            engine.dispose()
+            if owned:
+                engine.dispose()
 
     return data, [column.key for column in columns]
 
@@ -1232,6 +1310,7 @@ def get_resource_data(
     offset: int = 0,
     timeout: Optional[int] = None,
     timer: Optional[PhaseTimer] = None,
+    resource: Optional[OpenResource] = None,
 ) -> Iterable[Dict[str, Any]]:
     """Return a iterable of dictionaries with data of resource."""
 
@@ -1247,6 +1326,7 @@ def get_resource_data(
         offset,
         timeout,
         timer=timer,
+        resource=resource,
     )
 
     normalize_started = monotonic()

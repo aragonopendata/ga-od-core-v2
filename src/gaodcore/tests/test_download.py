@@ -851,7 +851,7 @@ def test_download_timing_log(endpoint: str, fmt: str, client: Client, full_examp
     assert fields["format"] == fmt
     assert fields["status"] == "200"
     assert fields["rows"] == "2"
-    assert int(fields["connects"]) >= 1
+    assert int(fields["connects"]) == 1
     for key in ("t_connect", "t_query", "t_normalize", "t_render", "t_total"):
         assert float(fields[key]) >= 0
     assert fields["bytes"] == str(len(response.content))
