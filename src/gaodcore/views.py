@@ -10,6 +10,7 @@ from json.decoder import JSONDecodeError
 from typing import Optional, Dict, Any, List, Callable
 
 import xlsxwriter
+from django.conf import settings
 from django.http import HttpResponse
 from drf_excel.mixins import XLSXFileMixin
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -187,6 +188,8 @@ class DownloadView(APIViewMixin):
         """Run the request and log one ``download_timing`` line with the time spent in each phase."""
         timer = PhaseTimer()
         self._timer = timer
+        if not getattr(settings, "DOWNLOAD_TIMING_LOG", True):
+            return super().dispatch(request, *args, **kwargs)
         timer.attrs["endpoint"] = "download" if self.is_download_endpoint(request) else "preview"
         raw_id = request.GET.get("resource_id") or request.GET.get("view_id") or ""
         if raw_id.isdigit():

@@ -7,6 +7,8 @@ common_config:
     - 'https://your-domain.com'
   debug: true
   cache_ttl: 300
+  # Optional. Log one `download_timing` line per download/preview request (default: true).
+  download_timing_log: true
   databases:
     default:
       ENGINE: django.db.backends.postgresql

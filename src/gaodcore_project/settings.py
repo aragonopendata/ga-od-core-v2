@@ -42,6 +42,9 @@ ALLOWED_HOSTS = CONFIG.common_config.allowed_hosts
 # CSRF settings
 CSRF_TRUSTED_ORIGINS = CONFIG.common_config.csrf_trusted_origins
 
+# Emit one ``download_timing`` INFO line per download/preview request (config key ``download_timing_log``).
+DOWNLOAD_TIMING_LOG = CONFIG.common_config.download_timing_log
+
 # Application definition
 
 INSTALLED_APPS = [

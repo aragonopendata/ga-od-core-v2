@@ -115,6 +115,7 @@ class CommonConfig(BaseModel):
     databases: Dict[str, Database]
     cache_ttl: int
     health_monitoring: HealthMonitoringConfig = HealthMonitoringConfig()
+    download_timing_log: bool = True
 
 
 class Config(BaseModel):

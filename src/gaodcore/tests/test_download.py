@@ -870,3 +870,19 @@ def test_download_timing_log_on_error(client: Client, full_example, timing_caplo
     assert fields["status"] == "400"
     assert fields["rows"] == "-1"
     assert fields["bytes"] == str(len(response.content))
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("endpoint", ["/GA_OD_Core/download", "/GA_OD_Core/preview"])
+def test_download_timing_log_disabled(endpoint: str, client: Client, full_example, timing_caplog, settings):
+    params = {"resource_id": full_example.resources.table.id, "formato": "json", "sort": ["id"]}
+    enabled = client.get(endpoint, params)
+    assert enabled.status_code == 200
+    assert len(_timing_lines(timing_caplog)) == 1
+    timing_caplog.records.clear()
+
+    settings.DOWNLOAD_TIMING_LOG = False
+    disabled = client.get(endpoint, params)
+    assert disabled.status_code == 200
+    assert disabled.content == enabled.content
+    assert _timing_lines(timing_caplog) == []
