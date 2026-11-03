@@ -55,7 +55,7 @@ from sqlalchemy.types import Numeric
 
 from gaodcore.operators import is_datetime
 from gaodcore.operators import process_filters_args
-from gaodcore_manager.models import ResourceSizeConfig, ResourceConfig
+from gaodcore_manager.models import ResourceSizeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -1505,18 +1505,16 @@ def get_resource_data(
     return (dict(zip(column_names, row)) for row in data)
 
 
-def update_resource_size(resource_id, registries, size):
-    try:
-        resource = ResourceConfig.objects.select_related().get(
-            id=resource_id, enabled=True, connector_config__enabled=True
-        )
-    except ResourceConfig.DoesNotExist as err:
-        raise ValidationError(
-            "Resource not exists or is not available", ErrorCodes.RESOURCE_UNAVAILABLE
-        ) from err
+def update_resource_size(resource_config, registries, size):
+    """Store the number of rows and the size in bytes of the last download of an already loaded resource.
 
+    ``size < 0`` means unknown (streaming response without ``Content-Length``): nothing is stored, so the previous
+    value is kept instead of a made-up one. Saving is an upsert by primary key, one row per resource.
+    """
+    if size is None or size < 0:
+        return
     rsc = ResourceSizeConfig(registries=registries, size=size)
-    rsc.resource_id = resource
+    rsc.resource_id = resource_config
     rsc.save()
 
 

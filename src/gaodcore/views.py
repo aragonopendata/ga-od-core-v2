@@ -4,7 +4,6 @@ import itertools
 import json
 import logging
 import resource
-import sys
 import tempfile
 import warnings
 from time import monotonic
@@ -216,6 +215,39 @@ def get_response_csv(data: ReturnList, delimiter: str = ",") -> HttpResponse:
     return response
 
 
+def response_size(response) -> int:
+    """Size in bytes of a response body without materializing a streaming one; ``-1`` when it is unknown.
+
+    A streaming response (``FileResponse``) announces its size in ``Content-Length``; a response that is not yet
+    rendered has no body to measure.
+    """
+    if response is None:
+        return -1
+    if getattr(response, "streaming", False):
+        # Streaming responses have no ``.content``; FileResponse announces the real size up front.
+        length = response.get("Content-Length", "")
+        return int(length) if length.isdigit() else -1
+    if not getattr(response, "is_rendered", True):
+        return -1
+    container = getattr(response, "_container", None)
+    if container is None:
+        return len(response.content)
+    # ``.content`` joins every chunk into a full copy of the body; summing the chunk lengths measures without copying.
+    return sum(map(len, container))
+
+
+def _save_size_when_ready(response, resource_config, registries: int) -> None:
+    """Store the real size of ``response`` once its body exists: now if it is ready, else right after it renders."""
+
+    def save(ready_response):
+        update_resource_size(resource_config, registries, response_size(ready_response))
+
+    if getattr(response, "is_rendered", True):
+        save(response)
+    else:
+        response.add_post_render_callback(save)
+
+
 class DownloadView(APIViewMixin):
     """This view allow get public serialized data from internal databases or APIs of Gobierno de Aragón. If JSON
     response type is selected and the view has a shape field the response will be in GEOJSON format"""
@@ -276,14 +308,7 @@ class DownloadView(APIViewMixin):
                 status, size = "-", -1
             else:
                 status = response.status_code
-                if getattr(response, "streaming", False):
-                    # Streaming responses have no ``.content``; FileResponse announces the real size up front.
-                    length = response.get("Content-Length", "")
-                    size = int(length) if length.isdigit() else -1
-                elif not getattr(response, "is_rendered", True):
-                    size = -1
-                else:
-                    size = len(response.content)
+                size = response_size(response)
             attrs = timer.attrs
             timing_logger.info(
                 "download_timing resource_id=%s endpoint=%s format=%s status=%s rows=%s connects=%s "
@@ -563,24 +588,22 @@ class DownloadView(APIViewMixin):
             with phase(timer, "normalize"):
                 data = get_return_list(data, format_is_xlsx=True)
             timer.attrs["rows"] = len(data)
-            update_resource_size(
-                resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
-            )
+            registries = len(data)
             with phase(timer, "normalize"):
                 modified = modify_header(data, columns, format_is_xlsx=True)
             with phase(timer, "render"):
                 response = get_response_xlsx(modified, resource_config)
+            _save_size_when_ready(response, resource_config, registries)
         elif format in ("csv", "scsv"):
             with phase(timer, "normalize"):
                 data = get_return_list(data, format_is_xlsx=False)
             timer.attrs["rows"] = len(data)
-            update_resource_size(
-                resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
-            )
+            registries = len(data)
             with phase(timer, "normalize"):
                 modified = modify_header(data, columns)
             with phase(timer, "render"):
                 response = get_response_csv(modified, delimiter=delimiter)
+            _save_size_when_ready(response, resource_config, registries)
         elif featureCollection:
             timer.attrs["rows"] = len(data.get("features", ()))
             response = Response(data)
@@ -588,12 +611,11 @@ class DownloadView(APIViewMixin):
             with phase(timer, "normalize"):
                 data = get_return_list(data, format_is_xlsx=False)
             timer.attrs["rows"] = len(data)
-            update_resource_size(
-                resource_id=resource_id, registries=len(data), size=sys.getsizeof(data)
-            )
+            registries = len(data)
 
             with phase(timer, "normalize"):
                 response = Response(modify_header(data, columns))
+            _save_size_when_ready(response, resource_config, registries)
 
         if self.is_download_endpoint(request) or format == "xlsx":
             filename = (
