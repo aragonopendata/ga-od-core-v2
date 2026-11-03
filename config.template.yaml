@@ -12,6 +12,9 @@ common_config:
   # Optional. Rows fetched per network round trip by Oracle cursors (default: 5000).
   # Higher values cut round trips on large tables at the cost of memory per cursor.
   oracle_arraysize: 5000
+  # Optional. Seconds the Django config-DB connection is kept open between requests
+  # (default: 60; 0 = close after every request). PostgreSQL connections ~= workers x threads.
+  conn_max_age: 60
   databases:
     default:
       ENGINE: django.db.backends.postgresql

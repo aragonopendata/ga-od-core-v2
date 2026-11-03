@@ -1,5 +1,8 @@
 """Tests for the external YAML config models."""
 
+import pytest
+from pydantic import ValidationError
+
 from gaodcore_project.config import CommonConfig, Config
 
 
@@ -32,3 +35,25 @@ def test_oracle_arraysize_defaults_to_5000():
 
 def test_oracle_arraysize_can_be_overridden():
     assert CommonConfig(**_common_data(), oracle_arraysize=250).oracle_arraysize == 250
+
+
+def test_conn_max_age_defaults_to_60():
+    assert CommonConfig(**_common_data()).conn_max_age == 60
+
+
+def test_conn_max_age_can_be_overridden_and_zero_is_valid():
+    assert CommonConfig(**_common_data(), conn_max_age=300).conn_max_age == 300
+    assert CommonConfig(**_common_data(), conn_max_age=0).conn_max_age == 0
+
+
+def test_conn_max_age_rejects_negative_values():
+    with pytest.raises(ValidationError):
+        CommonConfig(**_common_data(), conn_max_age=-1)
+
+
+def test_settings_databases_use_persistent_connections():
+    from gaodcore_project import settings as project_settings
+
+    default = project_settings.DATABASES["default"]
+    assert default["CONN_MAX_AGE"] == 60
+    assert default["CONN_HEALTH_CHECKS"] is True

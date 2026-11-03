@@ -111,8 +111,14 @@ WSGI_APPLICATION = "gaodcore_project.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# Persistent connections (config key ``conn_max_age``, seconds; 0 closes after each request).
 DATABASES = {
-    key: database.dict() for key, database in CONFIG.common_config.databases.items()
+    key: {
+        **database.dict(),
+        "CONN_MAX_AGE": CONFIG.common_config.conn_max_age,
+        "CONN_HEALTH_CHECKS": True,
+    }
+    for key, database in CONFIG.common_config.databases.items()
 }
 
 # Password validation
