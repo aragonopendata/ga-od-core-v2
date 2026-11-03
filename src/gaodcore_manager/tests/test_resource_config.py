@@ -38,7 +38,7 @@ def test_resource(
         os.path.join(os.path.dirname(__file__), "..", "..", "gaodcore", "tests"),
         f"download_{full_example.scheme}",
         accept_download,
-        download_response.content,
+        download_response.getvalue(),
     )
 
 

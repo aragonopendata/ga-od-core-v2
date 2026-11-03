@@ -1,10 +1,11 @@
 import contextlib
 import csv
-import io
+import itertools
 import json
 import logging
 import resource
 import sys
+import tempfile
 import warnings
 from time import monotonic
 from json.decoder import JSONDecodeError
@@ -12,7 +13,7 @@ from typing import Optional, Dict, Any, List, Callable
 
 import xlsxwriter
 from django.conf import settings
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse
 from drf_excel.mixins import XLSXFileMixin
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
@@ -102,45 +103,72 @@ def _get_resource(resource_id: int):
         ) from err
 
 
-def get_response_xlsx(
-    data: ReturnList, resource_config: Optional[ResourceConfig] = None
-) -> HttpResponse:
-    """Render resource data as XLSX and report hyperlinks skipped by Excel limits."""
+def _write_xlsx_rows(worksheet, data) -> tuple:
+    """Write the header and then the rows in strict row order, as ``constant_memory`` requires.
 
-    output = io.BytesIO()
-    workbook = xlsxwriter.Workbook(output)
-    worksheet = workbook.add_worksheet()
-
-    # column header names, you can use your own headers here
-
+    With ``constant_memory`` xlsxwriter flushes a row when a later one is started and silently drops anything written to
+    an earlier row, so the header must be complete before the first data row. Returns the number of hyperlinks Excel
+    refused (kept as text) and the first one as ``(excel_row, excel_column, column_name)``.
+    """
     skipped_hyperlinks = 0
     first_skipped_hyperlink = None
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message=r"Ignoring URL '.*' since it exceeds Excel's limit of 65,530 URLS per worksheet\.",
-            category=UserWarning,
-            module=r"xlsxwriter\.worksheet",
-        )
-        for row, item in enumerate(data):
-            for col, (key, value) in enumerate(item.items()):
-                # Write None values as blank cells, not NaN
-                if value is None:
-                    worksheet.write_blank(row + 1, col, None)
-                    write_result = 0
-                else:
-                    write_result = worksheet.write(row + 1, col, value)
-                if write_result == -4:
-                    worksheet.write_string(row + 1, col, str(value))
-                    skipped_hyperlinks += 1
-                    if first_skipped_hyperlink is None:
-                        first_skipped_hyperlink = (row + 2, col + 1, key)
-                if row == 0:
-                    worksheet.write(row, col, key)
+    rows = iter(data)
+    first = next(rows, None)
+    if first is None:
+        return skipped_hyperlinks, first_skipped_hyperlink
+    for col, key in enumerate(first.keys()):
+        worksheet.write(0, col, key)
+    for row, item in enumerate(itertools.chain((first,), rows)):
+        for col, (key, value) in enumerate(item.items()):
+            # Write None values as blank cells, not NaN
+            if value is None:
+                worksheet.write_blank(row + 1, col, None)
+                write_result = 0
+            else:
+                write_result = worksheet.write(row + 1, col, value)
+            if write_result == -4:
+                worksheet.write_string(row + 1, col, str(value))
+                skipped_hyperlinks += 1
+                if first_skipped_hyperlink is None:
+                    first_skipped_hyperlink = (row + 2, col + 1, key)
+    return skipped_hyperlinks, first_skipped_hyperlink
 
-    # Close the workbook before sending the data.
-    workbook.close()
-    output.seek(0)
+
+def get_response_xlsx(
+    data: ReturnList, resource_config: Optional[ResourceConfig] = None
+) -> FileResponse:
+    """Render resource data as XLSX and report hyperlinks skipped by Excel limits.
+
+    The workbook is written row by row (``constant_memory``) to a temporary file that is served as a streaming response
+    and deleted when the response is closed, or right away if building the workbook fails.
+    """
+
+    output = tempfile.NamedTemporaryFile(suffix=".xlsx")  # deleted when closed
+    try:
+        # xlsxwriter spills each worksheet to its own temp file in constant_memory mode; keep them in a directory that
+        # is always removed, even when writing fails before workbook.close().
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workbook = xlsxwriter.Workbook(
+                output, {"constant_memory": True, "tmpdir": tmpdir}
+            )
+            worksheet = workbook.add_worksheet()
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"Ignoring URL '.*' since it exceeds Excel's limit of 65,530 URLS per worksheet\.",
+                    category=UserWarning,
+                    module=r"xlsxwriter\.worksheet",
+                )
+                skipped_hyperlinks, first_skipped_hyperlink = _write_xlsx_rows(
+                    worksheet, data
+                )
+            # Close the workbook before sending the data.
+            workbook.close()
+        output.flush()
+        output.seek(0)
+    except BaseException:
+        output.close()
+        raise
 
     if first_skipped_hyperlink is not None:
         excel_row, excel_column, column_name = first_skipped_hyperlink
@@ -159,10 +187,13 @@ def get_response_xlsx(
             column_name,
         )
 
-    return HttpResponse(
+    response = FileResponse(
         output,
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+    # FileResponse would announce the temporary file name; the caller decides the download name.
+    del response["Content-Disposition"]
+    return response
 
 
 def get_response_csv(data: ReturnList, delimiter: str = ",") -> HttpResponse:
@@ -245,7 +276,11 @@ class DownloadView(APIViewMixin):
                 status, size = "-", -1
             else:
                 status = response.status_code
-                if getattr(response, "streaming", False) or not getattr(response, "is_rendered", True):
+                if getattr(response, "streaming", False):
+                    # Streaming responses have no ``.content``; FileResponse announces the real size up front.
+                    length = response.get("Content-Length", "")
+                    size = int(length) if length.isdigit() else -1
+                elif not getattr(response, "is_rendered", True):
                     size = -1
                 else:
                     size = len(response.content)

@@ -74,7 +74,7 @@ def test_preview_xlsx_is_bounded(client, big_resource):
 
     response = client.get(PREVIEW, {"resource_id": 1, "format": "xlsx", "limit": 50000})
     assert response.status_code == 200
-    sheet = load_workbook(BytesIO(response.content)).active
+    sheet = load_workbook(BytesIO(b"".join(response.streaming_content))).active
     assert sheet.max_row == 1000 + 1  # header + rows
 
 

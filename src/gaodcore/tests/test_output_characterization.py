@@ -135,7 +135,8 @@ def _snapshot(name):
 
 
 def _xlsx_cells(response):
-    sheet = load_workbook(BytesIO(response.content)).active
+    # XLSX is a streaming FileResponse, which has no ``.content``.
+    sheet = load_workbook(BytesIO(b"".join(response.streaming_content))).active
     return [[(cell.value, cell.data_type) for cell in row] for row in sheet.iter_rows()]
 
 
