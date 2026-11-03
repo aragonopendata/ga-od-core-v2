@@ -3,6 +3,7 @@ import io
 import json
 import os
 import re
+import tempfile
 from csv import DictReader
 from dataclasses import dataclass, field
 from typing import Optional
@@ -11,6 +12,7 @@ from urllib.parse import urlparse
 from lxml import etree
 import pytest as pytest
 import yaml
+from filelock import FileLock
 from openpyxl import load_workbook
 from _pytest.fixtures import FixtureRequest
 from pytest_httpserver import HTTPServer
@@ -28,11 +30,14 @@ from sqlalchemy import (
 )
 from sqlalchemy.exc import IntegrityError, ProgrammingError, OperationalError
 from sqlalchemy.orm import declarative_base, sessionmaker
-from pytest_docker_fixtures import images
+from pytest_docker_fixtures import images, mysql_image, pg_image
 
 DB_USERNAME = "username"
 DB_PASSWORD = "password"
 DB_NAME = "gaodcore"
+# Seconds to wait for a database container to accept connections (library default: 30).
+DB_START_MAX_WAIT_S = 120
+CONTAINER_START_LOCK = os.path.join(tempfile.gettempdir(), "gaodcore-tests-container-start.lock")
 
 images.configure(
     "mysql",
@@ -45,6 +50,7 @@ images.configure(
         "MYSQL_ROOT_PASSWORD": "",
         "MYSQL_ALLOW_EMPTY_PASSWORD": "yes",
     },
+    max_wait_s=DB_START_MAX_WAIT_S,
 )
 
 images.configure(
@@ -56,7 +62,28 @@ images.configure(
         "POSTGRES_PASSWORD": DB_PASSWORD,
         "POSTGRES_DB": DB_NAME,
     },
+    max_wait_s=DB_START_MAX_WAIT_S,
 )
+
+
+def _serialize_container_start(image) -> None:
+    """Make xdist workers start their database containers one at a time.
+
+    Several workers booting postgres/mysql at once (WSL) starve each other of I/O and
+    miss the start deadline. A file lock shared by the workers queues the starts; the
+    lock is held only until the container accepts connections.
+    """
+    run = image.run
+
+    def locked_run():
+        with FileLock(CONTAINER_START_LOCK, timeout=DB_START_MAX_WAIT_S * 6):
+            return run()
+
+    image.run = locked_run
+
+
+_serialize_container_start(pg_image)
+_serialize_container_start(mysql_image)
 
 pytest_plugins = ["pytest_docker_fixtures"]
 
