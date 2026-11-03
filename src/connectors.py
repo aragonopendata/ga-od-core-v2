@@ -897,10 +897,13 @@ def _validate_max_rows_allowed(
         engine.dispose()
 
 
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]")
+
+
 # Add feature to sanitize text include control characters
 def sanitize_control_charcters(text):
-    if re.search(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]", str(text)):
-        text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\n]", "", text)
+    if _CONTROL_CHARS_RE.search(str(text)):
+        text = _CONTROL_CHARS_RE.sub("", text)
     try:
         text = text.decode("utf-8")
     except Exception:
@@ -908,6 +911,66 @@ def sanitize_control_charcters(text):
     if isinstance(text, str):
         text = text.strip()
     return text
+
+
+def _normalize_value(column):
+    """Generic normalization of one driver value (reference behaviour for any type)."""
+    if isinstance(column, uuid.UUID):
+        # Handle UUID objects by converting to string
+        return str(column)
+    if (
+        isinstance(column, (decimal.Decimal, Promise))
+        or isinstance(column, float)
+        or isinstance(column, Numeric)
+    ):
+        parte_decimal, _ = math.modf(column)
+        if parte_decimal == 0.0:
+            return int(column)
+        return sanitize_control_charcters(column)
+    return sanitize_control_charcters(column)
+
+
+def _normalize_identity(value):
+    return value
+
+
+def _normalize_str(value):
+    if _CONTROL_CHARS_RE.search(value):
+        value = _CONTROL_CHARS_RE.sub("", value)
+    return value.strip()
+
+
+def _normalize_bytes(value):
+    # str(bytes) escapes every control character, so the generic cleanup never removes anything from bytes.
+    try:
+        return value.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return value
+
+
+def _normalize_number(value):
+    # float and Decimal: integral values become int, the rest is returned as is (nan, inf behave as before).
+    parte_decimal, _ = math.modf(value)
+    if parte_decimal == 0.0:
+        return int(value)
+    return value
+
+
+# Exact type -> conversion. Subclasses and any other type go through ``_normalize_value``.
+_NORMALIZERS = {
+    str: _normalize_str,
+    int: _normalize_identity,
+    bool: _normalize_identity,
+    type(None): _normalize_identity,
+    float: _normalize_number,
+    decimal.Decimal: _normalize_number,
+    bytes: _normalize_bytes,
+    uuid.UUID: str,
+    datetime: _normalize_identity,
+    date: _normalize_identity,
+    time: _normalize_identity,
+    timedelta: _normalize_identity,
+}
 
 
 def get_GeoJson_resource(
@@ -1368,31 +1431,16 @@ def get_resource_data(
     .. versionchanged:: 1.2  The numeric handling system for Oracle has been reworked to take advantage of newer
     oracledb features as well as better integration of outputtypehandlers. """
 
-    dataTemp = []
-    dataTempTuplas = []
-
+    # Eager normalization to tuples (errors raise here). The conversion is picked per value by its exact Python type
+    # (not by the reflected column type, which drivers do not honour: Oracle NUMBER, NullType, views, SQLite).
+    # Types without a fast path use the generic logic, so the result is the same for any value.
+    dispatch = _NORMALIZERS
+    generic = _normalize_value
+    rows = []
+    append = rows.append
     for item in data:
-        for column in item:
-            if isinstance(column, uuid.UUID):
-                # Handle UUID objects by converting to string
-                dataTempTuplas.append(str(column))
-            elif (
-                (isinstance(column, (decimal.Decimal, Promise)))
-                or (isinstance(column, float))
-                or (isinstance(column, Numeric))
-            ):
-                parte_decimal, _ = math.modf(column)
-                if (parte_decimal) == 0.0:
-                    dataTempTuplas.append(int(column))
-                else:
-                    dataTempTuplas.append(sanitize_control_charcters(column))
-
-            else:
-                dataTempTuplas.append(sanitize_control_charcters(column))
-
-        dataTemp.append(tuple(dataTempTuplas))
-        dataTempTuplas.clear()
-    data = dataTemp
+        append(tuple([dispatch.get(type(value), generic)(value) for value in item]))
+    data = rows
     if timer is not None:
         timer.add("normalize", monotonic() - normalize_started)
 
