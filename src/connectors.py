@@ -9,6 +9,7 @@ import ast
 import math
 import re
 import socket
+import threading
 import urllib.request
 import uuid
 from collections import OrderedDict
@@ -1815,8 +1816,10 @@ def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
     return engine
 
 
-# Global flag to track Oracle client initialization
+# Global flag to track Oracle client initialization. The worker threads of gunicorn (gthread) share it, so the
+# initialization is serialized with a lock: init_oracle_client() must run once per process.
 _oracle_client_initialized = False
+_oracle_client_lock = threading.Lock()
 
 
 def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
@@ -1838,16 +1841,18 @@ def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
     if uri_parsed.scheme in _DATABASE_SCHEMAS:
         # Special handling for Oracle to enable thick mode for older password verifiers
         if uri_parsed.scheme == "oracle+oracledb" and not _oracle_client_initialized:
-            try:
-                import oracledb
+            with _oracle_client_lock:
+                if not _oracle_client_initialized:  # another thread may have done it while this one waited
+                    try:
+                        import oracledb
 
-                # Initialize thick mode for compatibility with older Oracle versions
-                oracledb.init_oracle_client()
-                _oracle_client_initialized = True
-                logger.info("Oracle thick mode initialized successfully")
-            except Exception as e:
-                logger.warning(f"Could not initialize Oracle thick mode: {e}")
-                # Fall back to thin mode (default behavior)
+                        # Initialize thick mode for compatibility with older Oracle versions
+                        oracledb.init_oracle_client()
+                        _oracle_client_initialized = True
+                        logger.info("Oracle thick mode initialized successfully")
+                    except Exception as e:
+                        logger.warning(f"Could not initialize Oracle thick mode: {e}")
+                        # Fall back to thin mode (default behavior)
 
         # Configure database-specific connection timeout parameters.
         # connect_timeout only governs TCP handshake + auth, not query execution time,

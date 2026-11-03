@@ -1,4 +1,4 @@
-"""Tests for the post_request hook in src/gunicorn.conf.py, which recycles workers that hold too much memory."""
+"""Tests for src/gunicorn.conf.py: settings from the environment and the recycling of workers that hold too much memory."""
 
 import importlib.util
 from pathlib import Path
@@ -17,6 +17,14 @@ def fixture_conf():
     spec = importlib.util.spec_from_file_location("gunicorn_conf_under_test", _CONF_PATH)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+
+def _load(env):
+    spec = importlib.util.spec_from_file_location("gunicorn_conf_under_test", _CONF_PATH)
+    module = importlib.util.module_from_spec(spec)
+    with mock.patch.dict("os.environ", env, clear=True):
+        spec.loader.exec_module(module)
     return module
 
 
@@ -80,3 +88,56 @@ def test_unknown_rss_keeps_worker_running(conf):
 def test_current_rss_reads_this_process(conf):
     rss = conf._current_rss_bytes()  # pylint: disable=protected-access
     assert rss is None or rss > 10 * MIB
+
+
+def test_defaults_without_environment(conf):
+    module = _load({})
+    assert module.worker_class == "gaodcore_project.gunicorn_worker.DrainingThreadWorker"
+    assert (module.workers, module.threads) == (9, 4)
+    assert (module.timeout, module.graceful_timeout) == (240, 1800)
+    assert (module.max_requests, module.max_requests_jitter) == (1000, 100)
+    assert module.worker_connections == 6
+    assert module._max_worker_rss_bytes() == 1024 * MIB  # pylint: disable=protected-access
+
+
+def test_settings_are_read_from_environment(conf):
+    module = _load({
+        "GUNICORN_WORKERS": "3",
+        "GUNICORN_THREADS": "8",
+        "GUNICORN_TIMEOUT": "60",
+        "GUNICORN_GRACEFUL_TIMEOUT": "600",
+        "GUNICORN_MAX_REQUESTS": "0",
+        "GUNICORN_MAX_REQUESTS_JITTER": "0",
+    })
+    assert (module.workers, module.threads, module.timeout, module.graceful_timeout) == (3, 8, 60, 600)
+    assert (module.max_requests, module.max_requests_jitter) == (0, 0)
+    assert module.worker_connections == 10
+
+
+def test_worker_connections_can_be_set_explicitly(conf):
+    assert _load({"GUNICORN_THREADS": "2", "GUNICORN_WORKER_CONNECTIONS": "50"}).worker_connections == 50
+
+
+@pytest.mark.parametrize("value", ["mucho", "", "  ", "1.5"], ids=["text", "empty", "blank", "float"])
+def test_invalid_settings_fall_back_to_defaults(conf, value):
+    module = _load({"GUNICORN_WORKERS": value, "GUNICORN_THREADS": value, "GUNICORN_TIMEOUT": value})
+    assert (module.workers, module.threads, module.timeout) == (9, 4, 240)
+
+
+@pytest.mark.parametrize("name", ["GUNICORN_WORKERS", "GUNICORN_THREADS"])
+def test_workers_and_threads_are_at_least_one(conf, name):
+    module = _load({name: "0"})
+    assert min(module.workers, module.threads) >= 1
+
+
+def test_worker_already_stopping_is_left_alone(conf):
+    worker = _worker()
+    worker.alive = False
+    _run(conf, worker, 9000 * MIB)
+    worker.log.warning.assert_not_called()
+
+
+def test_worker_class_is_the_draining_one(conf):
+    module = _load({})
+    assert module.worker_class == "gaodcore_project.gunicorn_worker.DrainingThreadWorker"
+    assert not hasattr(module, "pre_request")

@@ -111,7 +111,8 @@ WSGI_APPLICATION = "gaodcore_project.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-# Persistent connections (config key ``conn_max_age``, seconds; 0 closes after each request).
+# Persistent connections (config key ``conn_max_age``, seconds; 0 closes after each request). Django keeps one per
+# thread, so with gunicorn gthread the server holds up to workers x threads connections to this database.
 DATABASES = {
     key: {
         **database.dict(),

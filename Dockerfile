@@ -79,4 +79,4 @@ RUN django-admin compilemessages
 CMD bash -c "python manage.py migrate --noinput \
     && python manage.py collectstatic --noinput \
     && python manage.py createcachetable \
-    && gunicorn gaodcore_project.wsgi -c gunicorn.conf.py --bind :8000 --workers 9 --timeout 240 --max-requests 1000 --max-requests-jitter 100"
+    && gunicorn gaodcore_project.wsgi -c gunicorn.conf.py --bind :8000"
