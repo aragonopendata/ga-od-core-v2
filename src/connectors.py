@@ -24,6 +24,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 
 import sqlalchemy.exc
+from sqlalchemy.dialects import mssql as mssql_dialect
 from django.utils.duration import duration_iso_string
 from django.utils.functional import Promise
 from geoalchemy2 import functions as GeoFunc
@@ -1254,6 +1255,60 @@ def _get_session_data_and_columns(
         )
 
 
+# MSSQL cannot compare or sort these legacy types ("The text, ntext, and image data types cannot be compared or
+# sorted"), so they are never used in an ORDER BY.
+_MSSQL_UNSORTABLE_TYPES = (mssql_dialect.TEXT, mssql_dialect.NTEXT, mssql_dialect.IMAGE)
+
+
+def _mssql_is_sortable(column: Column) -> bool:
+    return not isinstance(column.type, _MSSQL_UNSORTABLE_TYPES)
+
+
+def _mssql_sort_methods(model: Table, column_dict: Dict[str, Column], sort: List[OrderBy], paginated: bool) -> list:
+    """ORDER BY elements for a MSSQL query.
+
+    The requested sort is applied, skipping columns MSSQL cannot sort. When the query is paginated (limit or offset)
+    and nothing is left, fall back to the primary key and then to the first sortable column, because OFFSET requires
+    an ORDER BY. An empty list means no ORDER BY.
+    """
+    methods = [
+        method
+        for item, method in zip(sort, _get_sort_methods(column_dict, sort))
+        if _mssql_is_sortable(column_dict[item.field])
+    ]
+    if methods or not paginated:
+        return methods
+    pk_columns = list(model.primary_key.columns)
+    if pk_columns and all(_mssql_is_sortable(column) for column in pk_columns):
+        return pk_columns
+    for column in model.columns:
+        if _mssql_is_sortable(column):
+            return [column]
+    return []
+
+
+def _build_mssql_query(session, model, column_dict, columns, filters, filters_args, sort, limit, offset):
+    """Build the MSSQL query. Without limit and offset it is the plain query (ORDER BY only if sort is requested)."""
+    paginated = limit is not None or bool(offset)
+    order_by = _mssql_sort_methods(model, column_dict, sort, paginated)
+    query = (
+        session.query(model)
+        .filter_by(**filters)
+        .filter(*filters_args)
+        .order_by(*order_by)
+        .with_entities(*[model.c[col.key].label(col.key) for col in columns])
+    )
+    if order_by:
+        if offset:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+    elif limit is not None:
+        # Nothing sortable: TOP n (including the rows an offset would skip, see the caller).
+        query = query.limit(limit + (offset or 0))
+    return query
+
+
 def _query_session_data(
     resource: OpenResource,
     uri: str,
@@ -1287,15 +1342,19 @@ def _query_session_data(
     if parsed.scheme in ["mssql+pyodbc"]:
         mssql_query_started = monotonic()
         try:
-            data = (
-                session.query(model)
-                .filter_by(**filters)
-                .filter(*filters_args)
-                .with_entities(*[model.c[col.key].label(col.key) for col in columns])
-                .all()
+            query = _build_mssql_query(
+                session, model, column_dict, columns, filters, filters_args, sort, limit, offset
             )
+            data = query.all()
+            if offset and not _mssql_sort_methods(model, column_dict, sort, paginated=True):
+                # No orderable column: OFFSET is impossible, so TOP (limit + offset) was used and
+                # the skipped rows are dropped here.
+                data = data[offset:]
         except sqlalchemy.exc.ProgrammingError as err:
             raise NoObjectError("Object not available.") from err
+        except SortFieldNoExistsError as err:
+            logger.warning("Sort Field No Exists Error. - %s ", err)
+            raise ValidationError(err.message, ErrorCodes.INVALID_SORT) from err
         finally:
             if timer is not None:
                 timer.add("query", monotonic() - mssql_query_started)
