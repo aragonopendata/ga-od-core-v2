@@ -16,7 +16,6 @@ import requests
 import requests.auth
 from django.utils.duration import duration_iso_string
 from django.utils.functional import Promise
-from django.utils.timezone import is_aware
 from geoalchemy2 import elements
 from geoalchemy2.shape import to_shape
 from rest_framework.exceptions import ValidationError
@@ -56,11 +55,9 @@ def serializerJsonEncoder(o):
     elif isinstance(o, datetime.date):
         return o.isoformat()
     elif isinstance(o, datetime.time):
-        if is_aware(o):
-            raise ValueError("JSON can't represent timezone-aware times.")
         r = o.isoformat()
         if o.microsecond:
-            r = r[:12]
+            r = r[:12] + r[15:]  # milliseconds only; keep the UTC offset of an aware time, if any
         return r
     elif isinstance(o, datetime.timedelta):
         return duration_iso_string(o)

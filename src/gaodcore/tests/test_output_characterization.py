@@ -36,6 +36,7 @@ DOWNLOAD = "/GA_OD_Core/download"
 PREVIEW = "/GA_OD_Core/preview"
 FIXTURES = Path(__file__).parent / "fixtures_output"
 NAN = float("nan")
+INF = float("inf")
 
 RICH_COLUMNS = [
     "id", "dec_int", "dec_frac", "dec_prec", "flt", "flt_int", "flt_big", "flt_nan", "d", "dt_naive", "dt_utc",
@@ -225,6 +226,75 @@ def test_rich_json_semantics(client, rich_resource):
     assert first["raw_bytes"] == "café"  # QUIRK: bytes are decoded as UTF-8.
     assert first["flag"] is True and second["flag"] is False
     assert all(value is None for key, value in third.items() if key != "id")
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# D11: infinity is null (like NaN) and a time with a zone is ISO with its offset. Both used to be a 500.
+# --------------------------------------------------------------------------------------------------------------------
+
+D11_COLUMNS = ["id", "flt", "dec", "t_tz", "t_tz_ms", "t_naive", "nan"]
+
+
+def d11_rows():
+    tz = dt.timezone(dt.timedelta(hours=2))
+    return [
+        (1, INF, decimal.Decimal("-Infinity"), dt.time(8, 5, 3, tzinfo=tz), dt.time(8, 5, 3, 250000, tzinfo=tz),
+         dt.time(8, 5, 3, 250000), NAN),
+        (2, -INF, decimal.Decimal("Infinity"), dt.time(0, 0, tzinfo=dt.timezone.utc),
+         dt.time(23, 59, 59, 7, tzinfo=dt.timezone(dt.timedelta(hours=-5, minutes=-30))), dt.time(0, 0), 1.5),
+    ]  # fmt: skip
+
+
+@pytest.fixture
+def d11_resource(tmp_path):
+    uri = _sqlite(tmp_path, ["CREATE TABLE things (id INTEGER PRIMARY KEY)"])
+    with (
+        patch.object(gaodcore_views, "_get_resource", return_value=_config(uri)),
+        _patched_rows(d11_rows(), D11_COLUMNS),
+    ):
+        yield
+
+
+D11_FORMATS = [(fmt, content_type, f"d11.{fmt}") for fmt, content_type, _ in BODY_FORMATS]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("fmt,content_type,snapshot", D11_FORMATS)
+def test_infinity_and_aware_time_body_is_byte_exact(client, d11_resource, fmt, content_type, snapshot):
+    response = _get(client, DOWNLOAD, fmt)
+    assert response.status_code == 200
+    assert response["Content-Type"] == content_type
+    assert response.content == _snapshot(snapshot)
+
+
+@pytest.mark.django_db
+def test_infinity_and_aware_time_json_semantics(client, d11_resource):
+    first, second = json.loads(_get(client, DOWNLOAD, "json").content)
+    # inf, -inf and NaN are all null; Decimal infinities too.
+    assert [first[k] for k in ("flt", "dec", "nan")] == [None, None, None]
+    assert [second[k] for k in ("flt", "dec")] == [None, None] and second["nan"] == 1.5
+    # Aware times keep their offset (milliseconds only); the naive format is unchanged.
+    assert (first["t_tz"], first["t_tz_ms"], first["t_naive"]) == ("08:05:03+02:00", "08:05:03.250+02:00", "08:05:03.250")
+    assert (second["t_tz"], second["t_tz_ms"], second["t_naive"]) == ("00:00:00+00:00", "23:59:59.000-05:30", "00:00:00")
+
+
+@pytest.mark.django_db
+def test_infinity_and_aware_time_xlsx_cells(client, d11_resource):
+    cells = _xlsx_cells(_get(client, DOWNLOAD, "xlsx"))
+    assert cells[1] == [
+        (1, "n"), (None, "n"), (None, "n"), ("08:05:03+02:00", "s"), ("08:05:03.250+02:00", "s"),
+        ("08:05:03.250", "s"), (None, "n"),
+    ]  # fmt: skip
+    assert cells[2] == [
+        (2, "n"), (None, "n"), (None, "n"), ("00:00:00+00:00", "s"), ("23:59:59.000-05:30", "s"),
+        ("00:00:00", "s"), (1.5, "n"),
+    ]  # fmt: skip
+
+
+@pytest.mark.django_db
+def test_infinity_with_columns_rename_json(client, d11_resource):
+    rows = json.loads(_get(client, DOWNLOAD, "json", columns="a,b,c,d,e,f,g").content)
+    assert rows[0]["b"] is None and rows[1]["c"] is None and rows[0]["d"] == "08:05:03+02:00"
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -510,11 +580,43 @@ def _get_geojson(client, rows, model):
 
 
 @pytest.mark.django_db
-def test_geojson_uuid_property_crashes(client):
-    # QUIRK: the FeatureCollection code sends UUID through math.modf, so a UUID property is a TypeError (500).
+def test_geojson_uuid_property_is_text(client):
+    # D11: a UUID property is text, as in JSON and CSV (it used to be a TypeError, 500, through math.modf).
     model = Table("places", MetaData(), Column("id", Integer), Column("geom", Geometry("POINT", srid=4326)))
-    with pytest.raises(TypeError):
-        _get_geojson(client, [(uuid.UUID("12345678-1234-5678-1234-567812345678"), POINT)], model)
+    response = _get_geojson(client, [(uuid.UUID("12345678-1234-5678-1234-567812345678"), POINT)], model)
+    assert response.status_code == 200
+    feature = json.loads(response.content)["features"][0]
+    assert feature["properties"] == {"id": "12345678-1234-5678-1234-567812345678"}
+
+
+@pytest.mark.django_db
+def test_geojson_infinity_is_null_and_aware_time_is_iso(client):
+    # D11: inf / -inf are null (they used to be OverflowError, 500); a time with a zone is ISO with its offset.
+    model = Table(
+        "places",
+        MetaData(),
+        Column("id", Integer),
+        Column("flt", Integer),
+        Column("dec", Integer),
+        Column("t", Integer),
+        Column("t_ms", Integer),
+        Column("t_naive", Integer),
+        Column("geom", Geometry("POINT", srid=4326)),
+    )
+    tz = dt.timezone(dt.timedelta(hours=2))
+    rows = [
+        (1, INF, decimal.Decimal("-Infinity"), dt.time(8, 5, 3, tzinfo=tz), dt.time(8, 5, 3, 250000, tzinfo=tz),
+         dt.time(8, 5, 3, 250000), POINT),
+        (2, -INF, decimal.Decimal("Infinity"), dt.time(8, 5, 3, tzinfo=dt.timezone.utc), None, None, POINT),
+    ]  # fmt: skip
+    response = _get_geojson(client, rows, model)
+    assert response.status_code == 200
+    props = [feature["properties"] for feature in json.loads(response.content)["features"]]
+    assert props == [
+        {"id": 1, "flt": None, "dec": None, "t": "08:05:03+02:00", "t_ms": "08:05:03.250+02:00",
+         "t_naive": "08:05:03.250"},
+        {"id": 2, "flt": None, "dec": None, "t": "08:05:03+00:00", "t_ms": None, "t_naive": None},
+    ]  # fmt: skip
 
 
 @pytest.mark.django_db

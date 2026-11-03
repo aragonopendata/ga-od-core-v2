@@ -1,0 +1,14 @@
+- dec: null
+  flt: null
+  id: 1
+  nan: null
+  t_naive: '08:05:03.250'
+  t_tz: 08:05:03+02:00
+  t_tz_ms: 08:05:03.250+02:00
+- dec: null
+  flt: null
+  id: 2
+  nan: 1.5
+  t_naive: 00:00:00
+  t_tz: 00:00:00+00:00
+  t_tz_ms: 23:59:59.000-05:30

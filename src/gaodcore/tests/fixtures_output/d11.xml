@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root><list-item><id>1</id><flt></flt><dec></dec><t_tz>08:05:03+02:00</t_tz><t_tz_ms>08:05:03.250+02:00</t_tz_ms><t_naive>08:05:03.250</t_naive><nan></nan></list-item><list-item><id>2</id><flt></flt><dec></dec><t_tz>00:00:00+00:00</t_tz><t_tz_ms>23:59:59.000-05:30</t_tz_ms><t_naive>00:00:00</t_naive><nan>1.5</nan></list-item></root>

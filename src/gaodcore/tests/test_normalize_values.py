@@ -113,10 +113,12 @@ def test_value_normalization_matches_old(kind, idx):
         assert got[1] is expected[1]
 
 
-def test_inf_still_raises_as_before():
-    for v in (float("inf"), float("-inf"), _D("Infinity")):
+def test_inf_is_null():
+    # D11: the old normalization raised OverflowError (500) for these; now they are None, through both paths.
+    for v in (float("inf"), float("-inf"), _D("Infinity"), _D("-Infinity")):
         assert _run(_old_normalize, v)[0] == "err"
-        assert _run(lambda x: connectors._NORMALIZERS.get(type(x), connectors._normalize_value)(x), v)[0] == "err"
+        assert connectors._NORMALIZERS.get(type(v), connectors._normalize_value)(v) is None
+        assert connectors._normalize_value(v) is None
 
 
 def test_sanitize_matches_old():

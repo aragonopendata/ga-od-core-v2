@@ -926,7 +926,10 @@ def _normalize_value(column):
     ):
         parte_decimal, _ = math.modf(column)
         if parte_decimal == 0.0:
-            return int(column)
+            try:
+                return int(column)
+            except OverflowError:  # inf / -inf have no integer value: they are null, as NaN is in the output
+                return None
         return sanitize_control_charcters(column)
     return sanitize_control_charcters(column)
 
@@ -950,10 +953,13 @@ def _normalize_bytes(value):
 
 
 def _normalize_number(value):
-    # float and Decimal: integral values become int, the rest is returned as is (nan, inf behave as before).
+    # float and Decimal: integral values become int, the rest is returned as is (nan is kept, inf becomes None).
     parte_decimal, _ = math.modf(value)
     if parte_decimal == 0.0:
-        return int(value)
+        try:
+            return int(value)
+        except OverflowError:  # inf / -inf have no integer value: they are null, as NaN is in the output
+            return None
     return value
 
 
@@ -1114,22 +1120,15 @@ def _query_feature_collection(
         item = list(item)
         geometry = item.pop()
         for i, column in enumerate(item):
-            if isinstance(column, (decimal.Decimal, uuid.UUID, Promise)):
+            if isinstance(column, uuid.UUID):
+                item[i] = str(column)
+            elif isinstance(column, (decimal.Decimal, Promise, float, Numeric)):
                 parte_decimal, parte_entera = math.modf(column)
                 if (parte_decimal) == 0.0:
-                    item[i] = int(column)
-                else:
-                    item[i] = str(column)
-            elif isinstance(column, float):
-                parte_decimal, parte_entera = math.modf(column)
-                if (parte_decimal) == 0.0:
-                    item[i] = int(column)
-                else:
-                    item[i] = str(column)
-            elif isinstance(column, Numeric):
-                parte_decimal, parte_entera = math.modf(column)
-                if (parte_decimal) == 0.0:
-                    item[i] = int(column)
+                    try:
+                        item[i] = int(column)
+                    except OverflowError:  # inf / -inf are null
+                        item[i] = None
                 else:
                     item[i] = str(column)
             elif isinstance(column, datetime):
@@ -1144,7 +1143,7 @@ def _query_feature_collection(
             elif isinstance(column, time):
                 r = column.isoformat()
                 if column.microsecond:
-                    r = r[:12]
+                    r = r[:12] + r[15:]  # milliseconds only; keep the UTC offset of an aware time, if any
                 item[i] = r
             elif isinstance(column, timedelta):
                 item[i] = duration_iso_string(column)

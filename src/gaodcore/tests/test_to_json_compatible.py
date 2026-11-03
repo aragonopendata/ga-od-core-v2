@@ -81,10 +81,9 @@ def test_whole_rows_match():
 @pytest.mark.parametrize(
     "value",
     [
-        datetime.time(1, 2, 3, tzinfo=datetime.timezone.utc), b"bytes", {1, 2}, object(), {datetime.date(2020, 1, 1): 1},
-        {(1, 2): 1},
+        b"bytes", {1, 2}, object(), {datetime.date(2020, 1, 1): 1}, {(1, 2): 1},
     ],
-    ids=["aware_time", "bytes", "set", "object", "date_key", "tuple_key"],
+    ids=["bytes", "set", "object", "date_key", "tuple_key"],
 )
 def test_errors_match(value):
     with pytest.raises(Exception) as expected:
@@ -92,6 +91,14 @@ def test_errors_match(value):
     with pytest.raises(type(expected.value)) as got:
         get_return_list([{"k": value}])
     assert str(got.value) == str(expected.value)
+
+
+def test_aware_time_is_iso_with_offset():
+    # D11: a time with a zone used to be a ValueError; it is ISO with its offset (milliseconds only).
+    tz = datetime.timezone(datetime.timedelta(hours=2))
+    data = [{"a": datetime.time(1, 2, 3, tzinfo=tz), "b": datetime.time(1, 2, 3, 456789, tzinfo=tz)}]
+    assert get_return_list(data) == [{"a": "01:02:03+02:00", "b": "01:02:03.456+02:00"}]
+    assert get_return_list(data) == _round_trip(data)
 
 
 def test_circular_reference_raises_value_error():
