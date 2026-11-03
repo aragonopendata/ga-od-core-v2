@@ -2,15 +2,16 @@ import datetime
 import io
 import json
 import os
+import re
 from csv import DictReader
 from dataclasses import dataclass, field
 from typing import Optional
 from urllib.parse import urlparse
 
 from lxml import etree
-import pandas
 import pytest as pytest
 import yaml
+from openpyxl import load_workbook
 from _pytest.fixtures import FixtureRequest
 from pytest_httpserver import HTTPServer
 from sqlalchemy import (
@@ -318,6 +319,41 @@ def validate_error(response,
         assert "errors" not in problem
 
 
+_XLSX_NUMBER = re.compile(r"-?\d+(\.\d+)?")
+
+
+def _normalize_xlsx_value(value):
+    """Compare numbers by value whether the cell stores them as numbers or as text.
+
+    The renderer writes every value as text, while the expected fixtures hold typed cells.
+    """
+    if isinstance(value, str) and _XLSX_NUMBER.fullmatch(value):
+        return float(value)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return value
+
+
+def read_xlsx_records(content: bytes) -> list:
+    """Read the active sheet of an XLSX as records: first row = headers, empty cell = None.
+
+    Fully empty trailing rows are dropped and numeric-looking values are normalized to float.
+    """
+    workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    try:
+        rows = [list(row) for row in workbook.active.iter_rows(values_only=True)]
+    finally:
+        workbook.close()
+    if not rows:
+        return []
+    headers = rows[0]
+    assert all(header is not None for header in headers), f"Empty XLSX header in {headers}"
+    assert len(set(headers)) == len(headers), f"Duplicate XLSX headers in {headers}"
+    while len(rows) > 1 and all(value is None for value in rows[-1]):
+        rows.pop()
+    return [dict(zip(headers, (_normalize_xlsx_value(value) for value in row))) for row in rows[1:]]
+
+
 def compare_files(directory: str, file_without_extension, mimetype: str, content: bytes):
     if mimetype == 'text/html':
         assert content
@@ -326,35 +362,9 @@ def compare_files(directory: str, file_without_extension, mimetype: str, content
         if mimetype in ['application/xlsx', 'application/xml']:
             with open(url, 'rb') as f:
                 if mimetype == 'application/xlsx':
-                    test = pandas.read_excel(f, engine='openpyxl')
-                    test_data = test.where(pandas.notnull(test), None).to_dict(orient='records')
-                    response = pandas.read_excel(io.BytesIO(content), engine='openpyxl')
-                    response_data = response.where(pandas.notnull(response), None).to_dict(orient='records')
-
-                    # Custom comparison to handle NaN values properly
-                    import math
-                    def compare_xlsx_records(expected, actual):
-                        if len(expected) != len(actual):
-                            return False
-                        for exp_record, act_record in zip(expected, actual):
-                            if set(exp_record.keys()) != set(act_record.keys()):
-                                return False
-                            for key in exp_record.keys():
-                                exp_val = exp_record[key]
-                                act_val = act_record[key]
-                                # Handle NaN comparison
-                                if exp_val is None and act_val is None:
-                                    continue
-                                elif isinstance(exp_val, float) and isinstance(act_val, float):
-                                    if math.isnan(exp_val) and math.isnan(act_val):
-                                        continue
-                                    elif exp_val != act_val:
-                                        return False
-                                elif exp_val != act_val:
-                                    return False
-                        return True
-
-                    assert compare_xlsx_records(test_data, response_data), f"XLSX data mismatch:\nExpected: {test_data}\nActual: {response_data}"
+                    test_data = read_xlsx_records(f.read())
+                    response_data = read_xlsx_records(content)
+                    assert test_data == response_data, f"XLSX data mismatch:\nExpected: {test_data}\nActual: {response_data}"
                 elif mimetype == 'application/xml':
                     parser = etree.XMLParser(remove_blank_text=True)
                     assert etree.tostring(

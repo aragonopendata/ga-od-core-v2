@@ -13,7 +13,6 @@ drf-spectacular-sidecar>=2026.9.1
 gunicorn~=21.2.0
 mysqlclient~=2.2.7
 numpy~=2.1.0
-pandas~=2.2.3
 psycopg2-binary~=2.9.9
 pydantic~=2.9.0
 SQLAlchemy~=2.0.35

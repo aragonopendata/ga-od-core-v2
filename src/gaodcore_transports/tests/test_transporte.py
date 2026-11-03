@@ -2,9 +2,9 @@ import csv
 import io
 from typing import Dict
 
-import pandas
 import pytest
 import yaml
+from openpyxl import load_workbook
 import xml.etree.ElementTree as ET
 
 from django.test import Client
@@ -273,8 +273,10 @@ def test_transport_views(client: Client, accept: str, url: str, fields: Dict[str
         for field, field_type in fields.items():
             assert isinstance(data[field], field_type)
     elif accept == 'application/xlsx':
-        df = pandas.read_excel(io.BytesIO(response.content), engine='openpyxl')
-        assert set(df.columns.values) == fields.keys()
+        workbook = load_workbook(io.BytesIO(response.content), read_only=True, data_only=True)
+        headers = next(workbook.active.iter_rows(max_row=1, values_only=True))
+        workbook.close()
+        assert set(headers) == fields.keys()
     elif accept == 'application/xml':
         root = ET.fromstring(response.content)
         assert {field.tag for field in root[0]} == fields.keys()
