@@ -92,11 +92,11 @@ def test_current_rss_reads_this_process(conf):
 
 def test_defaults_without_environment(conf):
     module = _load({})
-    assert module.worker_class == "gaodcore_project.gunicorn_worker.DrainingThreadWorker"
-    assert (module.workers, module.threads) == (9, 4)
+    assert module.worker_class == "sync"
+    assert (module.workers, module.threads) == (9, 1)
     assert (module.timeout, module.graceful_timeout) == (240, 1800)
     assert (module.max_requests, module.max_requests_jitter) == (1000, 100)
-    assert module.worker_connections == 6
+    assert module.worker_connections == 3
     assert module._max_worker_rss_bytes() == 1024 * MIB  # pylint: disable=protected-access
 
 
@@ -121,7 +121,7 @@ def test_worker_connections_can_be_set_explicitly(conf):
 @pytest.mark.parametrize("value", ["mucho", "", "  ", "1.5"], ids=["text", "empty", "blank", "float"])
 def test_invalid_settings_fall_back_to_defaults(conf, value):
     module = _load({"GUNICORN_WORKERS": value, "GUNICORN_THREADS": value, "GUNICORN_TIMEOUT": value})
-    assert (module.workers, module.threads, module.timeout) == (9, 4, 240)
+    assert (module.workers, module.threads, module.timeout) == (9, 1, 240)
 
 
 @pytest.mark.parametrize("name", ["GUNICORN_WORKERS", "GUNICORN_THREADS"])
@@ -137,7 +137,13 @@ def test_worker_already_stopping_is_left_alone(conf):
     worker.log.warning.assert_not_called()
 
 
-def test_worker_class_is_the_draining_one(conf):
-    module = _load({})
-    assert module.worker_class == "gaodcore_project.gunicorn_worker.DrainingThreadWorker"
+def test_one_thread_uses_the_sync_worker(conf):
+    module = _load({"GUNICORN_THREADS": "1"})
+    assert module.worker_class == "sync"
     assert not hasattr(module, "pre_request")
+
+
+@pytest.mark.parametrize("threads", ["2", "4"])
+def test_more_threads_use_the_draining_worker(conf, threads):
+    module = _load({"GUNICORN_THREADS": threads})
+    assert module.worker_class == "gaodcore_project.gunicorn_worker.DrainingThreadWorker"

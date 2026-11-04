@@ -4,8 +4,9 @@ Everything is configurable through environment variables, so a deployment can ch
 (variable: default):
 
 * ``GUNICORN_WORKERS``: 9. Worker processes.
-* ``GUNICORN_THREADS``: 4. Threads per worker (``gthread`` worker class, here ``DrainingThreadWorker``), so each
-  worker serves several requests at once and one slow download no longer blocks a whole worker.
+* ``GUNICORN_THREADS``: 1. Threads per worker. It also chooses the worker class: with 1 (the default) the worker
+  is ``sync``; with more, ``DrainingThreadWorker`` (``gthread``), so each worker serves several requests at once
+  and one slow download no longer blocks a whole worker. See "Why sync by default" below before raising it.
 * ``GUNICORN_TIMEOUT``: 240. Seconds without a heartbeat before the arbiter kills a worker (see below).
 * ``GUNICORN_GRACEFUL_TIMEOUT``: 1800. Seconds a worker that is being recycled or stopped waits for the requests in
   progress to finish (see below).
@@ -16,6 +17,17 @@ Everything is configurable through environment variables, so a deployment can ch
 
 An invalid or empty value falls back to the default. Command line options (``--bind``, ``--workers``...) take
 precedence over this file.
+
+Why sync by default
+-------------------
+A ``sync`` worker is killed by the arbiter when a request runs longer than ``--timeout`` (240 s), the same limit
+as the ``ProxyPass ... timeout=240`` of the Apache proxies in front. So when Apache gives up and answers 502, the
+work stops and its memory is freed with the process. A ``gthread`` worker is not killed for a long request (see
+below): in production, on 4 November 2026, downloads of resource 3146 went on for up to 16 minutes after Apache had
+answered 502, for a client that had already left, and an automated client that retries each URL three times
+piled them up until the container ran out of memory (16 OOM kills in an afternoon, none with ``sync`` the day
+before). Use more than one thread only once a download cannot outlive the proxy timeout (a per-request deadline,
+or streaming so that a client that has gone away is noticed).
 
 What ``--timeout`` means with ``gthread``
 -----------------------------------------
@@ -68,7 +80,9 @@ import os
 from typing import Optional
 
 _WORKERS_DEFAULT = 9
-_THREADS_DEFAULT = 4
+_THREADS_DEFAULT = 1
+_SYNC_WORKER = "sync"
+_THREADED_WORKER = "gaodcore_project.gunicorn_worker.DrainingThreadWorker"
 _TIMEOUT_DEFAULT = 240
 _GRACEFUL_TIMEOUT_DEFAULT = 1800
 _MAX_REQUESTS_DEFAULT = 1000
@@ -94,9 +108,11 @@ def _env_int(name: str, default: int, minimum: int = 0) -> int:
     return max(value, minimum)
 
 
-worker_class = "gaodcore_project.gunicorn_worker.DrainingThreadWorker"
 workers = _env_int("GUNICORN_WORKERS", _WORKERS_DEFAULT, minimum=1)
 threads = _env_int("GUNICORN_THREADS", _THREADS_DEFAULT, minimum=1)
+# gunicorn itself would switch a "sync" worker with threads > 1 to the stock ThreadWorker, which loses accepted
+# connections when it is recycled; pick the draining one instead.
+worker_class = _SYNC_WORKER if threads == 1 else _THREADED_WORKER
 timeout = _env_int("GUNICORN_TIMEOUT", _TIMEOUT_DEFAULT)
 graceful_timeout = _env_int("GUNICORN_GRACEFUL_TIMEOUT", _GRACEFUL_TIMEOUT_DEFAULT)
 max_requests = _env_int("GUNICORN_MAX_REQUESTS", _MAX_REQUESTS_DEFAULT)
@@ -125,8 +141,8 @@ def _current_rss_bytes() -> Optional[int]:
 def post_request(worker, req, environ, resp):  # pylint: disable=unused-argument
     """Recycle the worker if its resident memory is above the threshold.
 
-    Only sets ``worker.alive``; ``DrainingThreadWorker`` then finishes the requests in the other threads and the
-    connections already accepted before the process exits.
+    Only sets ``worker.alive``: a ``sync`` worker exits once this request is done; ``DrainingThreadWorker`` first
+    finishes the requests in the other threads and the connections already accepted.
     """
     if not worker.alive:
         return
