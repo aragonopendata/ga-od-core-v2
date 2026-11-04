@@ -9,10 +9,11 @@ import warnings
 from time import monotonic
 from json.decoder import JSONDecodeError
 from typing import Optional, Dict, Any, List, Callable
+from urllib.parse import urlparse
 
 import xlsxwriter
 from django.conf import settings
-from django.http import FileResponse, HttpResponse
+from django.http import FileResponse, HttpResponse, StreamingHttpResponse
 from drf_excel.mixins import XLSXFileMixin
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
@@ -40,6 +41,7 @@ from connectors import (
     get_GeoJson_resource,
     update_resource_size,
     open_resource,
+    _HTTP_SCHEMAS,
 )
 from phase_timing import PhaseTimer, phase
 from gaodcore.negotations import HtmlFallbackContentNegotiation, LegacyContentNegotiation
@@ -51,6 +53,8 @@ logger = logging.getLogger(__name__)
 timing_logger = logging.getLogger("gaodcore.download_timing")
 
 _RESOURCE_MAX_ROWS_EXCEL = 1048576
+XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+CSV_CONTENT_TYPE = "text/csv"
 
 
 # Same renderers and order as the global DRF setting, minus the Browsable API: a browser asking for text/html would
@@ -188,7 +192,7 @@ def get_response_xlsx(
 
     response = FileResponse(
         output,
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        content_type=XLSX_CONTENT_TYPE,
     )
     # FileResponse would announce the temporary file name; the caller decides the download name.
     del response["Content-Disposition"]
@@ -199,7 +203,7 @@ def get_response_csv(data: ReturnList, delimiter: str = ",") -> HttpResponse:
     """Get resource csv with order column names."""
     """output CSV (Comma Separated Values) dynamically using Django views"""
 
-    response = HttpResponse(content_type="text/csv")
+    response = HttpResponse(content_type=CSV_CONTENT_TYPE)
     writer = csv.writer(response, delimiter=delimiter)
 
     for row, item in enumerate(data):
@@ -618,17 +622,72 @@ class DownloadView(APIViewMixin):
             _save_size_when_ready(response, resource_config, registries)
 
         if self.is_download_endpoint(request) or format == "xlsx":
-            filename = (
-                request.query_params.get("name")
-                or request.query_params.get("nameRes")
-                or resource_config.name
-            )
-            disposition = (
-                f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
-            )
-            response["content-disposition"] = disposition
+            response["content-disposition"] = self._content_disposition(request, resource_config)
 
         return response
+
+    def head(self, request: Request, **_kwargs) -> StreamingHttpResponse:
+        """Answer HEAD with the headers of the download, without querying the resource.
+
+        Without this method Django serves HEAD with ``get``: it queries the source, builds the whole file and the
+        server then discards the body. Link checkers HEAD every catalogue URL several times a day (more than 2,000
+        HEAD requests a day in November 2026, 466 of them to a 300k-700k row resource), and each one cost a full
+        download.
+
+        The request is validated as in ``get`` (resource, format and parameters), so an unknown resource or a bad
+        parameter returns the same error. For database sources it also connects and reflects the table, as ``get``
+        does before querying (median 0.2 s), so an unreachable source or a missing table returns the same 503. It
+        never runs the query: field and sort names, the XLSX row limit and slow queries are not detected. HTTP
+        sources are not opened, because opening one downloads the whole remote file.
+
+        The response has no ``Content-Length``, since the size is only known after building the file; it is a
+        streaming response so that ``CommonMiddleware`` does not announce 0 bytes. ``ResourceSizeConfig`` is not
+        updated.
+        """
+        timer = self._timer
+        resource_id = self._get_resource_id(request)
+        timer.attrs["resource_id"] = resource_id
+        self._get_offset(request)
+        self._get_limit(request)
+        self._get_fields(request)
+        self._get_filters(request)
+        self._get_columns(request)
+        self._get_like(request)
+        self._get_sort(request)
+        format = self._get_format(request)
+        self._get_delimiter(request, format)
+        timer.attrs["format"] = format
+
+        resource_config = _get_resource(resource_id=resource_id)
+        if urlparse(resource_config.connector_config.uri).scheme not in _HTTP_SCHEMAS:
+            with contextlib.ExitStack() as stack:
+                self._open_shared_resource(stack, resource_config, resource_id, timer, False)
+
+        response = StreamingHttpResponse((), content_type=self._head_content_type(request, format))
+        if self.is_download_endpoint(request) or format == "xlsx":
+            response["content-disposition"] = self._content_disposition(request, resource_config)
+        return response
+
+    @staticmethod
+    def _head_content_type(request: Request, format: str) -> str:
+        """Content-Type that ``get`` would send for ``format``."""
+        if format == "xlsx":
+            return XLSX_CONTENT_TYPE
+        if format in ("csv", "scsv"):
+            return CSV_CONTENT_TYPE
+        # As DRF's Response does when it renders.
+        charset = request.accepted_renderer.charset
+        media_type = request.accepted_media_type
+        return f"{media_type}; charset={charset}" if charset else media_type
+
+    @staticmethod
+    def _content_disposition(request: Request, resource_config: ResourceConfig) -> str:
+        filename = (
+            request.query_params.get("name")
+            or request.query_params.get("nameRes")
+            or resource_config.name
+        )
+        return f'attachment; filename="{filename}.{request.accepted_renderer.format}"'
 
     def get_filename(self, request: Request, resource_config: ResourceConfig):
         """Note: this is import due that replace XLSX Render method that forcer his own filename"""
