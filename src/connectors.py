@@ -26,6 +26,8 @@ from urllib.parse import urlparse
 
 import sqlalchemy.exc
 from sqlalchemy.dialects import mssql as mssql_dialect
+from django.db import DatabaseError, IntegrityError, transaction
+from django.utils import timezone
 from django.utils.duration import duration_iso_string
 from django.utils.functional import Promise
 from geoalchemy2 import functions as GeoFunc
@@ -1514,9 +1516,34 @@ def update_resource_size(resource_config, registries, size):
     """
     if size is None or size < 0:
         return
-    rsc = ResourceSizeConfig(registries=registries, size=size)
-    rsc.resource_id = resource_config
-    rsc.save()
+    try:
+        _upsert_resource_size(resource_config, registries, size)
+    except DatabaseError:
+        # The download is already rendered: a failed size save must never turn it into an error.
+        logger.warning(
+            "Could not store the size of resource_id=%s",
+            getattr(resource_config, "pk", resource_config),
+            exc_info=True,
+        )
+
+
+def _upsert_resource_size(resource_config, registries, size):
+    """UPDATE the row of the resource; INSERT it when missing, tolerating a concurrent INSERT of the same row.
+
+    The normal case (existing row) is a single UPDATE. ``updated_at`` is set by hand because ``QuerySet.update``
+    skips ``auto_now``.
+    """
+    values = {"registries": registries, "size": size, "updated_at": timezone.now()}
+    queryset = ResourceSizeConfig.objects.filter(pk=resource_config.pk)
+    if queryset.update(**values):
+        return
+    try:
+        # The savepoint keeps an IntegrityError from breaking an enclosing transaction.
+        with transaction.atomic():
+            ResourceSizeConfig.objects.create(resource_id=resource_config, **values)
+    except IntegrityError:
+        # Another download inserted the row first: ours is now a plain UPDATE.
+        queryset.update(**values)
 
 
 def _get_columns(

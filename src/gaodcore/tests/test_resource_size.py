@@ -97,3 +97,43 @@ def test_response_size_matches_content_length_of_body(client, resource, fmt):
     with patch.object(gaodcore_views, "response_size", side_effect=lambda r: sizes.append(real(r)) or sizes[-1]):
         response = _download(client, resource, fmt)
     assert sizes and all(size == len(response.content) for size in sizes)
+
+
+@pytest.mark.django_db
+def test_concurrent_first_insert_is_absorbed(resource):
+    """Another download inserts the row after our UPDATE found none: the INSERT collides, no error, new values."""
+    from django.db.models.query import QuerySet
+
+    from connectors import update_resource_size
+
+    real_update = QuerySet.update
+    calls = []
+
+    def racing_update(self, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            ResourceSizeConfig.objects.create(resource_id=resource, registries=1, size=1)
+            return 0  # our UPDATE ran before the other download's INSERT
+        return real_update(self, **kwargs)
+
+    with patch.object(QuerySet, "update", racing_update):
+        update_resource_size(resource, 7, 123)
+    assert len(calls) == 2
+    stored = ResourceSizeConfig.objects.get(resource_id=resource)
+    assert (stored.registries, stored.size) == (7, 123)
+    assert ResourceSizeConfig.objects.count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("fmt", ["json", "csv"])
+def test_database_error_saving_the_size_keeps_the_download(client, resource, fmt, caplog):
+    from django.db import OperationalError
+
+    expected = _body(_download(client, resource, fmt))
+    with patch("connectors._upsert_resource_size", side_effect=OperationalError("db gone")):
+        with caplog.at_level("WARNING", logger="connectors"):
+            response = _download(client, resource, fmt)
+    assert response.status_code == 200
+    assert _body(response) == expected
+    warnings_ = [r for r in caplog.records if r.levelname == "WARNING" and "size" in r.getMessage()]
+    assert warnings_ and str(resource.pk) in warnings_[0].getMessage()
