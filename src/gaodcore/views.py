@@ -19,7 +19,8 @@ from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 from rest_framework.exceptions import ValidationError
 
-from exceptions import ServiceUnavailable, ErrorCodes
+import download_limits
+from exceptions import ServiceUnavailable, ErrorCodes, DownloadInProgress, TooManyDownloads
 from rest_framework.renderers import BrowsableAPIRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -316,7 +317,7 @@ class DownloadView(APIViewMixin):
             attrs = timer.attrs
             timing_logger.info(
                 "download_timing resource_id=%s endpoint=%s format=%s status=%s rows=%s connects=%s "
-                "t_connect=%.3f t_query=%.3f t_normalize=%.3f t_render=%.3f t_total=%.3f bytes=%s maxrss_kb=%s",
+                "t_connect=%.3f t_query=%.3f t_normalize=%.3f t_render=%.3f t_total=%.3f bytes=%s maxrss_kb=%s%s",
                 attrs.get("resource_id", "-"),
                 attrs.get("endpoint", "-"),
                 attrs.get("format", "-"),
@@ -330,6 +331,7 @@ class DownloadView(APIViewMixin):
                 monotonic() - timer.started_at,
                 size,
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+                f" limited={attrs['limited']}" if "limited" in attrs else "",
             )
         except Exception:  # noqa: BLE001 - diagnostics must never break the request
             timing_logger.warning("download_timing could not be logged", exc_info=True)
@@ -490,7 +492,35 @@ class DownloadView(APIViewMixin):
                         "example": "id;name;value\n1;Example;100\n2;Sample;200",
                     },
                 },
-            }
+            },
+            429: {
+                "description": (
+                    "An identical large download (same resource and parameters, whatever the file name) is already "
+                    "being generated. Retry after the number of seconds in the Retry-After header. Only large "
+                    "downloads are affected; HEAD and preview never are."
+                ),
+                "headers": {
+                    "Retry-After": {
+                        "description": "Seconds to wait before retrying.",
+                        "schema": {"type": "integer"},
+                    }
+                },
+                "content": {"application/problem+json": {"schema": {"type": "object"}}},
+            },
+            503: {
+                "description": (
+                    "The resource or connection is not available, or (error_code TOO_MANY_DOWNLOADS) too many large "
+                    "downloads are running for this resource or in total. In the latter case retry after the number "
+                    "of seconds in the Retry-After header."
+                ),
+                "headers": {
+                    "Retry-After": {
+                        "description": "Seconds to wait before retrying (too many large downloads only).",
+                        "schema": {"type": "integer"},
+                    }
+                },
+                "content": {"application/problem+json": {"schema": {"type": "object"}}},
+            },
         },
     )
     def get(self, request: Request, **_kwargs) -> Response:
@@ -520,6 +550,44 @@ class DownloadView(APIViewMixin):
         resource_config = _get_resource(resource_id=resource_id)
         logger.info("Downloading resource: %s", resource_config)
 
+        # Large downloads (not previews) take a slot and a lock on their identity before any work is done on them.
+        try:
+            permit = (
+                download_limits.acquire(
+                    resource_id,
+                    limit,
+                    download_limits.normalized_url(resource_id, request.query_params, format),
+                )
+                if self.is_download_endpoint(request)
+                else None
+            )
+        except (DownloadInProgress, TooManyDownloads) as err:
+            timer.attrs["limited"] = err.limited
+            logger.warning("Large download limited (%s): resource %s", err.limited, resource_id)
+            raise
+        try:
+            response = self._build_download_response(
+                request, resource_config, resource_id, format, delimiter, limit, offset, fields, filters, columns,
+                like, sort,
+            )
+        except BaseException:
+            if permit is not None:
+                permit.release()
+            raise
+        if permit is not None:
+            # Held until the server has sent the response, which is when its memory is still in use.
+            permit.attach(response)
+        return response
+
+    def _build_download_response(
+        self, request, resource_config, resource_id, format, delimiter, limit, offset, fields, filters, columns,
+        like, sort,
+    ):
+        """Query the resource and build the response of ``get``."""
+        timer = self._timer
+        # The stored size is the size of the whole resource (what scripts/update_resources_size.py refreshes and
+        # what download limits read): a filtered or partial download must not overwrite it.
+        whole_resource = not (filters or like or fields or offset) and limit is None
         with contextlib.ExitStack() as stack:
             # One engine and one reflected table per request, shared by every step below
             # and disposed once when the stack closes, also on errors.
@@ -597,7 +665,8 @@ class DownloadView(APIViewMixin):
                 modified = modify_header(data, columns, format_is_xlsx=True)
             with phase(timer, "render"):
                 response = get_response_xlsx(modified, resource_config)
-            _save_size_when_ready(response, resource_config, registries)
+            if whole_resource:
+                _save_size_when_ready(response, resource_config, registries)
         elif format in ("csv", "scsv"):
             with phase(timer, "normalize"):
                 data = get_return_list(data, format_is_xlsx=False)
@@ -607,7 +676,8 @@ class DownloadView(APIViewMixin):
                 modified = modify_header(data, columns)
             with phase(timer, "render"):
                 response = get_response_csv(modified, delimiter=delimiter)
-            _save_size_when_ready(response, resource_config, registries)
+            if whole_resource:
+                _save_size_when_ready(response, resource_config, registries)
         elif featureCollection:
             timer.attrs["rows"] = len(data.get("features", ()))
             response = Response(data)
@@ -619,7 +689,8 @@ class DownloadView(APIViewMixin):
 
             with phase(timer, "normalize"):
                 response = Response(modify_header(data, columns))
-            _save_size_when_ready(response, resource_config, registries)
+            if whole_resource:
+                _save_size_when_ready(response, resource_config, registries)
 
         if self.is_download_endpoint(request) or format == "xlsx":
             response["content-disposition"] = self._content_disposition(request, resource_config)

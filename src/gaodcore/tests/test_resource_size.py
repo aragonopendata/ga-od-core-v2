@@ -137,3 +137,34 @@ def test_database_error_saving_the_size_keeps_the_download(client, resource, fmt
     assert _body(response) == expected
     warnings_ = [r for r in caplog.records if r.levelname == "WARNING" and "size" in r.getMessage()]
     assert warnings_ and str(resource.pk) in warnings_[0].getMessage()
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"filters": '{"id": 1}'},
+        {"limit": 5},
+        {"offset": 10},
+        {"like": '{"note": "x"}'},
+        {"fields": "id"},
+    ],
+    ids=["filters", "limit", "offset", "like", "fields"],
+)
+@pytest.mark.parametrize("fmt", ["json", "csv", "xlsx"])
+def test_partial_download_keeps_the_size_of_the_whole_resource(client, resource, fmt, params):
+    """The stored size is the whole resource's (download limits read it): a partial download must not overwrite it."""
+    _download(client, resource, "json")
+    whole = ResourceSizeConfig.objects.get(resource_id=resource)
+
+    response = client.get(DOWNLOAD, {"resource_id": resource.id, "format": fmt, "sort": "id", **params})
+
+    assert response.status_code == 200, response.content
+    stored = ResourceSizeConfig.objects.get(resource_id=resource)
+    assert (stored.registries, stored.size) == (whole.registries, whole.size) == (200, whole.size)
+
+
+@pytest.mark.django_db
+def test_preview_does_not_store_a_size(client, resource):
+    assert client.get("/GA_OD_Core/preview", {"resource_id": resource.id, "format": "json"}).status_code == 200
+    assert not ResourceSizeConfig.objects.filter(resource_id=resource).exists()

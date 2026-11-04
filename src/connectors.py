@@ -1509,7 +1509,7 @@ def get_resource_data(
 
 
 def update_resource_size(resource_config, registries, size):
-    """Store the number of rows and the size in bytes of the last download of an already loaded resource.
+    """Store the number of rows and the size in bytes of the last whole download of an already loaded resource.
 
     ``size < 0`` means unknown (streaming response without ``Content-Length``): nothing is stored, so the previous
     value is kept instead of a made-up one. Saving is an upsert by primary key, one row per resource.

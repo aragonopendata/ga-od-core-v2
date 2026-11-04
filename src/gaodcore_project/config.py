@@ -107,6 +107,24 @@ class HealthMonitoringConfig(BaseModel):
     alerts: HealthAlertsConfig = HealthAlertsConfig()
 
 
+class DownloadLimitsConfig(BaseModel):
+    """Limits for large downloads (``common_config.download_limits``).
+
+    A download is large when its resource had at least ``heavy_rows`` rows in its last whole download (without
+    filters, like, fields, limit or offset) or is listed in ``heavy_resource_ids``, and the request has no ``limit``
+    or one of at least ``heavy_rows``. Only large downloads
+    are limited, with PostgreSQL advisory locks of the configuration database.
+    """
+
+    enabled: bool = True
+    heavy_rows: int = Field(default=100000, ge=1)
+    # Slots per resource are numbered inside 4 bits of the lock key, hence the upper bound.
+    max_per_resource: int = Field(default=2, ge=1, le=16)
+    max_total: int = Field(default=4, ge=1)
+    retry_after: int = Field(default=120, ge=1)
+    heavy_resource_ids: List[int] = []
+
+
 class CommonConfig(BaseModel):
     allowed_hosts: List[str]
     csrf_trusted_origins: Optional[List[str]] = []
@@ -118,6 +136,7 @@ class CommonConfig(BaseModel):
     download_timing_log: bool = True
     oracle_arraysize: int = Field(default=5000, ge=1)
     conn_max_age: int = Field(default=60, ge=0)
+    download_limits: DownloadLimitsConfig = DownloadLimitsConfig()
 
 
 class Config(BaseModel):

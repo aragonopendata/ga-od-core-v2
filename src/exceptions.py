@@ -38,6 +38,8 @@ class ErrorCodes:
     INVALID_DELIMITER = "INVALID_DELIMITER"
     NOT_A_NUMBER = "NOT_A_NUMBER"
     REQUIRED = "REQUIRED"
+    DOWNLOAD_IN_PROGRESS = "DOWNLOAD_IN_PROGRESS"
+    TOO_MANY_DOWNLOADS = "TOO_MANY_DOWNLOADS"
 
 
 #: Human readable ``detail`` used when the problem carries per-field ``errors``.
@@ -107,3 +109,35 @@ class ServiceUnavailable(APIException):
     def __init__(self, detail=None, code=None):
         """Initialize with optional detail message and error code."""
         super().__init__(detail=detail, code=code)
+
+
+class DownloadInProgress(APIException):
+    """429: an identical large download is already being generated. ``wait`` becomes the ``Retry-After`` header."""
+
+    status_code = 429
+    default_detail = (
+        "Esta descarga ya se está generando para otra petición idéntica; vuelva a intentarlo en unos minutos. "
+        "This download is already being generated for an identical request; try again in a few minutes."
+    )
+    default_code = ErrorCodes.DOWNLOAD_IN_PROGRESS
+    limited = "duplicate"
+
+    def __init__(self, wait, detail=None, code=None):
+        super().__init__(detail=detail, code=code)
+        self.wait = wait
+
+
+class TooManyDownloads(APIException):
+    """503: no free slot for another large download. ``wait`` becomes the ``Retry-After`` header."""
+
+    status_code = 503
+    default_detail = (
+        "Demasiadas descargas grandes en curso; vuelva a intentarlo más tarde. "
+        "Too many large downloads are running; try again later."
+    )
+    default_code = ErrorCodes.TOO_MANY_DOWNLOADS
+
+    def __init__(self, wait, limited, detail=None, code=None):
+        super().__init__(detail=detail, code=code)
+        self.wait = wait
+        self.limited = limited

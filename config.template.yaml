@@ -9,6 +9,21 @@ common_config:
   cache_ttl: 300
   # Optional. Log one `download_timing` line per download/preview request (default: true).
   download_timing_log: true
+  # Optional. Limits for large downloads (GET of /download only; never HEAD or preview). Every key is optional.
+  # A download is large when its resource had >= heavy_rows rows in its last whole download (one without filters,
+  # like, fields, limit or offset; a resource never downloaded whole is not large unless listed) or its id is in
+  # heavy_resource_ids, and the request has no `limit` or a `limit` >= heavy_rows. Uses PostgreSQL advisory locks of
+  # the config database, so it does nothing on other databases (SQLite).
+  #   - An identical large download already running gets 429 Too Many Requests.
+  #   - No free slot (max_per_resource for the same resource, max_total overall) gets 503 Service Unavailable.
+  # Both answers carry a Retry-After header (retry_after seconds).
+  download_limits:
+    enabled: true             # false switches the limits off
+    heavy_rows: 100000
+    max_per_resource: 2       # simultaneous large downloads of one resource (1-16)
+    max_total: 4              # simultaneous large downloads in total
+    retry_after: 120          # seconds
+    heavy_resource_ids: []    # resources always treated as large, e.g. [3146]
   # Optional. Rows fetched per network round trip by Oracle cursors (default: 5000).
   # Higher values cut round trips on large tables at the cost of memory per cursor.
   oracle_arraysize: 5000
