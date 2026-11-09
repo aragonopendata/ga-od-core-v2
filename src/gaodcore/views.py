@@ -487,7 +487,11 @@ class DownloadView(APIViewMixin):
         ],
         responses={
             200: {
-                "description": "Successful response with data in the requested format",
+                "description": (
+                    "Successful response with data in the requested format. The body may be sent while it is "
+                    "generated: a 200 does not guarantee a complete download. Consume the whole response and treat "
+                    "any transfer error as a failed download."
+                ),
                 "content": {
                     "application/json": {
                         "schema": {
@@ -558,7 +562,19 @@ class DownloadView(APIViewMixin):
 
         This method allows get serialized public data from databases or APIs of Gobierno de Aragón. If JSON format is
         chosen and any field type returned by the function is "shape", the answer format will be GEOJSON. If data is
-        in Geojson format, "fields" and "columns" parameters will not work."""
+        in Geojson format, "fields" and "columns" parameters will not work.
+
+        Descargas incompletas: un 200 OK no garantiza que la descarga esté completa. Las descargas grandes se envían
+        mientras se generan; si algo falla a mitad, la conexión se corta sin aviso en el contenido y el fichero
+        recibido queda truncado (un CSV truncado puede parecer válido). Los scripts deben leer la respuesta entera,
+        comprobar que la transferencia termina sin errores (por ejemplo, el código de salida de curl o la excepción
+        del cliente HTTP) y solo después guardar o publicar el fichero.
+
+        Incomplete downloads: a 200 OK does not guarantee a complete download. Large downloads are sent while they are
+        generated; if something fails midway the connection is closed with no marker in the content and the received
+        file is truncated (a truncated CSV may look valid). Scripts must read the whole response, check that the
+        transfer ended without errors (for example curl's exit code or the HTTP client's exception) and only then save
+        or publish the file."""
         timer = self._timer
         resource_id = self._get_resource_id(request)
         timer.attrs["resource_id"] = resource_id
