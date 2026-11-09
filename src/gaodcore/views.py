@@ -29,6 +29,7 @@ from rest_framework.utils.serializer_helpers import ReturnList
 
 from connectors import (
     get_resource_data,
+    get_resource_rows,
     get_resource_columns,
     NoObjectError,
     DriverConnectionError,
@@ -44,6 +45,8 @@ from connectors import (
     open_resource,
     _HTTP_SCHEMAS,
 )
+from download_stream import CsvEncoder, StreamedDownload, StreamedDownloadResponse, csv_blocks, current_rss_kb
+from log_sanitizer import mask_uri
 from phase_timing import PhaseTimer, phase
 from gaodcore.negotations import HtmlFallbackContentNegotiation, LegacyContentNegotiation
 from gaodcore_manager.models import ResourceConfig
@@ -279,7 +282,10 @@ class DownloadView(APIViewMixin):
         except BaseException:
             self._log_timing(timer, None)
             raise
-        if getattr(response, "is_rendered", True):
+        if isinstance(response, StreamedDownloadResponse):
+            # Its ``download_timing`` line is written when the server closes the response, at the end of the sending.
+            pass
+        elif getattr(response, "is_rendered", True):
             self._log_timing(timer, response)
         else:
             # DRF responses are rendered lazily by Django after the view returns; time the render and log after it.
@@ -297,19 +303,27 @@ class DownloadView(APIViewMixin):
         return response
 
     @staticmethod
-    def _log_timing(timer: PhaseTimer, response) -> None:
+    def _log_timing(timer: PhaseTimer, response, download: Optional[StreamedDownload] = None) -> None:
         """Emit the single-line phase timing log. Never raises, so it cannot alter the response or the error.
 
         Fields (seconds, 3 decimals): t_connect = engine creation + reflection, summed over every engine built in the
         request (``connects`` counts them); t_query = the SQL/API query; t_normalize = value normalization and
         serialization (including get_return_list and modify_header); t_render = renderer / XLSX / CSV build.
         ``bytes=-1`` means unknown (streaming response or no response). ``maxrss_kb`` is the worker peak RSS.
+
+        A streamed download (``download``) is logged when its sending ends: ``rows`` and ``bytes`` are what was
+        delivered to the server, the phase times are the sum over its blocks, ``t_total`` runs until the end of the
+        sending, and three fields come last: ``result`` (``complete``, ``early_close`` or ``error``), ``t_first``
+        (request start to first block ready) and ``rss_kb`` (resident memory now).
         """
         if timer.emitted:
             return
         timer.emitted = True
         try:
-            if response is None:
+            if download is not None:
+                status, size = 200, download.bytes
+                timer.attrs["rows"] = download.rows
+            elif response is None:
                 status, size = "-", -1
             else:
                 status = response.status_code
@@ -331,7 +345,12 @@ class DownloadView(APIViewMixin):
                 monotonic() - timer.started_at,
                 size,
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
-                f" limited={attrs['limited']}" if "limited" in attrs else "",
+                (f" limited={attrs['limited']}" if "limited" in attrs else "")
+                + (
+                    f" result={download.result} t_first={download.t_first:.3f} rss_kb={current_rss_kb()}"
+                    if download is not None
+                    else ""
+                ),
             )
         except Exception:  # noqa: BLE001 - diagnostics must never break the request
             timing_logger.warning("download_timing could not be logged", exc_info=True)
@@ -612,7 +631,15 @@ class DownloadView(APIViewMixin):
                 resource=shared,
             )
             featureCollection = bool(reourceGeojon and format == "json")
-            if featureCollection:
+            download = None
+            if format in ("csv", "scsv") and self.is_download_endpoint(request) and settings.DOWNLOAD_STREAMING:
+                logger.info("Downloading resource %s in %s format, streaming.", resource_id, format)
+                disposition = self._content_disposition(request, resource_config)
+                download = self._open_csv_stream(
+                    stack, resource_config, resource_id, delimiter, limit, offset, fields, filters, columns, like,
+                    sort, shared, whole_resource,
+                )
+            elif featureCollection:
                 logger.info(
                     "Downloading resource %s in geojson format. FeatureCollection",
                     resource_id,
@@ -647,6 +674,15 @@ class DownloadView(APIViewMixin):
                     timer=timer,
                     resource=shared,
                 )
+
+        if download is not None:
+            try:
+                response = StreamedDownloadResponse(download, content_type=CSV_CONTENT_TYPE)
+                response["content-disposition"] = disposition
+            except BaseException:
+                download.close()
+                raise
+            return response
 
         if format == "xlsx":
             # Reject before normalizing, serializing or rendering a file that will not be returned.
@@ -696,6 +732,58 @@ class DownloadView(APIViewMixin):
             response["content-disposition"] = self._content_disposition(request, resource_config)
 
         return response
+
+    def _open_csv_stream(
+        self, stack, resource_config, resource_id, delimiter, limit, offset, fields, filters, columns, like, sort,
+        shared, whole_resource,
+    ) -> StreamedDownload:
+        """Run the query and prepare the first CSV block; the rest is produced while the response is sent.
+
+        Everything that can fail on the request's own data (connection, object, fields, sort, query, columns,
+        normalization and serialization of the first block) fails here, before a response exists, and maps to the
+        usual HTTP error. On success the open resources move from ``stack`` to the returned ``StreamedDownload``, which
+        closes them when the server closes the response.
+        """
+        timer = self._timer
+        block_rows = settings.DOWNLOAD_BLOCK_ROWS
+        rows = _get_data_public_error(
+            get_resource_rows,
+            uri=resource_config.connector_config.uri,
+            object_location=resource_config.object_location,
+            object_location_schema=resource_config.object_location_schema,
+            filters=filters,
+            like=like,
+            limit=limit,
+            offset=offset,
+            fields=fields,
+            sort=sort,
+            timer=timer,
+            resource=shared,
+            block_rows=block_rows,
+        )
+        stack.callback(rows.close)  # closes the cursor and then its connection, before the engine is disposed
+        first_rows = _get_data_public_error(rows.fetch, block_rows, True)
+        first, rest = csv_blocks(rows, CsvEncoder(columns, delimiter, timer), block_rows, first_rows)
+        t_first = monotonic() - timer.started_at
+        on_complete = None
+        if whole_resource:
+            def on_complete(registries, size):
+                update_resource_size(resource_config, registries, size)
+        on_finished = None
+        if getattr(settings, "DOWNLOAD_TIMING_LOG", True):
+            def on_finished(finished):
+                self._log_timing(timer, None, finished)
+        return StreamedDownload(
+            stack.pop_all(),
+            first,
+            rest,
+            resource_id=resource_id,
+            masked_uri=mask_uri(resource_config.connector_config.uri),
+            started_at=timer.started_at,
+            t_first=t_first,
+            on_complete=on_complete,
+            on_finished=on_finished,
+        )
 
     def head(self, request: Request, **_kwargs) -> StreamingHttpResponse:
         """Answer HEAD with the headers of the download, without querying the resource.

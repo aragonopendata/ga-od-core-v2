@@ -136,6 +136,8 @@ class CommonConfig(BaseModel):
     download_timing_log: bool = True
     oracle_arraysize: int = Field(default=5000, ge=1)
     conn_max_age: int = Field(default=60, ge=0)
+    download_streaming: bool = True
+    download_block_rows: int = Field(default=1000, ge=1)
     download_limits: DownloadLimitsConfig = DownloadLimitsConfig()
 
 

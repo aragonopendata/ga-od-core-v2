@@ -48,6 +48,11 @@ DOWNLOAD_TIMING_LOG = CONFIG.common_config.download_timing_log
 # Limits for large downloads (config key ``download_limits``): see ``download_limits.py``.
 DOWNLOAD_LIMITS = CONFIG.common_config.download_limits
 
+# Send CSV/SCSV downloads while they are read, in blocks of this many rows (config keys ``download_streaming`` and
+# ``download_block_rows``).
+DOWNLOAD_STREAMING = CONFIG.common_config.download_streaming
+DOWNLOAD_BLOCK_ROWS = CONFIG.common_config.download_block_rows
+
 # Rows fetched per round trip by oracledb cursors (config key ``oracle_arraysize``).
 ORACLE_ARRAYSIZE = CONFIG.common_config.oracle_arraysize
 

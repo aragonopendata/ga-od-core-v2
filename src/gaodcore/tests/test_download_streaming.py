@@ -1,0 +1,633 @@
+"""CSV and SCSV downloads are streamed: the owner of the resources (``StreamedDownload``), the result it reports in the
+``download_timing`` line and the errors before and after the first block.
+
+The data comes from SQLite files read through the real connector code. The blocks are made small (``DOWNLOAD_BLOCK_ROWS``)
+so that a download has several. ``client`` reads a streamed response to the end; ``streaming_client`` hands it back
+unread so a test can cut it half way, as a server does when the client goes away.
+"""
+
+import gc
+import logging
+import math
+from contextlib import ExitStack
+from unittest.mock import patch
+
+import pytest
+import sqlalchemy.exc
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine.cursor import CursorResult
+
+import connectors
+import download_stream
+from download_stream import COMPLETE, EARLY_CLOSE, ERROR, StreamedDownload
+from gaodcore import views as gaodcore_views
+from gaodcore_manager.models import ConnectorConfig, ResourceConfig, ResourceSizeConfig
+
+DOWNLOAD = "/GA_OD_Core/download"
+PREVIEW = "/GA_OD_Core/preview"
+ROWS = 10
+BLOCK_ROWS = 3
+
+
+class _ListHandler(logging.Handler):
+    def __init__(self):
+        super().__init__(logging.INFO)
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+def _capture(logger):
+    handler = _ListHandler()
+    logger.addHandler(handler)
+    return handler
+
+
+@pytest.fixture
+def timing_lines():
+    handler = _capture(gaodcore_views.timing_logger)
+    yield lambda: [r.getMessage() for r in handler.records if r.getMessage().startswith("download_timing ")]
+    gaodcore_views.timing_logger.removeHandler(handler)
+
+
+@pytest.fixture
+def error_records():
+    handler = _capture(download_stream.logger)
+    yield lambda: [r for r in handler.records if r.levelno >= logging.ERROR]
+    download_stream.logger.removeHandler(handler)
+
+
+@pytest.fixture(autouse=True)
+def _small_blocks(settings):
+    settings.DOWNLOAD_BLOCK_ROWS = BLOCK_ROWS
+    settings.DOWNLOAD_STREAMING = True
+
+
+def _make_resource(tmp_path, name, statements, location="things"):
+    uri = f"sqlite:///{tmp_path / (name + '.db')}"
+    engine = create_engine(uri)
+    with engine.begin() as conn:
+        for statement, params in statements:
+            conn.execute(text(statement), params)
+    engine.dispose()
+    connector = ConnectorConfig.objects.create(name=f"connector_{name}", uri=uri, enabled=True)
+    return ResourceConfig.objects.create(
+        name=name, connector_config=connector, object_location=location, enabled=True
+    )
+
+
+@pytest.fixture
+def resource(tmp_path):
+    statements = [("CREATE TABLE things (id INTEGER PRIMARY KEY, note TEXT, price REAL)", {})]
+    statements += [
+        ("INSERT INTO things VALUES (:i, :n, :p)", {"i": i, "n": f"note, {i}", "p": i * 1.5}) for i in range(1, ROWS + 1)
+    ]
+    return _make_resource(tmp_path, "things", statements)
+
+
+def get(client, resource, fmt="csv", **params):
+    return client.get(DOWNLOAD, {"resource_id": resource.id, "format": fmt, "sort": "id", **params})
+
+
+@pytest.fixture
+def tracker():
+    """What is open on the source: connections not yet closed and engines not yet disposed, plus the order of closing."""
+
+    class Tracker:
+        def __init__(self):
+            self.connections = set()
+            self.engines = set()
+            self.events = []
+
+        def open_connections(self):
+            return len(self.connections)
+
+        def undisposed_engines(self):
+            return len(self.engines)
+
+        def last(self, event):
+            return max(i for i, e in enumerate(self.events) if e == event)
+
+    t = Tracker()
+    real_get_engine = connectors._get_engine
+    real_connect, real_conn_close = Engine.connect, Connection.close
+    real_dispose, real_result_close = Engine.dispose, CursorResult.close
+
+    def get_engine(*args, **kwargs):
+        engine = real_get_engine(*args, **kwargs)
+        t.engines.add(id(engine))
+        return engine
+
+    def connect(self, *args, **kwargs):
+        conn = real_connect(self, *args, **kwargs)
+        t.connections.add(id(conn))
+        return conn
+
+    def conn_close(self):
+        t.connections.discard(id(self))
+        t.events.append("connection")
+        return real_conn_close(self)
+
+    def dispose(self, *args, **kwargs):
+        t.engines.discard(id(self))
+        t.events.append("engine")
+        return real_dispose(self, *args, **kwargs)
+
+    def result_close(self):
+        t.events.append("result")
+        return real_result_close(self)
+
+    with (
+        patch.object(connectors, "_get_engine", get_engine),
+        patch.object(Engine, "connect", connect),
+        patch.object(Connection, "close", conn_close),
+        patch.object(Engine, "dispose", dispose),
+        patch.object(CursorResult, "close", result_close),
+    ):
+        yield t
+
+
+pytestmark = pytest.mark.django_db
+
+
+# --- StreamedDownload alone ----------------------------------------------------------------------------------------
+
+class _Source:
+    """Stack, blocks and callbacks that record what happens to them."""
+
+    def __init__(self, blocks):
+        self.events = []
+        self.stack = ExitStack()
+        self.stack.callback(self.events.append, "closed")
+        self.generator = self._generate(blocks)
+        self.completed = []
+        self.finished = []
+
+    def _generate(self, blocks):
+        try:
+            for block in blocks:
+                if isinstance(block, Exception):
+                    raise block
+                yield block
+        finally:
+            self.events.append("generator closed")
+
+    def download(self, first=(b"a", 1), **kwargs):
+        return StreamedDownload(
+            self.stack,
+            first,
+            self.generator,
+            resource_id=7,
+            masked_uri="postgresql://user:***@host/db",
+            on_complete=lambda rows, size: self.completed.append((rows, size)),
+            on_finished=self.finished.append,
+            **kwargs,
+        )
+
+
+def test_exhausted_download_is_complete_and_closes_everything_once():
+    source = _Source([(b"bb", 2), (b"ccc", 3)])
+    download = source.download()
+
+    assert list(download) == [b"a", b"bb", b"ccc"]
+    assert (download.result, download.rows, download.bytes) == (COMPLETE, 6, 6)
+    assert source.completed == [(6, 6)]
+    assert source.events.count("closed") == 1  # closed as soon as the last block is delivered
+    assert source.finished == []  # the line is written by close(), not before
+
+    download.close()
+    download.close()
+
+    assert source.finished == [download] and download.result == COMPLETE
+    assert source.events.count("closed") == 1
+
+
+def test_close_midway_is_early_close_without_size():
+    source = _Source([(b"bb", 2), (b"ccc", 3)])
+    download = source.download()
+    assert next(download) == b"a"
+
+    download.close()
+
+    assert download.result == EARLY_CLOSE
+    assert (download.rows, download.bytes) == (1, 1)
+    assert source.completed == []
+    assert source.events == ["closed"]
+    assert source.generator.gi_frame is None  # the generator of the remaining blocks was closed too
+    assert list(download) == []  # nothing more is produced after close
+    assert source.finished == [download]
+
+
+def test_close_never_iterated_is_early_close():
+    source = _Source([(b"bb", 2)])
+    download = source.download()
+
+    download.close()
+
+    assert (download.result, download.rows, download.bytes) == (EARLY_CLOSE, 0, 0)
+    assert source.events.count("closed") == 1
+
+
+def test_failing_block_is_reraised_logged_and_closes_everything(error_records):
+    boom = RuntimeError("block 3 failed")
+    source = _Source([(b"bb", 2), boom])
+    download = source.download()
+
+    assert next(download) == b"a"
+    assert next(download) == b"bb"
+    with pytest.raises(RuntimeError, match="block 3 failed"):
+        next(download)
+
+    assert download.result == ERROR
+    assert source.completed == []
+    assert source.events.count("closed") == 1
+    (record,) = error_records()
+    message = record.getMessage()
+    assert "resource_id=7" in message and "postgresql://user:***@host/db" in message
+    assert "rows_sent=3" in message and "bytes_sent=3" in message
+    with pytest.raises(StopIteration):
+        next(download)  # a failed download does not go on
+
+    download.close()
+    assert download.result == ERROR  # close() does not turn it into early_close
+    assert source.finished == [download]
+
+
+def test_empty_blocks_are_never_delivered():
+    source = _Source([(b"", 0), (b"bb", 2), (b"", 0)])
+
+    assert list(source.download(first=(b"", 0))) == [b"bb"]
+
+
+def test_failing_size_update_keeps_the_download_complete(caplog):
+    source = _Source([])
+    download = StreamedDownload(
+        source.stack, (b"a", 1), source.generator, resource_id=7, masked_uri="x", on_complete=_raise
+    )
+
+    with caplog.at_level(logging.WARNING, logger="download_stream"):
+        assert list(download) == [b"a"]
+
+    assert download.result == COMPLETE
+    assert "Could not store the size of resource_id=7" in caplog.text
+
+
+def _raise(*_args):
+    raise RuntimeError("database down")
+
+
+def test_close_never_raises(caplog):
+    source = _Source([(b"bb", 2)])
+    source.stack.callback(_raise)
+    download = source.download()
+
+    with caplog.at_level(logging.WARNING, logger="download_stream"):
+        download.close()
+        download.close()
+
+    assert "Could not close the resources" in caplog.text
+    assert download.result == EARLY_CLOSE
+
+    unlogged = _Source([])
+    broken = StreamedDownload(
+        unlogged.stack, (b"a", 1), unlogged.generator, resource_id=7, masked_uri="x", on_finished=_raise
+    )
+    broken.close()  # the line failing to be written must not break the response
+
+
+def test_download_never_iterated_nor_closed_is_closed_by_the_finalizer():
+    source = _Source([(b"bb", 2)])
+    download = source.download()
+    assert source.events == []
+
+    del download
+    gc.collect()
+
+    assert source.events == ["closed"]
+
+
+# --- The endpoint --------------------------------------------------------------------------------------------------
+
+STREAM_CASES = [
+    pytest.param("csv", {}, id="csv"),
+    pytest.param("scsv", {}, id="scsv"),
+    pytest.param("csv", {"delimiter": "|"}, id="delimiter"),
+    pytest.param("csv", {"columns": "i,n,p"}, id="columns"),
+    pytest.param("csv", {"fields": "note,id", "columns": "n,i", "sort": "id desc"}, id="fields_columns_sort"),
+    pytest.param("csv", {"limit": "4", "offset": "2"}, id="limit_offset"),
+    pytest.param("csv", {"filters": '{"id": 7}'}, id="filter_one_row"),
+    pytest.param("csv", {"filters": '{"id": 99}'}, id="filter_no_rows"),
+    pytest.param("scsv", {"like": '{"note": "note, 1"}'}, id="like"),
+]
+
+
+@pytest.mark.parametrize("fmt,params", STREAM_CASES)
+def test_body_is_the_same_streamed_or_built_whole(client, settings, resource, fmt, params):
+    streamed = get(client, resource, fmt, **params)
+    settings.DOWNLOAD_STREAMING = False
+    whole = get(client, resource, fmt, **params)
+
+    assert streamed.status_code == whole.status_code == 200
+    assert streamed.content == whole.content
+    assert streamed["Content-Type"] == whole["Content-Type"] == "text/csv"
+    assert streamed["Content-Disposition"] == whole["Content-Disposition"]
+
+
+def test_download_is_streamed_in_blocks_and_nothing_is_read_ahead(streaming_client, resource):
+    response = get(streaming_client, resource)
+    assert response.streaming and response.status_code == 200
+
+    with patch.object(connectors.RowStream, "fetch", autospec=True, side_effect=connectors.RowStream.fetch) as fetch:
+        chunks = iter(response.streaming_content)
+        first = next(chunks)
+        assert first.startswith(b"id,note,price\r\n")
+        assert fetch.call_count == 0  # the first block was read before the response existed
+        rest = list(chunks)
+
+    assert len(rest) == math.ceil(ROWS / BLOCK_ROWS) - 1
+    assert fetch.call_count == len(rest) + 1  # the last call finds no more rows
+    assert b"".join([first, *rest]).count(b"\r\n") == ROWS + 1
+
+
+def test_the_other_formats_and_the_preview_are_not_streamed(client, settings, resource):
+    assert not get(client, resource, "csv", **{}).streaming
+    for fmt in ("json", "xml", "yaml"):
+        assert not isinstance(get(client, resource, fmt), download_stream.StreamedDownloadResponse)
+    preview = client.get(PREVIEW, {"resource_id": resource.id, "format": "csv"})
+    assert preview.status_code == 200 and not isinstance(preview, download_stream.StreamedDownloadResponse)
+    settings.DOWNLOAD_STREAMING = False
+    assert not isinstance(get(client, resource, "csv"), download_stream.StreamedDownloadResponse)
+
+
+def test_empty_result_has_no_header_and_completes(client, tmp_path, timing_lines):
+    empty = _make_resource(tmp_path, "empty", [("CREATE TABLE things (id INTEGER PRIMARY KEY)", {})])
+
+    response = get(client, empty)
+
+    assert response.status_code == 200 and response.content == b""
+    assert " rows=0 " in timing_lines()[0] and " result=complete " in timing_lines()[0]
+
+
+def test_timing_line_is_written_when_the_sending_ends(streaming_client, resource, timing_lines):
+    response = get(streaming_client, resource)
+    assert timing_lines() == []  # not when the response is created
+
+    body = b"".join(response.streaming_content)
+
+    (line,) = timing_lines()
+    assert f" rows={ROWS} " in line and f" bytes={len(body)} " in line and " status=200 " in line
+    assert " format=csv " in line and " endpoint=download " in line
+    # New fields come last, after the ones existing parsers know.
+    assert line.index(" maxrss_kb=") < line.index(" result=complete ") < line.index(" t_first=") < line.index(" rss_kb=")
+    assert line.split(" rss_kb=")[1].isdigit() and int(line.split(" rss_kb=")[1]) > 0
+    assert float(line.split(" t_first=")[1].split()[0]) <= float(line.split(" t_total=")[1].split()[0])
+
+
+def test_size_of_the_resource_is_stored_with_the_rows_and_bytes_delivered(client, resource):
+    response = get(client, resource)
+
+    stored = ResourceSizeConfig.objects.get(resource_id=resource)
+    assert (stored.registries, stored.size) == (ROWS, len(response.content))
+
+
+def test_partial_download_does_not_store_the_size(client, resource):
+    get(client, resource, limit="3")
+    get(client, resource, fields="id")
+
+    assert not ResourceSizeConfig.objects.exists()
+
+
+def test_client_going_away_is_early_close_and_releases_the_source(streaming_client, resource, timing_lines, tracker):
+    response = get(streaming_client, resource)
+    chunks = iter(response.streaming_content)
+    next(chunks)  # one block sent, the server then fails to write and closes the response
+    assert tracker.open_connections() == 1 and tracker.undisposed_engines() == 1
+
+    response.close()
+
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+    (line,) = timing_lines()
+    assert " result=early_close " in line and " status=200 " in line
+    assert f" rows={BLOCK_ROWS} " in line
+    assert not ResourceSizeConfig.objects.exists()
+    response.close()
+    assert len(timing_lines()) == 1
+
+
+def test_resources_are_closed_in_order_cursor_connection_engine(client, resource, tracker):
+    get(client, resource)
+
+    assert tracker.last("result") < tracker.last("connection") < tracker.last("engine")
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+def test_failure_after_the_first_block_aborts_without_a_marker(streaming_client, resource, timing_lines, error_records,
+                                                               tracker):
+    real_fetch = connectors.RowStream.fetch
+    calls = []  # the first block was read when the response was created, so these are the 2nd block on
+
+    def fetch(self, size, first=False):
+        calls.append(first)
+        if len(calls) == 3:  # the 4th block: three were delivered
+            raise RuntimeError("source went away")
+        return real_fetch(self, size, first)
+
+    response = get(streaming_client, resource)
+    received = []
+    with patch.object(connectors.RowStream, "fetch", fetch):
+        with pytest.raises(RuntimeError, match="source went away"):
+            for chunk in response.streaming_content:
+                received.append(chunk)
+    response.close()
+
+    body = b"".join(received)
+    assert body.startswith(b"id,note,price\r\n") and body.count(b"\r\n") == 1 + BLOCK_ROWS * 3
+    assert b"error" not in body.lower() and b"RuntimeError" not in body  # nothing but the rows
+    (record,) = error_records()
+    assert "resource_id=%s" % resource.id in record.getMessage() and "rows_sent=9" in record.getMessage()
+    (line,) = timing_lines()
+    assert " result=error " in line and " rows=9 " in line
+    assert not ResourceSizeConfig.objects.exists()
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+def test_source_failing_after_the_first_block_is_not_mapped_to_an_http_error(streaming_client, resource):
+    """Once the headers are sent the error cannot become a 5xx: it reaches the server, which aborts the response."""
+    response = get(streaming_client, resource)
+    assert response.status_code == 200
+
+    def failing_fetchmany(self, size):
+        raise sqlalchemy.exc.OperationalError("SELECT", {}, Exception("connection lost"))
+
+    with patch.object(connectors._RowCursor, "fetchmany", failing_fetchmany):
+        with pytest.raises(sqlalchemy.exc.OperationalError):
+            b"".join(response.streaming_content)
+
+
+# --- Failures before the first block: the same HTTP errors as always -----------------------------------------------
+
+def _problem(response):
+    body = response.json()
+    return response.status_code, body.get("error_code")
+
+
+@pytest.mark.parametrize("streaming", [True, False], ids=["streamed", "built_whole"])
+@pytest.mark.parametrize(
+    "case,expected",
+    [
+        pytest.param("missing_object", (503, "OBJECT_UNAVAILABLE"), id="missing_object"),
+        pytest.param("bad_sort", (400, "VALIDATION_ERROR"), id="bad_sort"),
+        pytest.param("bad_field", (400, "VALIDATION_ERROR"), id="bad_field"),
+        pytest.param("bad_columns", (400, "VALIDATION_ERROR"), id="bad_columns"),
+        pytest.param("query_fails", (503, "QUERY_ERROR"), id="query_fails"),
+    ],
+)
+def test_failure_before_the_first_block_returns_the_usual_error(
+    streaming_client, settings, resource, tracker, case, expected, streaming
+):
+    settings.DOWNLOAD_STREAMING = streaming
+    params = {}
+    if case == "missing_object":
+        resource.object_location = "nothing_here"
+        resource.save()
+    elif case == "bad_sort":
+        params["sort"] = "nope"
+    elif case == "bad_field":
+        params["fields"] = "nope"
+    elif case == "bad_columns":
+        params["columns"] = "only_one"
+    if case == "query_fails":
+        failure = sqlalchemy.exc.OperationalError("SELECT", {}, Exception("timeout"))
+        with patch.object(connectors, "_build_query", side_effect=failure):
+            response = get(streaming_client, resource, **params)
+    else:
+        response = get(streaming_client, resource, **params)
+
+    assert _problem(response) == expected
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+@pytest.mark.parametrize("streaming", [True, False], ids=["streamed", "built_whole"])
+def test_failure_of_the_first_fetch_returns_the_usual_error(streaming_client, settings, resource, tracker, streaming):
+    settings.DOWNLOAD_STREAMING = streaming
+    if streaming:
+        # The query is accepted and fails when the first rows are read.
+        failure = sqlalchemy.exc.OperationalError("SELECT", {}, Exception("DPY-4011"))
+        with patch.object(connectors._RowCursor, "fetchmany", side_effect=failure):
+            response = get(streaming_client, resource)
+    else:
+        failure = sqlalchemy.exc.OperationalError("SELECT", {}, Exception("DPY-4011"))
+        with patch.object(connectors, "_build_query", side_effect=failure):
+            response = get(streaming_client, resource)
+
+    assert _problem(response) == (503, "QUERY_ERROR")
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+@pytest.mark.parametrize("streaming", [True, False], ids=["streamed", "built_whole"])
+def test_failure_of_the_normalization_is_the_same_error(streaming_client, settings, resource, tracker, streaming):
+    settings.DOWNLOAD_STREAMING = streaming
+
+    def boom(_value):
+        raise RuntimeError("cannot normalize")
+
+    with patch.dict(connectors._NORMALIZERS, {int: boom}):
+        with pytest.raises(RuntimeError, match="cannot normalize"):
+            get(streaming_client, resource)
+
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+@pytest.fixture
+def blob_resource(tmp_path):
+    """The 8th row holds bytes that are not UTF-8: they cannot be serialized."""
+    statements = [("CREATE TABLE things (id INTEGER PRIMARY KEY, raw BLOB)", {})]
+    statements += [
+        ("INSERT INTO things VALUES (:i, :b)", {"i": i, "b": b"\xff\xfe" if i == 8 else b"ok"}) for i in range(1, 11)
+    ]
+    return _make_resource(tmp_path, "blobs", statements)
+
+
+@pytest.mark.parametrize("streaming", [True, False], ids=["streamed", "built_whole"])
+def test_failure_of_the_serialization_in_the_first_block_is_the_same_error(
+    streaming_client, settings, blob_resource, tracker, streaming
+):
+    settings.DOWNLOAD_STREAMING = streaming
+
+    with pytest.raises(ValueError):
+        get(streaming_client, blob_resource, filters='{"id": 8}')
+
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+def test_failure_of_the_serialization_after_the_first_block_aborts(streaming_client, blob_resource, timing_lines,
+                                                                   error_records, tracker):
+    response = get(streaming_client, blob_resource)  # the first block (rows 1-3) is fine
+    assert response.status_code == 200
+    received = []
+
+    with pytest.raises(ValueError):
+        for chunk in response.streaming_content:
+            received.append(chunk)
+
+    assert b"".join(received).count(b"\r\n") == 1 + 6  # header and the two blocks before the 8th row
+    assert len(error_records()) == 1
+    assert " result=error " in timing_lines()[0]
+    assert not ResourceSizeConfig.objects.exists()
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+def test_response_never_iterated_nor_closed_is_closed_by_the_finalizer(streaming_client, resource, tracker):
+    response = get(streaming_client, resource)
+    assert tracker.open_connections() == 1
+
+    response._resource_closers.clear()  # nothing will close it: the owner's finalizer is the only safety net
+    streaming_client.cookies.clear()
+    del response
+    gc.collect()
+
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+# --- Skipping rows while reading (MSSQL without an orderable column) ----------------------------------------------
+
+class _FakeResult:
+    def __init__(self, rows):
+        self._rows = list(rows)
+
+    def fetchmany(self, size):
+        taken, self._rows = self._rows[:size], self._rows[size:]
+        return taken
+
+    def close(self):
+        pass
+
+
+class _FakeConnection:
+    def close(self):
+        pass
+
+
+@pytest.mark.parametrize(
+    "skip,size,expected",
+    [
+        pytest.param(0, 4, [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9]], id="no_skip"),
+        pytest.param(2, 4, [[2, 3], [4, 5, 6, 7], [8, 9]], id="skip_inside_first_block"),
+        pytest.param(4, 4, [[4, 5, 6, 7], [8, 9]], id="skip_a_whole_block"),
+        pytest.param(6, 4, [[6, 7], [8, 9]], id="skip_across_blocks"),
+        pytest.param(20, 4, [], id="skip_everything"),
+    ],
+)
+def test_offset_without_sortable_column_drops_rows_while_reading(skip, size, expected):
+    cursor = connectors._RowCursor(_FakeConnection(), _FakeResult(range(10)), skip, None)
+
+    blocks = []
+    while True:
+        rows = cursor.fetchmany(size)
+        if not rows:
+            break
+        blocks.append(rows)
+
+    assert blocks == expected

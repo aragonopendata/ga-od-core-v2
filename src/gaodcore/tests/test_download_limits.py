@@ -12,10 +12,11 @@ import pytest
 from django.db.utils import ConnectionHandler
 from django.http import QueryDict
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 
 import download_limits
 from conftest import DB_NAME, DB_PASSWORD, DB_USERNAME
-from connectors import DriverConnectionError
+from connectors import DriverConnectionError, RowStream
 from gaodcore import views as gaodcore_views
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig, ResourceSizeConfig
 from gaodcore_project.config import DownloadLimitsConfig
@@ -214,7 +215,8 @@ def test_other_format_or_filter_is_another_download(client, settings, big, other
     _limits(settings)
     hold(other, big, sort="id")
 
-    assert get(client, big, formato="csv").status_code == 200
+    # YAML, not CSV: CSV is streamed and does not go through get_resource_data.
+    assert get(client, big, formato="yaml").status_code == 200
     assert get(client, big, filters='{"id": 1}').status_code == 200
     assert query_calls.call_count == 2
 
@@ -444,3 +446,92 @@ def test_normalized_url_ignores_names_and_orders_parameters():
 def test_url_lock_key_fits_an_int4():
     for url in ("a", "b", "c" * 1000):
         assert -2**31 <= download_limits.url_lock_key(url) < 2**31
+
+
+# --- Streamed (CSV) downloads: the locks live as long as the sending --------------------------------------------------
+
+@pytest.fixture
+def streamed(settings, streaming_client):
+    """A client that returns a streamed CSV download unread, with one row per block (the tables have two rows)."""
+    settings.DOWNLOAD_BLOCK_ROWS = 1
+    return streaming_client
+
+
+def test_streamed_download_holds_its_locks_while_it_is_sent_and_frees_them_on_close(
+    streamed, settings, big, other, timing_lines
+):
+    _limits(settings, max_per_resource=1, max_total=1)
+
+    response = get(streamed, big, formato="csv")
+    assert response.status_code == 200 and response.streaming
+    chunks = iter(response.streaming_content)
+    next(chunks)
+    assert not free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    assert not free(other, download_limits.LOCK_CLASS_RESOURCE, big.id * 16)
+    with patch.object(download_limits, "limiter_connection", return_value=other):  # another worker
+        assert get(streamed, big, formato="csv", filters='{"id": 1}').status_code == 503
+
+    assert b"".join(chunks) == b"2,b\r\n"
+    response.close()  # what the server does once it has sent everything
+
+    assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    assert free(other, download_limits.LOCK_CLASS_RESOURCE, big.id * 16)
+    assert " result=complete " in timing_lines()[-1]
+
+
+def test_client_cutting_a_streamed_download_frees_the_locks_and_the_source(
+    streamed, settings, big, other, timing_lines
+):
+    _limits(settings, max_per_resource=1, max_total=1)
+    events = []
+    real_release = download_limits.DownloadPermit.release
+    real_cursor_close = RowStream.close
+    real_dispose = Engine.dispose
+
+    def release(self):
+        events.append("locks")
+        return real_release(self)
+
+    def cursor_close(self):
+        events.append("cursor")
+        return real_cursor_close(self)
+
+    def dispose(self, *args, **kwargs):
+        events.append("engine")
+        return real_dispose(self, *args, **kwargs)
+
+    with (
+        patch.object(download_limits.DownloadPermit, "release", release),
+        patch.object(RowStream, "close", cursor_close),
+        patch.object(Engine, "dispose", dispose),
+    ):
+        response = get(streamed, big, formato="csv")
+        chunks = iter(response.streaming_content)
+        next(chunks)  # one row sent; then the write to the client fails and the server closes the response
+        assert not free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+        del events[:]
+        response.close()
+
+    # Source first (cursor and connection, then the engine), the locks after it.
+    assert events[:3] == ["cursor", "engine", "locks"]
+    assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    assert free(other, download_limits.LOCK_CLASS_RESOURCE, big.id * 16)
+    assert " result=early_close " in timing_lines()[-1]
+    gaodcore_views.update_resource_size.assert_not_called()  # no size is stored for a cut download
+    assert get(streamed, big, formato="csv", filters='{"id": 1}').status_code == 200
+
+
+def test_failing_streamed_download_frees_its_locks(streamed, settings, big, other):
+    _limits(settings, max_per_resource=1, max_total=1)
+    response = get(streamed, big, formato="csv")
+
+    def fail(self, size, first=False):
+        raise RuntimeError("source went away")
+
+    with patch.object(RowStream, "fetch", fail):
+        with pytest.raises(RuntimeError):
+            b"".join(response.streaming_content)
+    response.close()  # the server closes it after the failure (the test client already did when reading failed)
+
+    assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    gaodcore_views.update_resource_size.assert_not_called()

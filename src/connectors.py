@@ -3,6 +3,7 @@
 import contextlib
 import csv
 import decimal
+import itertools
 import json
 import logging
 import ast
@@ -1217,6 +1218,7 @@ def _get_session_data_and_columns(
     timeout: Optional[int] = None,
     timer: Optional[PhaseTimer] = None,
     resource: Optional[OpenResource] = None,
+    stream_block_rows: Optional[int] = None,
 ):
     """
     Retrieve data from a resource based on the provided parameters.
@@ -1238,6 +1240,9 @@ def _get_session_data_and_columns(
     @param resource: Shared engine and model. When omitted they are created here and the engine is disposed here;
                      a shared engine is never disposed by this function.
 
+    @param stream_block_rows: Read the rows in blocks of this size instead of all at once. ``data`` is then a cursor
+                     (``fetchmany``/``close``) that the caller must close; it needs a shared ``resource``.
+
     @return: A tuple ``(data, column_names)``: the rows of the resource and the names of the selected columns, in
              the order of the rows' values. The names are known even when there are no rows.
 
@@ -1249,11 +1254,14 @@ def _get_session_data_and_columns(
     # cannot be compared or sorted, except when using IS NULL or LIKE operator. (306) (SQLExecDirectW)')
     # mssql no order no limit no offset
 
+    if stream_block_rows is not None and resource is None:
+        raise ValueError("Streaming needs a shared resource: its owner disposes the engine when the stream ends.")
     with _owned_resource(
         resource, uri, object_location, object_location_schema, timeout, timer
     ) as resource:
         return _query_session_data(
-            resource, uri, object_location, object_location_schema, filters, like, fields, sort, limit, offset, timer
+            resource, uri, object_location, object_location_schema, filters, like, fields, sort, limit, offset, timer,
+            stream_block_rows,
         )
 
 
@@ -1311,83 +1319,30 @@ def _build_mssql_query(session, model, column_dict, columns, filters, filters_ar
     return query
 
 
-def _query_session_data(
-    resource: OpenResource,
-    uri: str,
-    object_location: Optional[str],
-    object_location_schema: Optional[str],
-    filters,
-    like,
-    fields,
-    sort,
-    limit,
-    offset,
-    timer,
-):
-    """Run the query on a shared resource, closing the session on every path. The engine is not disposed here."""
-    engine, model = resource.engine, resource.model
-    session_maker = sessionmaker(bind=engine)
-    parsed = urlparse(uri)
-
-    column_dict = {column.key: column for column in model.columns}
-    columns = _get_columns(column_dict, fields)
-    filters_args = []
-    like_filters = _process_like_filter(like, model)
-    filters, filters_args = _get_filter_operators(filters, filters_args)
-    if "oracle" in parsed.scheme:
-        filters = _process_filters_oracle_dates(filters)
-    filters_args = process_filters_args(filters_args, parsed.scheme, frozenset(column_dict.keys()))
-    filters_args.extend(like_filters)
-
-    session = session_maker()
-
-    if parsed.scheme in ["mssql+pyodbc"]:
-        mssql_query_started = monotonic()
-        try:
-            query = _build_mssql_query(
-                session, model, column_dict, columns, filters, filters_args, sort, limit, offset
-            )
-            data = query.all()
-            if offset and not _mssql_sort_methods(model, column_dict, sort, paginated=True):
-                # No orderable column: OFFSET is impossible, so TOP (limit + offset) was used and
-                # the skipped rows are dropped here.
-                data = data[offset:]
-        except sqlalchemy.exc.ProgrammingError as err:
+@contextlib.contextmanager
+def _translated_query_errors(uri, object_location, object_location_schema, mssql, started_at):
+    """Map the errors of running a query on a resource to the ones the API reports (the same on every code path)."""
+    try:
+        yield
+    except sqlalchemy.exc.ProgrammingError as err:
+        if mssql:
             raise NoObjectError("Object not available.") from err
-        except SortFieldNoExistsError as err:
-            logger.warning("Sort Field No Exists Error. - %s ", err)
-            raise ValidationError(err.message, ErrorCodes.INVALID_SORT) from err
-        finally:
-            if timer is not None:
-                timer.add("query", monotonic() - mssql_query_started)
-            session.close()
-    else:
-        query_started_at = monotonic()
-        try:
-            data = (
-                session.query(model)
-                .filter_by(**filters)
-                .filter(*filters_args)
-                .order_by(*_get_sort_methods(column_dict, sort))
-                .with_entities(*[model.c[col.key].label(col.key) for col in columns])
-                .offset(offset)
-                .limit(limit)
-                .all()
-            )
-        except sqlalchemy.exc.ProgrammingError as err:
-            logger.warning("Object not available. - %s ", err)
-            raise ServiceUnavailable(
-                "Object not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
-            ) from err
-        except sqlalchemy.exc.InvalidRequestError as err:
+        logger.warning("Object not available. - %s ", err)
+        raise ServiceUnavailable(
+            "Object not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
+        ) from err
+    except SortFieldNoExistsError as err:
+        logger.warning("Sort Field No Exists Error. - %s ", err)
+        raise ValidationError(err.message, ErrorCodes.INVALID_SORT) from err
+    except Exception as err:
+        if mssql:
+            raise
+        if isinstance(err, sqlalchemy.exc.InvalidRequestError):
             logger.warning("Invalid Request Error. - %s ", err)
             raise ServiceUnavailable(
                 "Invalid Request Error.", code=ErrorCodes.QUERY_ERROR
             ) from err
-        except SortFieldNoExistsError as err:
-            logger.warning("Sort Field No Exists Error. - %s ", err)
-            raise ValidationError(err.message, ErrorCodes.INVALID_SORT) from err
-        except sqlalchemy.exc.OperationalError as err:
+        if isinstance(err, sqlalchemy.exc.OperationalError):
             # Driver-level failure, which is where a timeout surfaces: oracledb
             # raises DPY-4011/DPY-4024 on call_timeout and SQLAlchemy wraps it here.
             # Logged at ERROR with the object location and elapsed time so the
@@ -1400,21 +1355,152 @@ def _query_session_data(
                 mask_uri(uri),
                 object_location,
                 object_location_schema,
-                monotonic() - query_started_at,
+                monotonic() - started_at,
                 err,
             )
             raise ServiceUnavailable(
                 "Query error", code=ErrorCodes.QUERY_ERROR
             ) from err
-        except Exception as err:
-            logger.warning("Problem in resource query: %s", err)
-            raise ServiceUnavailable(
-                "Query error", code=ErrorCodes.QUERY_ERROR
-            ) from err
+        logger.warning("Problem in resource query: %s", err)
+        raise ServiceUnavailable(
+            "Query error", code=ErrorCodes.QUERY_ERROR
+        ) from err
+
+
+def _build_query(session, scheme, model, column_dict, columns, filters, filters_args, sort, limit, offset):
+    """Build the query of a resource for ``scheme``. Returns ``(query, skip)``: ``skip`` is the number of leading rows
+    the caller must drop (MSSQL without an orderable column cannot OFFSET, so TOP (limit + offset) is used instead)."""
+    if scheme in ["mssql+pyodbc"]:
+        query = _build_mssql_query(
+            session, model, column_dict, columns, filters, filters_args, sort, limit, offset
+        )
+        skip = offset if offset and not _mssql_sort_methods(model, column_dict, sort, paginated=True) else 0
+        return query, skip
+    query = (
+        session.query(model)
+        .filter_by(**filters)
+        .filter(*filters_args)
+        .order_by(*_get_sort_methods(column_dict, sort))
+        .with_entities(*[model.c[col.key].label(col.key) for col in columns])
+        .offset(offset)
+        .limit(limit)
+    )
+    return query, 0
+
+
+class _RowCursor:
+    """Rows of a running query, read in blocks. Closing it closes the result and then the connection it uses."""
+
+    def __init__(self, connection, result, skip, translate_errors):
+        self._connection = connection
+        self._result = result
+        self._skip = skip
+        self.translate_errors = translate_errors
+
+    def fetchmany(self, size):
+        while True:
+            rows = self._result.fetchmany(size)
+            if not rows or not self._skip:
+                return rows
+            dropped = min(self._skip, len(rows))
+            self._skip -= dropped
+            rows = rows[dropped:]
+            if rows:
+                return rows
+
+    def close(self):
+        try:
+            self._result.close()
         finally:
-            if timer is not None:
-                timer.add("query", monotonic() - query_started_at)
-            session.close()
+            self._connection.close()
+
+
+class _ListCursor:
+    """The same block interface over rows that are already in memory."""
+
+    def __init__(self, rows):
+        self._rows = iter(rows)
+        self.translate_errors = contextlib.nullcontext
+
+    def fetchmany(self, size):
+        return list(itertools.islice(self._rows, size))
+
+    def close(self):
+        self._rows = iter(())
+
+
+def _query_parts(resource, uri, filters, like, fields):
+    """Columns and filters of a query on ``resource``."""
+    parsed = urlparse(uri)
+    column_dict = {column.key: column for column in resource.model.columns}
+    columns = _get_columns(column_dict, fields)
+    filters_args = []
+    like_filters = _process_like_filter(like, resource.model)
+    filters, filters_args = _get_filter_operators(filters, filters_args)
+    if "oracle" in parsed.scheme:
+        filters = _process_filters_oracle_dates(filters)
+    filters_args = process_filters_args(filters_args, parsed.scheme, frozenset(column_dict.keys()))
+    filters_args.extend(like_filters)
+    return parsed, column_dict, columns, filters, filters_args
+
+
+def _query_session_data(
+    resource: OpenResource,
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    filters,
+    like,
+    fields,
+    sort,
+    limit,
+    offset,
+    timer,
+    stream_block_rows: Optional[int] = None,
+):
+    """Run the query on a shared resource, closing the session on every path. The engine is not disposed here.
+
+    With ``stream_block_rows`` the rows are not read: a ``_RowCursor`` over a streaming result is returned instead of
+    the list, and the caller must close it (which returns its connection to the pool).
+    """
+    engine, model = resource.engine, resource.model
+    session_maker = sessionmaker(bind=engine)
+    parsed, column_dict, columns, filters, filters_args = _query_parts(resource, uri, filters, like, fields)
+    mssql = parsed.scheme in ["mssql+pyodbc"]
+
+    session = session_maker()
+    started_at = monotonic()
+
+    def translate():
+        return _translated_query_errors(uri, object_location, object_location_schema, mssql, started_at)
+
+    connection = None
+    try:
+        with translate():
+            query, skip = _build_query(
+                session, parsed.scheme, model, column_dict, columns, filters, filters_args, sort, limit, offset
+            )
+            if stream_block_rows is None:
+                data = query.all()
+                if skip:
+                    # No orderable column: OFFSET is impossible, so TOP (limit + offset) was used and
+                    # the skipped rows are dropped here.
+                    data = data[skip:]
+            else:
+                connection = engine.connect()
+                result = connection.execute(
+                    query.statement,
+                    execution_options={"stream_results": True, "max_row_buffer": stream_block_rows},
+                )
+                data = _RowCursor(connection, result, skip, translate)
+    except BaseException:
+        if connection is not None:
+            connection.close()
+        raise
+    finally:
+        if timer is not None:
+            timer.add("query", monotonic() - started_at)
+        session.close()
 
     return data, [column.key for column in columns]
 
@@ -1506,6 +1592,85 @@ def get_resource_data(
         timer.add("normalize", monotonic() - normalize_started)
 
     return (dict(zip(column_names, row)) for row in data)
+
+
+class RowStream:
+    """The rows of a resource, read and normalized in blocks (as ``get_resource_data`` does for all of them).
+
+    ``fetch`` returns the next block as a list of dicts, empty when there are no more. ``close`` closes the cursor and
+    then the connection; it is safe to call more than once. The time of each block is added to the ``query`` and
+    ``normalize`` phases of the timer.
+    """
+
+    def __init__(self, cursor, columns: List[str], timer: Optional[PhaseTimer] = None):
+        self._cursor = cursor
+        self.columns = columns
+        self._timer = timer
+
+    def fetch(self, size: int, first: bool = False) -> List[Dict[str, Any]]:
+        """Next block of at most ``size`` rows. With ``first`` a failure is mapped to the API errors, as for the
+        non-streaming query; later failures are raised as the driver reports them (the headers are already sent)."""
+        started = monotonic()
+        try:
+            with self._cursor.translate_errors() if first else contextlib.nullcontext():
+                raw = self._cursor.fetchmany(size)
+        finally:
+            if self._timer is not None:
+                self._timer.add("query", monotonic() - started)
+        normalize_started = monotonic()
+        dispatch = _NORMALIZERS
+        generic = _normalize_value
+        names = self.columns
+        rows = [
+            dict(zip(names, [dispatch.get(type(value), generic)(value) for value in item])) for item in raw
+        ]
+        if self._timer is not None:
+            self._timer.add("normalize", monotonic() - normalize_started)
+        return rows
+
+    def close(self) -> None:
+        self._cursor.close()
+
+
+def get_resource_rows(
+    *,
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    filters: Dict[str, Union[str, dict]],
+    like: Union[str, Dict],
+    fields: List[str],
+    sort: List[OrderBy],
+    limit: Optional[int] = None,
+    offset: int = 0,
+    timeout: Optional[int] = None,
+    timer: Optional[PhaseTimer] = None,
+    resource: OpenResource,
+    block_rows: int = 1000,
+) -> RowStream:
+    """Run the query of ``get_resource_data`` on the shared ``resource`` and return its rows as a ``RowStream``.
+
+    The query is executed here (so a bad field, sort or object fails here) but no row is read yet. The caller owns the
+    stream and must close it before the resource is disposed.
+    """
+    cursor, column_names = _get_session_data_and_columns(
+        uri,
+        object_location,
+        object_location_schema,
+        filters,
+        like,
+        fields,
+        sort,
+        limit,
+        offset,
+        timeout,
+        timer=timer,
+        resource=resource,
+        stream_block_rows=block_rows,
+    )
+    if not hasattr(cursor, "fetchmany"):  # rows already in memory
+        cursor = _ListCursor(cursor)
+    return RowStream(cursor, list(column_names), timer)
 
 
 def update_resource_size(resource_config, registries, size):

@@ -57,3 +57,17 @@ def test_settings_databases_use_persistent_connections():
     default = project_settings.DATABASES["default"]
     assert default["CONN_MAX_AGE"] == 60
     assert default["CONN_HEALTH_CHECKS"] is True
+
+
+def test_download_streaming_defaults():
+    config = CommonConfig(**_common_data())
+    assert config.download_streaming is True
+    assert config.download_block_rows == 1000
+
+
+def test_download_streaming_can_be_tuned_and_rejects_empty_blocks():
+    config = CommonConfig(**_common_data(), download_streaming=False, download_block_rows=50)
+    assert config.download_streaming is False
+    assert config.download_block_rows == 50
+    with pytest.raises(ValidationError):
+        CommonConfig(**_common_data(), download_block_rows=0)
