@@ -1,3 +1,4 @@
+from functools import partial
 from itertools import count
 
 import pytest
@@ -22,7 +23,7 @@ class _BufferingClient(Client):
     Tests that need to control the reading (cut it half way, read it block by block) use ``streaming_client``.
     """
 
-    _COPIED = ("client", "request", "wsgi_request", "templates", "context", "resolver_match", "exc_info", "json")
+    _COPIED = ("client", "request", "wsgi_request", "templates", "context", "resolver_match", "exc_info")
 
     def request(self, **request):
         response = super().request(**request)
@@ -34,6 +35,7 @@ class _BufferingClient(Client):
         for name in self._COPIED:
             if name in response.__dict__:
                 setattr(buffered, name, response.__dict__[name])
+        buffered.json = partial(self._parse_json, buffered)  # the one of ``response`` would read the unread stream
         return buffered
 
 

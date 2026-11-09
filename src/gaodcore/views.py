@@ -21,7 +21,7 @@ from rest_framework.exceptions import ValidationError
 
 import download_limits
 from exceptions import ServiceUnavailable, ErrorCodes, DownloadInProgress, TooManyDownloads
-from rest_framework.renderers import BrowsableAPIRenderer
+from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.settings import api_settings
@@ -45,7 +45,15 @@ from connectors import (
     open_resource,
     _HTTP_SCHEMAS,
 )
-from download_stream import CsvEncoder, StreamedDownload, StreamedDownloadResponse, csv_blocks, current_rss_kb
+from download_stream import (
+    CsvEncoder,
+    JsonEncoder,
+    StreamedDownload,
+    StreamedDownloadResponse,
+    csv_blocks,
+    current_rss_kb,
+    json_blocks,
+)
 from log_sanitizer import mask_uri
 from phase_timing import PhaseTimer, phase
 from gaodcore.negotations import HtmlFallbackContentNegotiation, LegacyContentNegotiation
@@ -632,12 +640,28 @@ class DownloadView(APIViewMixin):
             )
             featureCollection = bool(reourceGeojon and format == "json")
             download = None
-            if format in ("csv", "scsv") and self.is_download_endpoint(request) and settings.DOWNLOAD_STREAMING:
+            streamed_json = (
+                format == "json" and not featureCollection and self._renders_plain_json(request)
+            )
+            if (
+                (format in ("csv", "scsv") or streamed_json)
+                and self.is_download_endpoint(request)
+                and settings.DOWNLOAD_STREAMING
+            ):
                 logger.info("Downloading resource %s in %s format, streaming.", resource_id, format)
                 disposition = self._content_disposition(request, resource_config)
-                download = self._open_csv_stream(
-                    stack, resource_config, resource_id, delimiter, limit, offset, fields, filters, columns, like,
-                    sort, shared, whole_resource,
+                if streamed_json:
+                    renderer = request.accepted_renderer
+                    content_type = (
+                        f"{renderer.media_type}; charset={renderer.charset}" if renderer.charset else renderer.media_type
+                    )
+                    encoder, make_blocks = JsonEncoder(renderer, columns, timer), json_blocks
+                else:
+                    content_type = CSV_CONTENT_TYPE
+                    encoder, make_blocks = CsvEncoder(columns, delimiter, timer), csv_blocks
+                download = self._open_stream(
+                    stack, resource_config, resource_id, limit, offset, fields, filters, like, sort, shared,
+                    whole_resource, encoder, make_blocks,
                 )
             elif featureCollection:
                 logger.info(
@@ -677,7 +701,7 @@ class DownloadView(APIViewMixin):
 
         if download is not None:
             try:
-                response = StreamedDownloadResponse(download, content_type=CSV_CONTENT_TYPE)
+                response = StreamedDownloadResponse(download, content_type=content_type)
                 response["content-disposition"] = disposition
             except BaseException:
                 download.close()
@@ -733,11 +757,21 @@ class DownloadView(APIViewMixin):
 
         return response
 
-    def _open_csv_stream(
-        self, stack, resource_config, resource_id, delimiter, limit, offset, fields, filters, columns, like, sort,
-        shared, whole_resource,
+    @staticmethod
+    def _renders_plain_json(request: Request) -> bool:
+        """Whether the negotiated renderer is ``JSONRenderer`` and its output does not depend on the whole data.
+
+        Only then the body can be built row by row: with ``indent`` in the ``Accept`` (or any other renderer, e.g. a
+        subclass or the XML/YAML ones) it goes through the renderer as before.
+        """
+        renderer = request.accepted_renderer
+        return type(renderer) is JSONRenderer and renderer.get_indent(request.accepted_media_type, {}) is None
+
+    def _open_stream(
+        self, stack, resource_config, resource_id, limit, offset, fields, filters, like, sort,
+        shared, whole_resource, encoder, make_blocks,
     ) -> StreamedDownload:
-        """Run the query and prepare the first CSV block; the rest is produced while the response is sent.
+        """Run the query and prepare the first block (CSV or JSON); the rest is produced while the response is sent.
 
         Everything that can fail on the request's own data (connection, object, fields, sort, query, columns,
         normalization and serialization of the first block) fails here, before a response exists, and maps to the
@@ -763,7 +797,7 @@ class DownloadView(APIViewMixin):
         )
         stack.callback(rows.close)  # closes the cursor and then its connection, before the engine is disposed
         first_rows = _get_data_public_error(rows.fetch, block_rows, True)
-        first, rest = csv_blocks(rows, CsvEncoder(columns, delimiter, timer), block_rows, first_rows)
+        first, rest = make_blocks(rows, encoder, block_rows, first_rows)
         t_first = monotonic() - timer.started_at
         on_complete = None
         if whole_resource:

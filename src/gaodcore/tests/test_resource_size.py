@@ -95,7 +95,7 @@ def test_response_size_does_not_copy_the_body():
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("fmt", ["json"])
+@pytest.mark.parametrize("fmt", ["xml"])
 def test_response_size_matches_content_length_of_body(client, resource, fmt):
     sizes = []
     real = gaodcore_views.response_size

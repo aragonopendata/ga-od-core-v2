@@ -17,6 +17,7 @@ from time import monotonic
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from django.http import StreamingHttpResponse
+from rest_framework.renderers import LONG_SEPARATORS, SHORT_SEPARATORS
 
 from connectors import RowStream
 from phase_timing import PhaseTimer, phase
@@ -207,6 +208,65 @@ class CsvEncoder:
             encoded = buffer.getvalue().encode("utf-8")
         self._header_written = True
         return encoded, len(data)
+
+
+class JsonEncoder:
+    """Turns blocks of normalized rows into the bytes ``JSONRenderer`` gives for all the rows at once (no ``indent``).
+
+    ``[`` comes with the first block, the rows are separated by the renderer's item separator and ``]`` is the last
+    block (``close``), so a body that is cut never ends in a valid JSON document. Every row goes through the same
+    ``json.dumps`` configuration as the renderer, built once from its attributes.
+    """
+
+    def __init__(self, renderer, columns_name: List[str], timer: Optional[PhaseTimer] = None):
+        separators = SHORT_SEPARATORS if renderer.compact else LONG_SEPARATORS
+        self._item_separator = separators[0]
+        self._dumps = renderer.encoder_class(
+            ensure_ascii=renderer.ensure_ascii, allow_nan=not renderer.strict, separators=separators
+        ).encode
+        self._columns_name = columns_name
+        self._timer = timer
+        self._started = False
+
+    def encode(self, rows: List[Dict[str, Any]]) -> Block:
+        if not rows:
+            return (b"" if self._started else b"["), 0
+        with phase(self._timer, "normalize"):
+            data = get_return_list(rows, format_is_xlsx=False)
+            data = modify_header(data, self._columns_name)
+        with phase(self._timer, "render"):
+            dumps = self._dumps
+            body = self._item_separator.join([dumps(item) for item in data])
+            body = body.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+            if self._started:
+                body = self._item_separator + body
+            else:
+                body = "[" + body
+                self._started = True
+        return body.encode(), len(data)
+
+    @staticmethod
+    def close() -> Block:
+        return b"]", 0
+
+
+def json_blocks(stream: RowStream, encoder: JsonEncoder, block_rows: int, first_rows: List[Dict[str, Any]]):
+    """Prepare the first block now and return ``(first, rest)`` like ``csv_blocks``; ``]`` is the last block of ``rest``.
+
+    The ``]`` is only produced when the rows run out without error: a failing or abandoned generator never reaches it.
+    """
+    first = encoder.encode(first_rows)
+
+    def rest() -> Iterator[Block]:
+        if first_rows:
+            while True:
+                rows = stream.fetch(block_rows)
+                if not rows:
+                    break
+                yield encoder.encode(rows)
+        yield encoder.close()
+
+    return first, rest()
 
 
 def csv_blocks(stream: RowStream, encoder: CsvEncoder, block_rows: int, first_rows: List[Dict[str, Any]]):

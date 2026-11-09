@@ -215,9 +215,9 @@ def test_other_format_or_filter_is_another_download(client, settings, big, other
     _limits(settings)
     hold(other, big, sort="id")
 
-    # YAML, not CSV: CSV is streamed and does not go through get_resource_data.
+    # YAML, not CSV or JSON: those are streamed and do not go through get_resource_data.
     assert get(client, big, formato="yaml").status_code == 200
-    assert get(client, big, filters='{"id": 1}').status_code == 200
+    assert get(client, big, formato="yaml", filters='{"id": 1}').status_code == 200
     assert query_calls.call_count == 2
 
 
@@ -310,18 +310,19 @@ def test_streaming_response_holds_its_slot_until_it_is_closed(client, settings, 
 
 def test_slot_is_free_again_after_an_error_response(client, settings, big, other):
     _limits(settings, max_per_resource=1, max_total=1)
+    # YAML: JSON and CSV are streamed and do not go through get_resource_data (their errors are in test_download_streaming).
     with patch.object(gaodcore_views, "get_resource_data", side_effect=DriverConnectionError("down")):
-        assert get(client, big).status_code == 503
+        assert get(client, big, formato="yaml").status_code == 503
 
     assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
-    assert get(client, big).status_code == 200
+    assert get(client, big, formato="yaml").status_code == 200
 
 
 def test_slot_is_free_again_after_an_unexpected_exception(client, settings, big, other):
     _limits(settings, max_per_resource=1, max_total=1)
     with patch.object(gaodcore_views, "get_resource_data", side_effect=RuntimeError("boom")):
         with pytest.raises(RuntimeError):
-            get(client, big)
+            get(client, big, formato="yaml")
 
     assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
     assert free(other, download_limits.LOCK_CLASS_RESOURCE, big.id * 16)
@@ -333,7 +334,7 @@ def test_slot_is_free_again_when_the_lazy_render_fails(client, settings, big, ot
     with patch("rest_framework.response.Response.rendered_content", new_callable=PropertyMock) as rendered:
         rendered.side_effect = RuntimeError("render failed")
         with pytest.raises(RuntimeError):
-            get(client, big)
+            get(client, big, formato="yaml")
 
     assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
     assert free(other, download_limits.LOCK_CLASS_RESOURCE, big.id * 16)
@@ -452,7 +453,7 @@ def test_url_lock_key_fits_an_int4():
 
 @pytest.fixture
 def streamed(settings, streaming_client):
-    """A client that returns a streamed CSV download unread, with one row per block (the tables have two rows)."""
+    """A client that returns a streamed CSV or JSON download unread, with one row per block (the tables have two rows)."""
     settings.DOWNLOAD_BLOCK_ROWS = 1
     return streaming_client
 
@@ -532,6 +533,61 @@ def test_failing_streamed_download_frees_its_locks(streamed, settings, big, othe
         with pytest.raises(RuntimeError):
             b"".join(response.streaming_content)
     response.close()  # the server closes it after the failure (the test client already did when reading failed)
+
+    assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    gaodcore_views.update_resource_size.assert_not_called()
+
+
+def test_streamed_json_download_cut_half_way_frees_the_locks_and_has_no_closing_bracket(
+    streamed, settings, big, other, timing_lines
+):
+    _limits(settings, max_per_resource=1, max_total=1)
+
+    response = get(streamed, big, formato="json")
+    assert response.status_code == 200 and response.streaming
+    chunks = iter(response.streaming_content)
+    received = [next(chunks)]  # one row sent; then the write to the client fails and the server closes the response
+    assert not free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    assert not free(other, download_limits.LOCK_CLASS_RESOURCE, big.id * 16)
+    response.close()
+
+    assert b"]" not in b"".join(received)
+    assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    assert free(other, download_limits.LOCK_CLASS_RESOURCE, big.id * 16)
+    assert " result=early_close " in timing_lines()[-1]
+    gaodcore_views.update_resource_size.assert_not_called()
+    assert get(streamed, big, formato="json", filters='{"id": 1}').status_code == 200
+
+
+def test_streamed_json_download_holds_its_locks_until_it_ends_and_closes_with_a_bracket(
+    streamed, settings, big, other, timing_lines
+):
+    _limits(settings, max_per_resource=1, max_total=1)
+
+    response = get(streamed, big, formato="json")
+    chunks = iter(response.streaming_content)
+    next(chunks)
+    assert not free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    rest = b"".join(chunks)
+    response.close()
+
+    assert rest.endswith(b"]")
+    assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    assert free(other, download_limits.LOCK_CLASS_RESOURCE, big.id * 16)
+    assert " result=complete " in timing_lines()[-1]
+
+
+def test_failing_streamed_json_download_frees_its_locks(streamed, settings, big, other):
+    _limits(settings, max_per_resource=1, max_total=1)
+    response = get(streamed, big, formato="json")
+
+    def fail(self, size, first=False):
+        raise RuntimeError("source went away")
+
+    with patch.object(RowStream, "fetch", fail):
+        with pytest.raises(RuntimeError):
+            b"".join(response.streaming_content)
+    response.close()
 
     assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
     gaodcore_views.update_resource_size.assert_not_called()

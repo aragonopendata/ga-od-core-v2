@@ -353,7 +353,7 @@ def test_download_is_streamed_in_blocks_and_nothing_is_read_ahead(streaming_clie
 
 def test_the_other_formats_and_the_preview_are_not_streamed(client, settings, resource):
     assert not get(client, resource, "csv", **{}).streaming
-    for fmt in ("json", "xml", "yaml"):
+    for fmt in ("xml", "yaml"):
         assert not isinstance(get(client, resource, fmt), download_stream.StreamedDownloadResponse)
     preview = client.get(PREVIEW, {"resource_id": resource.id, "format": "csv"})
     assert preview.status_code == 200 and not isinstance(preview, download_stream.StreamedDownloadResponse)
@@ -631,3 +631,263 @@ def test_offset_without_sortable_column_drops_rows_while_reading(skip, size, exp
         blocks.append(rows)
 
     assert blocks == expected
+
+
+# --- JSON: the bytes of JSONRenderer without ``indent``, produced block by block ------------------------------------
+
+def _whole(client, settings, resource, fmt="json", **params):
+    """The response as it is built without streaming (the renderer of DRF)."""
+    settings.DOWNLOAD_STREAMING = False
+    try:
+        return get(client, resource, fmt, **params)
+    finally:
+        settings.DOWNLOAD_STREAMING = True
+
+
+@pytest.fixture
+def special_resource(tmp_path):
+    """Values that need care: NaN/inf, Decimal, dates, bytes, U+2028/U+2029, quotes and non ASCII."""
+    statements = [("CREATE TABLE things (id INTEGER PRIMARY KEY, txt TEXT, price REAL, d DATE, blob BLOB)", {})]
+    texts = ["plain", "a\u2028b\u2029c", "ñandú \u20ac \U0001F600", 'quote " and \\ and \n', None, "", "x" * 50]
+    statements += [
+        (
+            "INSERT INTO things VALUES (:i, :t, :p, :d, :b)",
+            {"i": i, "t": t, "p": i / 3, "d": f"2020-01-{i:02d}", "b": b"ok"},
+        )
+        for i, t in enumerate(texts, 1)
+    ]
+    return _make_resource(tmp_path, "special", statements)
+
+
+@pytest.mark.parametrize("rows", [0, 1, 2, 3, 4, 6, 7], ids=lambda n: f"{n}_rows")
+def test_json_bytes_are_those_of_the_renderer(client, streaming_client, settings, tmp_path, rows):
+    statements = [("CREATE TABLE things (id INTEGER PRIMARY KEY, note TEXT, price REAL)", {})]
+    statements += [("INSERT INTO things VALUES (:i, :n, :p)", {"i": i, "n": f"n\u2028{i}", "p": i * 1.5})
+                   for i in range(1, rows + 1)]
+    resource = _make_resource(tmp_path, f"json{rows}", statements)
+
+    streamed = get(streaming_client, resource, "json")
+    assert isinstance(streamed, download_stream.StreamedDownloadResponse)
+    chunks = list(streamed.streaming_content)
+    streamed.close()
+    whole = _whole(client, settings, resource)
+
+    assert b"".join(chunks) == whole.content
+    assert chunks[-1] == b"]" and all(chunks)
+    assert len(chunks) == 1 + max(1, math.ceil(rows / BLOCK_ROWS))  # the blocks of rows and the closing bracket
+    assert streamed["Content-Type"] == whole["Content-Type"] == "application/json"
+    assert streamed["Content-Disposition"] == whole["Content-Disposition"]
+    assert "Content-Length" not in streamed.headers
+
+
+def test_json_special_values_are_the_same_bytes(client, streaming_client, settings, special_resource):
+    streamed = get(streaming_client, special_resource, "json")
+    body = b"".join(streamed.streaming_content)
+    streamed.close()
+    assert body == _whole(client, settings, special_resource).content
+    assert b"\\u2028" in body and b"\\u2029" in body
+
+
+@pytest.mark.parametrize("literal", ["1e999", "-1e999"], ids=["inf", "minus_inf"])
+def test_json_infinity_is_the_same_bytes_as_the_renderer(client, streaming_client, settings, tmp_path, literal):
+    resource = _make_resource(
+        tmp_path, "inf", [("CREATE TABLE things (id INTEGER PRIMARY KEY, v REAL)", {}),
+                          (f"INSERT INTO things VALUES (1, {literal})", {})]
+    )
+    streamed = get(streaming_client, resource, "json")
+    body = b"".join(streamed.streaming_content)
+    streamed.close()
+    assert body == _whole(client, settings, resource).content
+
+
+def test_json_nan_is_the_same_bytes_as_the_renderer(client, streaming_client, settings, tmp_path):
+    """NaN and infinity are normalized before the serialization, by code that both paths share."""
+    resource = _make_resource(
+        tmp_path, "nan", [("CREATE TABLE things (id INTEGER PRIMARY KEY, v REAL)", {})]
+        + [("INSERT INTO things VALUES (:i, :v)", {"i": i, "v": float("nan") if i % 2 else 1.5}) for i in range(1, 6)]
+    )
+    streamed = get(streaming_client, resource, "json")
+    body = b"".join(streamed.streaming_content)
+    streamed.close()
+    assert body == _whole(client, settings, resource).content
+
+
+@pytest.mark.parametrize(
+    "columns",
+    ["a,b,c", "x,x,c", "id,id,id"],
+    ids=["renamed", "duplicate_names", "same_name_everywhere"],
+)
+def test_json_columns_are_applied_per_block_like_the_whole(client, streaming_client, settings, resource, columns):
+    streamed = get(streaming_client, resource, "json", columns=columns)
+    body = b"".join(streamed.streaming_content)
+    streamed.close()
+    assert body == _whole(client, settings, resource, columns=columns).content
+
+
+def test_json_wrong_number_of_columns_is_the_same_error(streaming_client, client, settings, resource, tracker):
+    streamed = get(streaming_client, resource, "json", columns="a,b")
+    assert not isinstance(streamed, download_stream.StreamedDownloadResponse)
+    whole = _whole(client, settings, resource, columns="a,b")
+    assert streamed.status_code == whole.status_code and streamed.content == whole.content
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+@pytest.mark.parametrize(
+    "accept, streamed",
+    [
+        ("application/json", True),
+        ("*/*", True),
+        ("text/html", True),
+        ("application/json; indent=0", True),
+        ("application/json; indent=4", False),
+        ("application/json; indent=2, text/html", False),
+    ],
+    ids=["json", "any", "html_only", "indent_zero", "indent_4", "indent_2_listed"],
+)
+def test_json_negotiation_streams_only_without_indent(client, streaming_client, settings, resource, accept, streamed):
+    response = streaming_client.get(
+        DOWNLOAD, {"resource_id": resource.id, "sort": "id"}, HTTP_ACCEPT=accept
+    )
+    assert isinstance(response, download_stream.StreamedDownloadResponse) is streamed
+    body = b"".join(response.streaming_content) if streamed else response.content
+    settings.DOWNLOAD_STREAMING = False
+    whole = client.get(DOWNLOAD, {"resource_id": resource.id, "sort": "id"}, HTTP_ACCEPT=accept)
+    assert body == whole.content and response["Content-Type"] == whole["Content-Type"]
+    if not streamed:
+        assert b"\n    " in body or b"\n  " in body  # indented by the renderer, as before
+
+
+@pytest.mark.parametrize("how", ["formato", "format"], ids=["formato", "format"])
+def test_json_selected_by_query_parameter_is_streamed(streaming_client, resource, how):
+    response = streaming_client.get(DOWNLOAD, {"resource_id": resource.id, how: "json"})
+    assert isinstance(response, download_stream.StreamedDownloadResponse)
+    assert response["Content-Type"] == "application/json"
+    response.close()
+
+
+def test_json_preview_is_not_streamed(client, resource):
+    response = client.get(PREVIEW, {"resource_id": resource.id, "format": "json"})
+    assert not isinstance(response, download_stream.StreamedDownloadResponse) and response.status_code == 200
+
+
+def test_json_geometry_resource_goes_the_old_way(streaming_client, resource):
+    collection = {"type": "FeatureCollection", "features": []}
+    with (
+        patch.object(gaodcore_views, "get_GeoJson_resource", return_value=True),
+        patch.object(gaodcore_views, "get_resource_data_feature", return_value=collection),
+        patch.object(gaodcore_views, "get_resource_rows") as rows,
+    ):
+        response = get(streaming_client, resource, "json")
+    assert not isinstance(response, download_stream.StreamedDownloadResponse)
+    assert response.json() == collection
+    rows.assert_not_called()
+
+
+def test_json_timing_and_size_of_a_complete_download(streaming_client, resource, timing_lines):
+    response = streaming_client.get(DOWNLOAD, {"resource_id": resource.id, "format": "json"})
+    body = b"".join(response.streaming_content)
+    response.close()
+    (line,) = timing_lines()
+    assert f" rows={ROWS} " in line and f" bytes={len(body)} " in line and " result=complete " in line
+    assert ResourceSizeConfig.objects.get(resource_id=resource).size == len(body)
+
+
+# --- JSON: errors ----------------------------------------------------------------------------------------------------
+
+@pytest.mark.parametrize("streaming", [True, False], ids=["streamed", "built_whole"])
+def test_json_failure_of_the_first_fetch_is_the_same_error(streaming_client, settings, resource, tracker, streaming):
+    settings.DOWNLOAD_STREAMING = streaming
+    failure = sqlalchemy.exc.OperationalError("SELECT", {}, Exception("DPY-4011"))
+    target = (connectors._RowCursor, "fetchmany") if streaming else (connectors, "_build_query")
+    with patch.object(*target, side_effect=failure):
+        response = get(streaming_client, resource, "json")
+
+    assert _problem(response) == (503, "QUERY_ERROR")
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+@pytest.mark.parametrize("streaming", [True, False], ids=["streamed", "built_whole"])
+def test_json_failure_of_the_normalization_is_the_same_error(streaming_client, settings, resource, tracker, streaming):
+    settings.DOWNLOAD_STREAMING = streaming
+
+    def boom(_value):
+        raise RuntimeError("cannot normalize")
+
+    with patch.dict(connectors._NORMALIZERS, {int: boom}):
+        with pytest.raises(RuntimeError, match="cannot normalize"):
+            get(streaming_client, resource, "json")
+
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+@pytest.mark.parametrize("streaming", [True, False], ids=["streamed", "built_whole"])
+def test_json_failure_of_the_serialization_in_the_first_block_is_the_same_error(
+    streaming_client, settings, blob_resource, tracker, streaming
+):
+    settings.DOWNLOAD_STREAMING = streaming
+
+    with pytest.raises(ValueError):
+        get(streaming_client, blob_resource, "json", filters='{"id": 8}')
+
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+def test_json_failure_in_a_later_block_has_no_closing_bracket_nor_marker(
+    streaming_client, resource, timing_lines, error_records, tracker
+):
+    real_fetch = connectors.RowStream.fetch
+    calls = []
+
+    def fetch(self, size, first=False):
+        calls.append(first)
+        if len(calls) == 3:
+            raise RuntimeError("source went away")
+        return real_fetch(self, size, first)
+
+    response = get(streaming_client, resource, "json")
+    received = []
+    with patch.object(connectors.RowStream, "fetch", fetch):
+        with pytest.raises(RuntimeError, match="source went away"):
+            for chunk in response.streaming_content:
+                received.append(chunk)
+    response.close()
+
+    body = b"".join(received)
+    assert body.startswith(b"[{") and not body.endswith(b"]") and b"]" not in body
+    assert body.count(b'"id"') == 9
+    assert b"error" not in body.lower() and b"RuntimeError" not in body
+    assert len(error_records()) == 1
+    (line,) = timing_lines()
+    assert " result=error " in line and " rows=9 " in line
+    assert not ResourceSizeConfig.objects.exists()
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+def test_json_failure_of_the_serialization_after_the_first_block_aborts(
+    streaming_client, blob_resource, timing_lines, tracker
+):
+    response = get(streaming_client, blob_resource, "json")
+    received = []
+    with pytest.raises(ValueError):
+        for chunk in response.streaming_content:
+            received.append(chunk)
+    response.close()
+
+    assert b"]" not in b"".join(received) and b"".join(received).count(b'"id"') == 6
+    assert " result=error " in timing_lines()[0]
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+def test_json_cut_half_way_is_early_close_without_bracket_or_size(
+    streaming_client, resource, timing_lines, tracker
+):
+    response = get(streaming_client, resource, "json")
+    chunks = iter(response.streaming_content)
+    received = [next(chunks), next(chunks)]
+    response.close()
+
+    assert b"]" not in b"".join(received)
+    (line,) = timing_lines()
+    assert " result=early_close " in line
+    assert not ResourceSizeConfig.objects.exists()
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
