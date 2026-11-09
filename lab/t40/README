@@ -1,0 +1,169 @@
+LABORATORIO T40: descargas en streaming detras de dos Apache
+============================================================
+
+Cadena que reproduce la de produccion (sin nombres reales):
+
+    cliente -> apache-front -> apache-back -> app (Gunicorn sync, :6001) -> oracle / configdb
+               httpd:2.4.66    httpd:2.4.66     0,8 CPU, imagen del Dockerfile del repo
+               ProxyPass ... timeout=240 en los dos, mod_proxy_http (HTTP/1.1 hacia atras)
+
+Todo vive en lab/t40/ y usa el proyecto Compose "gaod-t40-lab" (no toca ningun otro contenedor ni volumen).
+No se conecta a ningun sistema real: contrasenas solo de laboratorio, ningun .env del repo se carga.
+
+
+1. Requisitos
+-------------
+- Docker con Compose v2, curl y Python 3 (solo biblioteca estandar) en el host.
+- RAM: Oracle Free necesita ~2 GB, app 6 GB como maximo (LAB_APP_MEM; en produccion son 10,7 GB), PostgreSQL ~0,5 GB.
+  Con 16 GB de maquina va justo mientras corre otra cosa pesada; no lances pytest a la vez (sus contenedores y la
+  CPU se mezclarian con las medidas).
+- Disco: ~4 GB de imagenes y ~3 GB de volumenes (Oracle + PostgreSQL con 1,5 M de filas).
+- Puertos de host (solo 127.0.0.1): front 18080, back 18081, app 18082, PostgreSQL 18432, Oracle 18521.
+  Los contenedores de pytest usan puertos aleatorios y otras imagenes (postgres:13, mysql:5.7, postgres:16-alpine
+  efimeros); este laboratorio no los toca.
+- La construccion de la imagen app descarga el Oracle Instant Client y paquetes (necesita red); despues queda en cache.
+
+
+2. Arrancar y sembrar
+---------------------
+    lab/t40/scripts/lab.sh up        # construye app, arranca todo, espera a Oracle sembrado y siembra la config Django
+
+El primer arranque tarda unos minutos (genera 1,5 M de filas en Oracle y en PostgreSQL). Los volumenes persisten: los
+siguientes arranques son rapidos. "up" ya ejecuta la siembra de Django (idempotente); se puede repetir con
+"lab.sh seed". Resultado: superusuario lab / lab_admin_pw (admin Django) y los recursos:
+
+    ora_10k ora_200k ora_1500k   Oracle, 10.000 / 200.000 / 1.500.000 filas (6 columnas)
+    ora_200k_b/_c/_d, ora_1500k_b/_c/_d   copias del mismo recurso, para poder lanzar varias descargas grandes a la vez
+                                 sin que los limites T53 las rechacen (max_per_resource=2, bloqueo L2 por URL)
+    ora_wide                     20.000 filas x 40 columnas (VARCHAR2 de hasta 1000), ~8 KB/fila
+    ora_lob                      5.000 filas con un CLOB de ~20 KB
+    pg_1500k                     1,5 M de filas en PostgreSQL (base labdata del servicio configdb), para comparar
+
+Los recursos de >= 100.000 filas llevan sembrado su tamano (ResourceSizeConfig), asi que T53 los trata como grandes
+desde la primera descarga (toman bloqueos consultivos en configdb). ora_wide, ora_lob y ora_10k no estan limitados.
+
+URL de descarga (CSV):   http://127.0.0.1:18080/GA_OD_Core/download?resource_id=<id>&format=csv
+Salto a salto: 18080 front, 18081 back (apache-back directo), 18082 app (Gunicorn directo).
+Los ids salen de "lab.sh status" o de /GA_OD_Core/views (los scripts los buscan por nombre).
+
+Otras ordenes de lab.sh:
+    status                       contenedores y recursos
+    logs [servicio]              docker compose logs (app, apache-front, apache-back, oracle, configdb)
+    apache none|front|back|both  recrea los Apache con mod_deflate donde se indique (cliente con Accept-Encoding: gzip)
+    app-env LAB_X=Y ...          recrea app con otras variables (ver abajo)
+    rebuild                      reconstruye la imagen app con el src/ actual y recrea app y Apache
+    down / down -v               para (conserva volumenes) / para y borra los volumenes del laboratorio
+
+
+3. Reconstruir tras cambios en src/
+-----------------------------------
+La imagen copia ./src al construirse (como el Dockerfile de produccion), asi que tras cualquier cambio:
+
+    lab/t40/scripts/lab.sh rebuild
+
+(las capas de dependencias estan en cache: tarda ~1 min). Los scripts del laboratorio, la config y observer.py se montan
+desde lab/t40 y no necesitan reconstruir. Si se cambia el modo de compresion y luego se reconstruye, vuelve a "none".
+
+Variables de entorno (se pasan a "lab.sh app-env" o antes de "up"):
+    LAB_GUNICORN_TIMEOUT   timeout de Gunicorn (240 por defecto, como produccion; bajalo para pruebas rapidas)
+    LAB_WORKERS            workers sync (4 por defecto; produccion usa 9 con mas CPU compartida; con 0,8 CPU basta 4)
+    LAB_THREADS            1 = sync (como produccion); >1 usa el DrainingThreadWorker
+    LAB_ORACLE_ARRAYSIZE   common_config.oracle_arraysize (5000)
+    LAB_HEAVY_ROWS / LAB_MAX_PER_RESOURCE / LAB_MAX_TOTAL   download_limits de T53 (100000 / 2 / 4)
+    LAB_APP_MEM            limite de memoria de app (6g)
+    LAB_ORACLE_IMAGE / LAB_ORACLE_SERVICE   p. ej. gvenzl/oracle-xe:21-slim y XEPDB1 (hay que borrar el volumen oracle-data)
+Ejemplo:  lab/t40/scripts/lab.sh app-env LAB_GUNICORN_TIMEOUT=20
+
+
+4. Que se mide y como: scripts/
+--------------------------------
+Todos: Python 3 estandar + docker + curl, se ejecutan desde el HOST (python3 lab/t40/scripts/<script>.py --help),
+imprimen una tabla legible y escriben un CSV en lab/t40/results/ (ignorado por git). Cada uno lanza dentro del
+contenedor app un observador (observer.py) que, cada 0,25 s y desde FUERA de la peticion, lee:
+  - los workers de Gunicorn: pids y RSS (/proc), y la memoria del cgroup del contenedor y los OOM;
+  - "busy": conexiones TCP al puerto 6001 en ESTABLISHED/CLOSE_WAIT. Un worker sync atiende una sola conexion y la cierra
+    al terminar: busy == 0 significa "ningun worker ocupado con un cliente o proxy" (= worker libre);
+  - Oracle (usuario SYSTEM, solo para observar): sesiones, sesiones activas, cursores abiertos y viajes de red de
+    LAB_DATA (v$session, v$open_cursor, v$sesstat);
+  - los bloqueos consultivos de T53 (pg_locks, locktype='advisory') desde otra conexion PostgreSQL.
+Los relojes del host y del contenedor son el mismo (mismo kernel).
+
+No lances dos scripts a la vez: comparten la CPU limitada y las medidas se estropean.
+
+  timing_summary.py     Extrae las lineas download_timing del log de app y las resume por recurso/formato/result.
+                        Tolera lineas sin result/t_first/rss_kb (salen como "-"). Opciones: --last N, --resource, --csv.
+
+  c7_client_cut.py      Condicion 7. "curl -s URL | head -c 2000000 > /dev/null" en cada salto. Columnas:
+                        t_cut (s hasta que el cliente corta), t_worker (corte -> worker libre), t_ora (corte -> sin sesion
+                        Oracle), t_locks (corte -> sin bloqueos T53), log_result/log_rows/rows_pct/log_t_total de
+                        download_timing, y X_front/X_back = %X de Apache (X = conexion abortada antes de completar).
+                        Con streaming se espera result=early_close, rows_pct muy bajo y t_* de pocos segundos. Sin
+                        streaming rows_pct=100% (el trabajo sigue hasta el final).  Defecto: ora_1500k (minutos por salto).
+
+  r3_timeout_backpressure.py   R3. Casos: completa, cliente lento (curl --limit-rate), cliente que deja de leer
+                        (timeout+10 s con el socket abierto) y datos fluyendo mas tiempo que el timeout. Por caso:
+                        veredicto del cliente (curl exit / presencia del bloque final chunked), WORKER TIMEOUT en el log,
+                        workers reemplazados, bloqueos T53 durante y tras el caso, sesiones Oracle residuales.
+                        IMPORTANTE: con --hop front/back los Apache absorben las respuestas que caben en sus buffers
+                        (20 MB con ora_200k) y el worker termina enseguida, asi que no hay WORKER TIMEOUT por cliente
+                        lento. Para ver la contrapresion sobre Gunicorn usa --hop app (--hop front para ver el efecto
+                        completo de la cadena con respuestas mayores, p. ej. --resource ora_1500k).
+                        Prueba rapida:  r3_timeout_backpressure.py --hop app --timeout 20 --restore
+                        Con 240 s reales (cada caso ~4-5 min):  r3_timeout_backpressure.py   (sin --timeout, con el
+                        entorno por defecto; --slow-rate bajo para que dure mas que 240 s, p. ej. --slow-rate 60000).
+
+  r4_oracle.py          R4. Parte 1: arraysize 100/1000/5000/20000 (recrea app con LAB_ORACLE_ARRAYSIZE): t_query,
+                        t_normalize, total, viajes de red en Oracle y RSS, con filas normales, anchas y con CLOB.
+                        Nota: prefetchrows de oracledb no es configurable en el proyecto (valor por defecto del driver);
+                        solo se puede comparar arraysize. Parte 2: cierre de sesiones y cursores en Oracle tras descarga
+                        completa, cortada y con error (KILL SESSION). t_to_zero_s es el tiempo hasta 0 sesiones y 0
+                        cursores de LAB_DATA; ">90 (FUGA)" significa que no se cerraron.
+
+  r7_apache.py          R7. Por salto (app, back, front) y modo de compresion (none, both; tambien front, back):
+                        A) corte del cliente: ttfb_hdr/ttfb_body, t_worker/t_ora/t_locks, download_timing, X de Apache;
+                        B) fallo a mitad de descarga: se mata la sesion Oracle con ALTER SYSTEM KILL SESSION ... IMMEDIATE
+                        (mecanismo del lado del origen, no toca src/) unos segundos despues de aparecer la sesion y el
+                        cliente en bruto dice si la transferencia es FALLIDA (sin bloque final chunked / Content-Length
+                        incompleto) o COMPLETA. Si el fallo ocurre antes de enviar la cabecera (sin streaming) el cliente
+                        ve un error HTTP y 'client' lo indica.
+
+  r8_memory.py          R8. Matriz recurso x concurrencia (1,2,4) x rondas repetidas, a 0,8 CPU. Salida: RSS maximo de la
+                        suma de workers y de un worker, RSS retenido 3 s despues, pico del cgroup, OOM, ttfb_body_s,
+                        total_s, y campos del log (rows, bytes, t_first, t_total, rss_kb, maxrss_kb, result). Con --cut,
+                        t_work_after_cut_s. NO impone umbrales: es la tabla para fijarlos despues.
+
+Mecanismo de fallo provocado (r7: un kill unos segundos despues de aparecer la sesion; r4: kill repetido desde
+0,8 s hasta que acaba la peticion, porque con recursos pequenos la sesion Oracle dura 1-2 s): lab_common.kill_lab_sessions() (ALTER SYSTEM KILL SESSION de las sesiones de LAB_DATA con
+el usuario administrador del laboratorio). El cliente de r7/r4 ve el fallo igual que ante un fallo real de Oracle a mitad
+de lectura (ORA-00028 en el siguiente fetch).
+
+
+5. Interpretar la salida contra el codigo actual y contra el de streaming
+-------------------------------------------------------------------------
+- Hoy (sin streaming) download_timing se escribe al crear la respuesta, trae maxrss_kb y no trae result/t_first/rss_kb;
+  el primer byte llega tras construir todo el resultado (ttfb_body ~ t_total) y un corte del cliente no detiene el
+  trabajo pendiente en los workers ya ocupados.
+- Con streaming: ttfb_body debe ser de pocos segundos aunque la descarga dure minutos, rows/bytes son lo entregado,
+  result=complete|early_close|error, t_first y rss_kb aparecen, t_worker/t_ora/t_locks tras un corte son de segundos, la
+  memoria del worker deja de crecer con el tamano del recurso, y en R7-B/R3 el cliente ve FALLIDA (nunca COMPLETA truncada).
+- Un valor ">N" en una columna de tiempo significa que no ocurrio en la espera maxima.
+- Con mod_deflate en un Apache, el primer byte del cuerpo puede retrasarse por el buffer de compresion (ttfb_body en
+  modo both frente a none) y 'enc' muestra gzip.
+
+
+6. Parar y limpiar
+------------------
+    lab/t40/scripts/lab.sh down        # para y elimina los contenedores, conserva los volumenes (siembra de Oracle: lenta)
+    lab/t40/scripts/lab.sh down -v     # tambien borra los volumenes configdb-data y oracle-data del laboratorio
+(equivale a: docker compose -p gaod-t40-lab -f lab/t40/docker-compose.yml down [-v])
+
+Diferencias conocidas con produccion
+------------------------------------
+- Apache: httpd 2.4.66 con configuracion minima propia (mpm_event, sin TLS ni balanceador delante), no la de produccion.
+- Oracle: Free 23ai (imagen gvenzl) en vez de la version de produccion; cliente Instant Client 21.1 en modo thick, como la
+  imagen. Los datos son sinteticos y la BD esta en la misma maquina (latencia de red casi nula: arraysize pesa menos que en
+  produccion).
+- Gunicorn: 4 workers (produccion 9), 6 GB de memoria (produccion 10,7 GB); CPU 0,8 como produccion. El host real y su
+  carga influyen en las medidas: repite varias veces y compara tendencias.
+- Gunicorn se ejecuta con --access-logfile - (no afecta al comportamiento).
+- No hay balanceador: el cliente entra directamente por apache-front.

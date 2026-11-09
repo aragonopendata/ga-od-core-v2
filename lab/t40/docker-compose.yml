@@ -1,0 +1,118 @@
+# Laboratorio T40: descargas en streaming detras de dos Apache (ver README).
+#   cliente -> apache-front -> apache-back -> app (Gunicorn sync :6001) -> oracle / configdb
+# Uso: scripts/lab.sh (envuelve "docker compose -p gaod-t40-lab -f lab/t40/docker-compose.yml ...").
+name: gaod-t40-lab
+
+services:
+  configdb:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: lab_pg_pw
+      POSTGRES_DB: gaodcore
+    command: ["postgres", "-c", "max_connections=100", "-c", "shared_buffers=256MB"]
+    volumes:
+      - configdb-data:/var/lib/postgresql/data
+      # Crea la base de datos "labdata" con la tabla grande (solo en el primer arranque del volumen).
+      - ./postgres/init-labdata.sh:/docker-entrypoint-initdb.d/10-labdata.sh:ro
+    ports:
+      - "127.0.0.1:18432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d gaodcore && psql -U postgres -d labdata -tAc \"select to_regclass('public.lab_ready')\" | grep -q lab_ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 120
+
+  oracle:
+    # Oracle Free 23ai (en produccion la version es otra, ver README). Para XE 21: LAB_ORACLE_IMAGE=gvenzl/oracle-xe:21-slim
+    # y LAB_ORACLE_SERVICE=XEPDB1.
+    image: ${LAB_ORACLE_IMAGE:-gvenzl/oracle-free:23.9-slim-faststart}
+    environment:
+      ORACLE_PASSWORD: lab_admin_pw
+      APP_USER: lab_data
+      APP_USER_PASSWORD: lab_data_pw
+      LAB_ORACLE_SERVICE: ${LAB_ORACLE_SERVICE:-FREEPDB1}
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./oracle/init:/container-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:18521:1521"
+    shm_size: 1g
+    healthcheck:
+      # Ademas de que la BD este arriba, esperamos a que la siembra haya terminado (tabla lab_ready).
+      test: ["CMD-SHELL", "healthcheck.sh && echo \"select 'LABREADY' from lab_ready;\" | sqlplus -s lab_data/lab_data_pw@localhost/$${LAB_ORACLE_SERVICE} | grep -q LABREADY"]
+      interval: 15s
+      timeout: 20s
+      retries: 120
+      start_period: 60s
+
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: gaod-t40-lab-app:latest
+    # Como en produccion: 0,8 CPU. La memoria de produccion es 10,7 GB; aqui 6 GB por defecto para dejar sitio a Oracle
+    # en una maquina de 16 GB (LAB_APP_MEM=10700m para igualarla).
+    cpus: 0.8
+    mem_limit: ${LAB_APP_MEM:-6g}
+    memswap_limit: ${LAB_APP_MEM:-6g}
+    environment:
+      CONFIG_PATH: /etc/gaodcore/config.yaml
+      DJANGO_SETTINGS_MODULE: gaodcore_project.settings
+      DJANGO_LOG_LEVEL: INFO
+      DJANGO_SUPERUSER_USERNAME: lab
+      DJANGO_SUPERUSER_PASSWORD: lab_admin_pw
+      DJANGO_SUPERUSER_EMAIL: lab@example.invalid
+      # Gunicorn: src/gunicorn.conf.py leido tal cual. Todo por entorno.
+      GUNICORN_WORKERS: ${LAB_WORKERS:-4}
+      GUNICORN_THREADS: ${LAB_THREADS:-1}
+      GUNICORN_TIMEOUT: ${LAB_GUNICORN_TIMEOUT:-240}
+      GUNICORN_GRACEFUL_TIMEOUT: ${LAB_GUNICORN_GRACEFUL_TIMEOUT:-1800}
+      GUNICORN_MAX_REQUESTS: ${LAB_MAX_REQUESTS:-1000}
+      GUNICORN_MAX_WORKER_RSS_MB: ${LAB_MAX_WORKER_RSS_MB:-1024}
+      # Valores que rellenan config/lab-config.yaml.tpl al arrancar (envsubst)
+      LAB_ORACLE_ARRAYSIZE: ${LAB_ORACLE_ARRAYSIZE:-5000}
+      LAB_HEAVY_ROWS: ${LAB_HEAVY_ROWS:-100000}
+      LAB_MAX_PER_RESOURCE: ${LAB_MAX_PER_RESOURCE:-2}
+      LAB_MAX_TOTAL: ${LAB_MAX_TOTAL:-4}
+      LAB_ORACLE_SERVICE: ${LAB_ORACLE_SERVICE:-FREEPDB1}
+    volumes:
+      - ./:/lab:ro
+    ports:
+      - "127.0.0.1:18082:6001"
+    depends_on:
+      configdb:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/lab/scripts/app-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request as u; u.urlopen('http://127.0.0.1:6001/GA_OD_Core/views', timeout=5)\""]
+      interval: 5s
+      timeout: 8s
+      retries: 60
+      start_period: 20s
+
+  apache-back:
+    image: httpd:2.4.66
+    # Modo por entorno: LAB_BACK_MODE=DEFLATE activa mod_deflate (ver apache/httpd-back.conf).
+    command: ["httpd", "-D", "FOREGROUND", "-D", "${LAB_BACK_MODE:-PLAIN}"]
+    volumes:
+      - ./apache/httpd-back.conf:/usr/local/apache2/conf/httpd.conf:ro
+    ports:
+      - "127.0.0.1:18081:80"
+    depends_on:
+      app:
+        condition: service_healthy
+
+  apache-front:
+    image: httpd:2.4.66
+    command: ["httpd", "-D", "FOREGROUND", "-D", "${LAB_FRONT_MODE:-PLAIN}"]
+    volumes:
+      - ./apache/httpd-front.conf:/usr/local/apache2/conf/httpd.conf:ro
+    ports:
+      - "127.0.0.1:18080:80"
+    depends_on:
+      - apache-back
+
+volumes:
+  configdb-data:
+  oracle-data:
