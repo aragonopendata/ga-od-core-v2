@@ -19,6 +19,16 @@ from exceptions import (
 
 logger = logging.getLogger(__name__)
 
+#: 5xx error codes that are not failures of this application: the external source or upstream API
+#: is down, or the download limiter refused the request on purpose. Everything else stays at ERROR.
+_SERVER_ERROR_LOG_LEVELS = {
+    ErrorCodes.CONNECTION_UNAVAILABLE: logging.WARNING,
+    ErrorCodes.OBJECT_UNAVAILABLE: logging.WARNING,
+    ErrorCodes.BAD_GATEWAY: logging.WARNING,
+    # Refused on purpose by the download limiter, but kept visible in production: it is still under study.
+    ErrorCodes.TOO_MANY_DOWNLOADS: logging.WARNING,
+}
+
 _NON_FIELD_ERRORS_KEY = api_settings.NON_FIELD_ERRORS_KEY
 
 
@@ -150,7 +160,11 @@ def _force_problem_renderer(context, response):
 
 
 def _log_server_error(exc, context, problem):
-    """Log 5xx problems with request context for easier debugging."""
+    """Log 5xx problems with request context for easier debugging.
+
+    Failures of an external source and intentional refusals are logged below ERROR
+    (see ``_SERVER_ERROR_LOG_LEVELS``), so ERROR is left for faults of the application.
+    """
     request = context.get("request") if context else None
     resource_id = None
     path = "unknown"
@@ -162,7 +176,8 @@ def _log_server_error(exc, context, problem):
         ) or request.query_params.get("view_id")
         path = request.path
 
-    logger.error(
+    logger.log(
+        _SERVER_ERROR_LOG_LEVELS.get(problem["error_code"], logging.ERROR),
         "%s: %s - resource_id=%s, error_code=%s, detail=%s",
         problem["status"],
         path,

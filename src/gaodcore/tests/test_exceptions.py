@@ -641,3 +641,27 @@ class TestServerErrorLogging:
     def test_only_5xx_responses_are_marked_as_logged(self):
         assert handle(ServiceUnavailable("Nope.")).__dict__["_has_been_logged"] is True
         assert not hasattr(handle(NotFound()), "_has_been_logged")
+
+
+@pytest.mark.parametrize(
+    "exc,level",
+    [
+        (ServiceUnavailable("Connection is not available.", code=ErrorCodes.CONNECTION_UNAVAILABLE), logging.WARNING),
+        (ServiceUnavailable("Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE), logging.WARNING),
+        (BadGateway(), logging.WARNING),
+        (ServiceUnavailable("Too many large downloads.", code=ErrorCodes.TOO_MANY_DOWNLOADS), logging.WARNING),
+        (ServiceUnavailable("Query error", code=ErrorCodes.QUERY_ERROR), logging.ERROR),
+        (ServiceUnavailable("Nope."), logging.ERROR),
+        (APIException("Boom."), logging.ERROR),
+    ],
+    ids=["connection", "object", "bad-gateway", "too-many-downloads", "query-error", "no-code", "500"],
+)
+def test_5xx_log_level_depends_on_error_code(exc, level, captured_logs):
+    """Failures of the external source and intentional refusals are not logged as ERROR."""
+    handler_logger = logging.getLogger("gaodcore.exception_handlers")
+    with mock.patch.object(handler_logger, "level", logging.DEBUG):
+        response = handle(exc)
+
+    records = captured_logs["gaodcore.exception_handlers"]
+    assert [r.levelno for r in records] == [level]
+    assert f"error_code={response.data['error_code']}" in records[0].getMessage()
