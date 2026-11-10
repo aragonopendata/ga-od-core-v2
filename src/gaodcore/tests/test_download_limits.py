@@ -453,7 +453,7 @@ def test_url_lock_key_fits_an_int4():
 
 @pytest.fixture
 def streamed(settings, streaming_client):
-    """A client that returns a streamed CSV or JSON download unread, with one row per block (the tables have two rows)."""
+    """A client that returns a streamed CSV, JSON or XML download unread, with one row per block (the tables have two rows)."""
     settings.DOWNLOAD_BLOCK_ROWS = 1
     return streaming_client
 
@@ -580,6 +580,61 @@ def test_streamed_json_download_holds_its_locks_until_it_ends_and_closes_with_a_
 def test_failing_streamed_json_download_frees_its_locks(streamed, settings, big, other):
     _limits(settings, max_per_resource=1, max_total=1)
     response = get(streamed, big, formato="json")
+
+    def fail(self, size, first=False):
+        raise RuntimeError("source went away")
+
+    with patch.object(RowStream, "fetch", fail):
+        with pytest.raises(RuntimeError):
+            b"".join(response.streaming_content)
+    response.close()
+
+    assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    gaodcore_views.update_resource_size.assert_not_called()
+
+
+def test_streamed_xml_download_cut_half_way_frees_the_locks_and_has_no_closing_root(
+    streamed, settings, big, other, timing_lines
+):
+    _limits(settings, max_per_resource=1, max_total=1)
+
+    response = get(streamed, big, formato="xml")
+    assert response.status_code == 200 and response.streaming
+    chunks = iter(response.streaming_content)
+    received = [next(chunks)]  # one row sent; then the write to the client fails and the server closes the response
+    assert not free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    assert not free(other, download_limits.LOCK_CLASS_RESOURCE, big.id * 16)
+    response.close()
+
+    assert b"</root>" not in b"".join(received)
+    assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    assert free(other, download_limits.LOCK_CLASS_RESOURCE, big.id * 16)
+    assert " result=early_close " in timing_lines()[-1]
+    gaodcore_views.update_resource_size.assert_not_called()
+    assert get(streamed, big, formato="xml", filters='{"id": 1}').status_code == 200
+
+
+def test_streamed_xml_download_holds_its_locks_until_it_ends_and_closes_the_root(
+    streamed, settings, big, other, timing_lines
+):
+    _limits(settings, max_per_resource=1, max_total=1)
+
+    response = get(streamed, big, formato="xml")
+    chunks = iter(response.streaming_content)
+    next(chunks)
+    assert not free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    rest = b"".join(chunks)
+    response.close()
+
+    assert rest.endswith(b"</root>")
+    assert free(other, download_limits.LOCK_CLASS_TOTAL, 0)
+    assert free(other, download_limits.LOCK_CLASS_RESOURCE, big.id * 16)
+    assert " result=complete " in timing_lines()[-1]
+
+
+def test_failing_streamed_xml_download_frees_its_locks(streamed, settings, big, other):
+    _limits(settings, max_per_resource=1, max_total=1)
+    response = get(streamed, big, formato="xml")
 
     def fail(self, size, first=False):
         raise RuntimeError("source went away")

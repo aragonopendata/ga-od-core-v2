@@ -1,4 +1,5 @@
-"""Streaming of a download: the owner of everything a response needs while it is being sent, and the CSV encoder.
+"""Streaming of a download: the owner of everything a response needs while it is being sent, and the CSV, JSON and XML
+encoders.
 
 A download used to be built whole in memory before the first byte left. Here the response is an iterator of blocks
 (``StreamedDownload``): it is handed to ``StreamingHttpResponse``, which Django closes (``response.close()``) when the
@@ -19,6 +20,7 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from django.http import StreamingHttpResponse
 from rest_framework.renderers import LONG_SEPARATORS, SHORT_SEPARATORS
 
+import xml_output
 from connectors import RowStream
 from phase_timing import PhaseTimer, phase
 from utils import get_return_list, modify_header
@@ -254,6 +256,59 @@ def json_blocks(stream: RowStream, encoder: JsonEncoder, block_rows: int, first_
     """Prepare the first block now and return ``(first, rest)`` like ``csv_blocks``; ``]`` is the last block of ``rest``.
 
     The ``]`` is only produced when the rows run out without error: a failing or abandoned generator never reaches it.
+    """
+    first = encoder.encode(first_rows)
+
+    def rest() -> Iterator[Block]:
+        if first_rows:
+            while True:
+                rows = stream.fetch(block_rows)
+                if not rows:
+                    break
+                yield encoder.encode(rows)
+        yield encoder.close()
+
+    return first, rest()
+
+
+class XmlEncoder:
+    """Turns blocks of normalized rows into the bytes ``GaodXMLRenderer`` gives for all the rows at once.
+
+    The declaration and the opening ``<root>`` come with the first block (also with no rows at all) and ``</root>`` is
+    the last block (``close``), so a body that is cut never ends in a well-formed document. Escaping and names are
+    those of ``xml_output``: nothing is duplicated here.
+    """
+
+    def __init__(self, columns_name: List[str], timer: Optional[PhaseTimer] = None):
+        self._columns_name = columns_name
+        self._timer = timer
+        self._started = False
+
+    def encode(self, rows: List[Dict[str, Any]]) -> Block:
+        if not rows:
+            return (b"" if self._started else self._start().encode()), 0
+        with phase(self._timer, "normalize"):
+            data = get_return_list(rows, format_is_xlsx=False)
+            data = modify_header(data, self._columns_name)
+        with phase(self._timer, "render"):
+            body = xml_output.encode_items(data)
+            if not self._started:
+                body = self._start() + body
+            return body.encode("utf-8"), len(data)
+
+    def _start(self) -> str:
+        self._started = True
+        return xml_output.XML_DECLARATION + xml_output.ROOT_OPEN
+
+    @staticmethod
+    def close() -> Block:
+        return xml_output.ROOT_CLOSE.encode(), 0
+
+
+def xml_blocks(stream: RowStream, encoder: XmlEncoder, block_rows: int, first_rows: List[Dict[str, Any]]):
+    """Prepare the first block now and return ``(first, rest)`` like ``json_blocks``; ``</root>`` is the last of ``rest``.
+
+    ``</root>`` is only produced when the rows run out without error: a failing or abandoned generator never reaches it.
     """
     first = encoder.encode(first_rows)
 

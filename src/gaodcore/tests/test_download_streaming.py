@@ -1,4 +1,4 @@
-"""CSV and SCSV downloads are streamed: the owner of the resources (``StreamedDownload``), the result it reports in the
+"""CSV, SCSV, JSON and XML downloads are streamed: the owner of the resources (``StreamedDownload``), the result it reports in the
 ``download_timing`` line and the errors before and after the first block.
 
 The data comes from SQLite files read through the real connector code. The blocks are made small (``DOWNLOAD_BLOCK_ROWS``)
@@ -20,8 +20,12 @@ from sqlalchemy.engine.cursor import CursorResult
 
 import connectors
 import download_stream
+import xml_output
 from download_stream import COMPLETE, EARLY_CLOSE, ERROR, StreamedDownload
 from gaodcore import views as gaodcore_views
+from rest_framework_xml.renderers import XMLRenderer as OldXMLRenderer
+from utils import get_return_list, modify_header
+from xml_output import GaodXMLRenderer
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig, ResourceSizeConfig
 
 DOWNLOAD = "/GA_OD_Core/download"
@@ -353,8 +357,7 @@ def test_download_is_streamed_in_blocks_and_nothing_is_read_ahead(streaming_clie
 
 def test_the_other_formats_and_the_preview_are_not_streamed(client, settings, resource):
     assert not get(client, resource, "csv", **{}).streaming
-    for fmt in ("xml", "yaml"):
-        assert not isinstance(get(client, resource, fmt), download_stream.StreamedDownloadResponse)
+    assert not isinstance(get(client, resource, "yaml"), download_stream.StreamedDownloadResponse)
     preview = client.get(PREVIEW, {"resource_id": resource.id, "format": "csv"})
     assert preview.status_code == 200 and not isinstance(preview, download_stream.StreamedDownloadResponse)
     settings.DOWNLOAD_STREAMING = False
@@ -891,3 +894,368 @@ def test_json_cut_half_way_is_early_close_without_bracket_or_size(
     assert " result=early_close " in line
     assert not ResourceSizeConfig.objects.exists()
     assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+# --- XML: the bytes of GaodXMLRenderer, produced block by block ------------------------------------------------------
+
+def _rows_of(resource_rows, columns=None, fields=None, note=None):
+    """The normalized rows a download of the test table has, as the renderers receive them."""
+    rows = [{"id": i, "note": note or f"note, {i}", "price": connectors._normalize_number(i * 1.5)}
+            for i in range(1, resource_rows + 1)]
+    if fields:
+        rows = [{name: row[name] for name in fields} for row in rows]
+    data = get_return_list(rows, format_is_xlsx=False)
+    return modify_header(data, columns or [])
+
+
+def _xml_table(tmp_path, name, rows, note=None):
+    statements = [("CREATE TABLE things (id INTEGER PRIMARY KEY, note TEXT, price REAL)", {})]
+    statements += [
+        ("INSERT INTO things VALUES (:i, :n, :p)", {"i": i, "n": note or f"note, {i}", "p": i * 1.5})
+        for i in range(1, rows + 1)
+    ]
+    return _make_resource(tmp_path, name, statements)
+
+
+def _same(left: bytes, right: bytes) -> bool:
+    """Byte equality that reports where two long bodies differ (pytest's diff of two big bytes takes minutes)."""
+    if left == right:
+        return True
+    at = next((i for i, (a, b) in enumerate(zip(left, right)) if a != b), min(len(left), len(right)))
+    print(f"bodies differ at byte {at}: {left[at - 40:at + 40]!r} != {right[at - 40:at + 40]!r}")
+    return False
+
+
+def _read(response):
+    chunks = list(response.streaming_content)
+    response.close()
+    return chunks
+
+
+@pytest.mark.parametrize("block_rows", [None, 7], ids=["default_blocks", "small_blocks"])
+@pytest.mark.parametrize("rows", [0, 1, 999, 1000, 1001, 2500])
+def test_xml_bytes_are_those_of_the_renderers(client, streaming_client, settings, tmp_path, rows, block_rows):
+    if block_rows is None:
+        settings.DOWNLOAD_BLOCK_ROWS = 1000
+    else:
+        settings.DOWNLOAD_BLOCK_ROWS = block_rows
+    resource = _xml_table(tmp_path, f"xml{rows}", rows)
+
+    streamed = get(streaming_client, resource, "xml")
+    assert isinstance(streamed, download_stream.StreamedDownloadResponse)
+    body = b"".join(_read(streamed))
+    whole = _whole(client, settings, resource, "xml")
+
+    data = _rows_of(rows)
+    expected = xml_output.render_document(data).encode()
+    assert _same(body, expected) and _same(whole.content, expected)
+    assert _same(body, OldXMLRenderer().render(data).encode())
+    assert body.startswith(b'<?xml version="1.0" encoding="utf-8"?>\n<root>') and body.endswith(b"</root>")
+    assert streamed["Content-Type"] == whole["Content-Type"] == "application/xml; charset=utf-8"
+    assert streamed["Content-Disposition"] == whole["Content-Disposition"]
+    assert "Content-Length" not in streamed.headers
+
+
+def test_xml_without_rows_is_the_empty_document(streaming_client, tmp_path):
+    resource = _xml_table(tmp_path, "xml_none", 0)
+    response = get(streaming_client, resource, "xml")
+    chunks = _read(response)
+    assert b"".join(chunks) == xml_output.render_document([]).encode() == (
+        b'<?xml version="1.0" encoding="utf-8"?>\n<root></root>'
+    )
+    assert chunks == [b'<?xml version="1.0" encoding="utf-8"?>\n<root>', b"</root>"]
+
+
+def test_xml_is_streamed_in_blocks_with_the_root_closed_last(streaming_client, resource):
+    response = get(streaming_client, resource, "xml")
+    chunks = _read(response)
+    assert chunks[0].startswith(b'<?xml version="1.0" encoding="utf-8"?>\n<root><list-item>')
+    assert chunks[-1] == b"</root>" and all(chunks)
+    assert len(chunks) == math.ceil(ROWS / BLOCK_ROWS) + 1
+    assert [c.count(b"<list-item>") for c in chunks[:-1]] == [3, 3, 3, 1]
+
+
+@pytest.mark.parametrize(
+    "params,columns,fields",
+    [
+        pytest.param({"columns": "a,b,c"}, ["a", "b", "c"], None, id="columns"),
+        pytest.param({"fields": "note,id"}, None, ["note", "id"], id="fields"),
+        pytest.param({"fields": "note,id", "columns": "n,i"}, ["n", "i"], ["note", "id"], id="fields_columns"),
+    ],
+)
+def test_xml_columns_and_fields_are_those_of_the_renderers(
+    client, streaming_client, settings, resource, params, columns, fields
+):
+    streamed = get(streaming_client, resource, "xml", **params)
+    body = b"".join(_read(streamed))
+    data = _rows_of(ROWS, columns, fields)
+    assert body == OldXMLRenderer().render(data).encode() == _whole(client, settings, resource, "xml", **params).content
+
+
+def test_xml_names_that_are_not_xml_names_and_carriage_returns_are_the_renderer_bytes(
+    client, streaming_client, settings, tmp_path
+):
+    resource = _xml_table(tmp_path, "xml_odd", 7, note="a\rb <&> c")
+    columns = "a b,1x,TOTAL$"
+    streamed = get(streaming_client, resource, "xml", columns=columns)
+    body = b"".join(_read(streamed))
+
+    assert body == _whole(client, settings, resource, "xml", columns=columns).content
+    assert body == xml_output.render_document(_rows_of(7, columns.split(","), note="a\rb <&> c")).encode()
+    assert b'<field name="a b">1</field>' in body and b'<field name="1x">' in body
+    assert b"a&#13;b &lt;&amp;&gt; c" in body and b"\r" not in body
+
+
+def test_xml_is_streamed_only_for_download_with_the_gaod_renderer(streaming_client, settings, resource):
+    response = get(streaming_client, resource, "xml")
+    assert isinstance(response, download_stream.StreamedDownloadResponse)
+    response.close()
+
+    class Subclass(GaodXMLRenderer):
+        pass
+
+    renderers = tuple(Subclass if r is GaodXMLRenderer else r for r in gaodcore_views.PUBLIC_DATA_RENDERER_CLASSES)
+    with patch.object(gaodcore_views.DownloadView, "renderer_classes", renderers):
+        other = get(streaming_client, resource, "xml")
+    assert not isinstance(other, download_stream.StreamedDownloadResponse)
+    assert other.status_code == 200
+
+    preview = streaming_client.get(PREVIEW, {"resource_id": resource.id, "format": "xml"})
+    assert not isinstance(preview, download_stream.StreamedDownloadResponse) and preview.status_code == 200
+
+    settings.DOWNLOAD_STREAMING = False
+    assert not isinstance(get(streaming_client, resource, "xml"), download_stream.StreamedDownloadResponse)
+
+
+def test_xml_preview_keeps_its_cap(client, settings, tmp_path):
+    resource = _xml_table(tmp_path, "xml_preview", 1005)
+    response = client.get(PREVIEW, {"resource_id": resource.id, "format": "xml"})
+    assert response.content.count(b"<list-item>") == 1000
+
+
+@pytest.mark.parametrize(
+    "request_kwargs",
+    [
+        pytest.param({"data": {"format": "xml"}}, id="format"),
+        pytest.param({"data": {"formato": "xml"}}, id="formato"),
+        pytest.param({"data": {}, "HTTP_ACCEPT": "application/xml"}, id="accept"),
+    ],
+)
+def test_xml_negotiation_streams(streaming_client, resource, request_kwargs):
+    data = {"resource_id": resource.id, "sort": "id", **request_kwargs.pop("data")}
+    response = streaming_client.get(DOWNLOAD, data, **request_kwargs)
+    assert isinstance(response, download_stream.StreamedDownloadResponse)
+    assert response["Content-Type"] == "application/xml; charset=utf-8"
+    assert b"".join(_read(response)).endswith(b"</root>")
+
+
+def test_xml_head_is_unchanged_and_keeps_the_content_type_discrepancy_with_indent(client, resource):
+    """HEAD uses the accepted media type (with its parameters); GET sends the renderer's one, streamed or not."""
+    accept = {"HTTP_ACCEPT": "application/xml; indent=4"}
+    params = {"resource_id": resource.id}
+    with patch.object(gaodcore_views, "get_resource_rows") as rows, patch.object(
+        gaodcore_views, "update_resource_size"
+    ) as size:
+        head = client.head(DOWNLOAD, params, **accept)
+        rows.assert_not_called()
+        size.assert_not_called()
+    get_ = client.get(DOWNLOAD, params, **accept)
+    assert head.status_code == get_.status_code == 200
+    assert head["Content-Type"] == "application/xml; indent=4; charset=utf-8"
+    assert get_["Content-Type"] == "application/xml; charset=utf-8"
+
+
+def test_xml_timing_and_size_of_a_complete_download(streaming_client, resource, timing_lines):
+    response = streaming_client.get(DOWNLOAD, {"resource_id": resource.id, "format": "xml"})
+    body = b"".join(response.streaming_content)
+    response.close()
+    (line,) = timing_lines()
+    assert f" rows={ROWS} " in line and f" bytes={len(body)} " in line and " result=complete " in line
+    assert " format=xml " in line
+    stored = ResourceSizeConfig.objects.get(resource_id=resource)
+    assert (stored.registries, stored.size) == (ROWS, len(body))
+
+
+@pytest.mark.parametrize(
+    "params",
+    [{"limit": "4"}, {"fields": "id"}, {"filters": '{"id": 7}'}, {"offset": "1"}],
+    ids=["limit", "fields", "filter", "offset"],
+)
+def test_xml_partial_download_does_not_store_the_size(client, resource, params):
+    get(client, resource, "xml", **params)
+    assert not ResourceSizeConfig.objects.exists()
+
+
+def test_xml_cut_half_way_is_early_close_without_root_or_size(streaming_client, resource, timing_lines, tracker):
+    response = get(streaming_client, resource, "xml")
+    chunks = iter(response.streaming_content)
+    received = [next(chunks), next(chunks)]
+    response.close()
+
+    assert b"</root>" not in b"".join(received)
+    (line,) = timing_lines()
+    assert " result=early_close " in line
+    assert not ResourceSizeConfig.objects.exists()
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+def test_xml_cut_after_the_closing_tag_is_early_close_without_size(streaming_client, resource, timing_lines, tracker):
+    """The ``</root>`` block is handed over, but the download only completes when the next block is requested."""
+    response = get(streaming_client, resource, "xml")
+    chunks = iter(response.streaming_content)
+    received = []
+    while not received or received[-1] != b"</root>":
+        received.append(next(chunks))
+    response.close()  # the client closed before the server asked for the next block
+
+    assert b"".join(received).endswith(b"</root>")
+    (line,) = timing_lines()
+    assert " result=early_close " in line
+    assert not ResourceSizeConfig.objects.exists()
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+def test_xml_failure_in_a_later_block_has_no_closing_root(
+    streaming_client, resource, timing_lines, error_records, tracker
+):
+    real_fetch = connectors.RowStream.fetch
+    calls = []
+
+    def fetch(self, size, first=False):
+        calls.append(first)
+        if len(calls) == 3:
+            raise RuntimeError("source went away")
+        return real_fetch(self, size, first)
+
+    response = get(streaming_client, resource, "xml")
+    received = []
+    with patch.object(connectors.RowStream, "fetch", fetch):
+        with pytest.raises(RuntimeError, match="source went away"):
+            for chunk in response.streaming_content:
+                received.append(chunk)
+    response.close()
+
+    body = b"".join(received)
+    assert body.startswith(b"<?xml") and b"</root>" not in body and body.count(b"<list-item>") == 9
+    assert len(error_records()) == 1
+    (line,) = timing_lines()
+    assert " result=error " in line and " rows=9 " in line
+    assert not ResourceSizeConfig.objects.exists()
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+@pytest.fixture
+def control_char_resource(tmp_path):
+    """Row 5 (second block) holds a character XML 1.0 cannot carry."""
+    statements = [("CREATE TABLE things (id INTEGER PRIMARY KEY, note TEXT)", {})]
+    statements += [
+        ("INSERT INTO things VALUES (:i, :n)", {"i": i, "n": "bad\ufffe" if i == 5 else "ok"}) for i in range(1, 11)
+    ]
+    return _make_resource(tmp_path, "ctrl", statements)
+
+
+def test_xml_unrepresentable_character_in_a_later_block_aborts(
+    streaming_client, control_char_resource, timing_lines, error_records, tracker
+):
+    response = get(streaming_client, control_char_resource, "xml")
+    assert response.status_code == 200
+    received = []
+    with pytest.raises(xml_output.XmlUnrepresentableError):
+        for chunk in response.streaming_content:
+            received.append(chunk)
+    response.close()
+
+    body = b"".join(received)
+    assert body.count(b"<list-item>") == 3 and b"</root>" not in body
+    assert " result=error " in timing_lines()[0]
+    assert len(error_records()) == 1
+    assert not ResourceSizeConfig.objects.exists()
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+@pytest.mark.parametrize("streaming", [True, False], ids=["streamed", "built_whole"])
+def test_xml_unrepresentable_character_in_the_first_block_fails_as_without_streaming(
+    streaming_client, settings, control_char_resource, tracker, streaming
+):
+    """Not mapped to an HTTP error in either path: the exception reaches the test client (a 500 on a server)."""
+    settings.DOWNLOAD_STREAMING = streaming
+    with pytest.raises(xml_output.XmlUnrepresentableError):
+        get(streaming_client, control_char_resource, "xml", filters='{"id": 5}')
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+@pytest.mark.parametrize("streaming", [True, False], ids=["streamed", "built_whole"])
+@pytest.mark.parametrize(
+    "case,expected",
+    [
+        pytest.param("missing_object", (503, "OBJECT_UNAVAILABLE"), id="missing_object"),
+        pytest.param("bad_sort", (400, "VALIDATION_ERROR"), id="bad_sort"),
+        pytest.param("bad_field", (400, "VALIDATION_ERROR"), id="bad_field"),
+        pytest.param("bad_columns", (400, "VALIDATION_ERROR"), id="bad_columns"),
+        pytest.param("query_fails", (503, "QUERY_ERROR"), id="query_fails"),
+        pytest.param("first_fetch_fails", (503, "QUERY_ERROR"), id="first_fetch_fails"),
+    ],
+)
+def test_xml_failure_before_the_first_block_returns_the_usual_error(
+    streaming_client, settings, resource, tracker, case, expected, streaming
+):
+    settings.DOWNLOAD_STREAMING = streaming
+    params = {}
+    failure = sqlalchemy.exc.OperationalError("SELECT", {}, Exception("timeout"))
+    if case == "missing_object":
+        resource.object_location = "nothing_here"
+        resource.save()
+    elif case == "bad_sort":
+        params["sort"] = "nope"
+    elif case == "bad_field":
+        params["fields"] = "nope"
+    elif case == "bad_columns":
+        params["columns"] = "only_one"
+    if case == "query_fails":
+        with patch.object(connectors, "_build_query", side_effect=failure):
+            response = get(streaming_client, resource, "xml", **params)
+    elif case == "first_fetch_fails":
+        target = (connectors._RowCursor, "fetchmany") if streaming else (connectors, "_build_query")
+        with patch.object(*target, side_effect=failure):
+            response = get(streaming_client, resource, "xml", **params)
+    else:
+        response = get(streaming_client, resource, "xml", **params)
+
+    assert _problem(response) == expected
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+@pytest.mark.parametrize("streaming", [True, False], ids=["streamed", "built_whole"])
+def test_xml_failure_of_the_normalization_is_the_same_error(streaming_client, settings, resource, tracker, streaming):
+    settings.DOWNLOAD_STREAMING = streaming
+
+    def boom(_value):
+        raise RuntimeError("cannot normalize")
+
+    with patch.dict(connectors._NORMALIZERS, {int: boom}):
+        with pytest.raises(RuntimeError, match="cannot normalize"):
+            get(streaming_client, resource, "xml")
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+
+
+def test_xml_response_never_iterated_and_closed_twice_releases_once(streaming_client, resource, tracker):
+    response = get(streaming_client, resource, "xml")
+    assert tracker.open_connections() == 1
+
+    response.close()
+    response.close()
+
+    assert tracker.open_connections() == 0 and tracker.undisposed_engines() == 0
+    assert tracker.events.count("engine") == 1
+
+
+def test_xml_http_source_is_streamed(streaming_client, resource):
+    """HTTP sources arrive as a ``_ListCursor``: same path, same bytes."""
+    rows = [{"id": i, "note": f"n{i}"} for i in range(1, 6)]
+    stream = connectors.RowStream(connectors._ListCursor([(r["id"], r["note"]) for r in rows]), ["id", "note"], None)
+    with patch.object(gaodcore_views, "get_resource_rows", return_value=stream):
+        response = get(streaming_client, resource, "xml")
+        assert isinstance(response, download_stream.StreamedDownloadResponse)
+        body = b"".join(_read(response))
+    expected = modify_header(get_return_list(rows, format_is_xlsx=False), [])
+    assert body == xml_output.render_document(expected).encode()

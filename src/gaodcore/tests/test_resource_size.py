@@ -73,13 +73,13 @@ def test_no_select_of_the_resource_and_one_row_per_resource(client, resource, fm
 def test_unknown_size_keeps_the_previous_value(client, resource):
     _download(client, resource, "json")
     previous = ResourceSizeConfig.objects.get(resource_id=resource).size
-    # CSV is streamed and its size is the bytes delivered, never unknown; an XML body is measured with response_size.
+    # CSV is streamed and its size is the bytes delivered, never unknown; a YAML body is measured with response_size.
     engine = create_engine(resource.connector_config.uri)
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO things VALUES (1000, 'another row')"))
     engine.dispose()
     with patch.object(gaodcore_views, "response_size", return_value=-1):
-        _download(client, resource, "xml")
+        _download(client, resource, "yaml")
     assert ResourceSizeConfig.objects.get(resource_id=resource).size == previous
 
 
@@ -95,7 +95,7 @@ def test_response_size_does_not_copy_the_body():
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("fmt", ["xml"])
+@pytest.mark.parametrize("fmt", ["yaml"])
 def test_response_size_matches_content_length_of_body(client, resource, fmt):
     sizes = []
     real = gaodcore_views.response_size

@@ -51,9 +51,11 @@ from download_stream import (
     JsonEncoder,
     StreamedDownload,
     StreamedDownloadResponse,
+    XmlEncoder,
     csv_blocks,
     current_rss_kb,
     json_blocks,
+    xml_blocks,
 )
 from log_sanitizer import mask_uri
 from phase_timing import PhaseTimer, phase
@@ -61,6 +63,7 @@ from gaodcore.negotations import HtmlFallbackContentNegotiation, LegacyContentNe
 from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list, modify_header
 from views import APIViewMixin
+from xml_output import GaodXMLRenderer
 
 logger = logging.getLogger(__name__)
 timing_logger = logging.getLogger("gaodcore.download_timing")
@@ -664,19 +667,23 @@ class DownloadView(APIViewMixin):
             streamed_json = (
                 format == "json" and not featureCollection and self._renders_plain_json(request)
             )
+            streamed_xml = format == "xml" and type(request.accepted_renderer) is GaodXMLRenderer
             if (
-                (format in ("csv", "scsv") or streamed_json)
+                (format in ("csv", "scsv") or streamed_json or streamed_xml)
                 and self.is_download_endpoint(request)
                 and settings.DOWNLOAD_STREAMING
             ):
                 logger.info("Downloading resource %s in %s format, streaming.", resource_id, format)
                 disposition = self._content_disposition(request, resource_config)
-                if streamed_json:
+                if streamed_json or streamed_xml:
                     renderer = request.accepted_renderer
                     content_type = (
                         f"{renderer.media_type}; charset={renderer.charset}" if renderer.charset else renderer.media_type
                     )
-                    encoder, make_blocks = JsonEncoder(renderer, columns, timer), json_blocks
+                    if streamed_xml:
+                        encoder, make_blocks = XmlEncoder(columns, timer), xml_blocks
+                    else:
+                        encoder, make_blocks = JsonEncoder(renderer, columns, timer), json_blocks
                 else:
                     content_type = CSV_CONTENT_TYPE
                     encoder, make_blocks = CsvEncoder(columns, delimiter, timer), csv_blocks
@@ -783,7 +790,7 @@ class DownloadView(APIViewMixin):
         """Whether the negotiated renderer is ``JSONRenderer`` and its output does not depend on the whole data.
 
         Only then the body can be built row by row: with ``indent`` in the ``Accept`` (or any other renderer, e.g. a
-        subclass or the XML/YAML ones) it goes through the renderer as before.
+        subclass or the YAML one) it goes through the renderer as before.
         """
         renderer = request.accepted_renderer
         return type(renderer) is JSONRenderer and renderer.get_indent(request.accepted_media_type, {}) is None
@@ -792,7 +799,7 @@ class DownloadView(APIViewMixin):
         self, stack, resource_config, resource_id, limit, offset, fields, filters, like, sort,
         shared, whole_resource, encoder, make_blocks,
     ) -> StreamedDownload:
-        """Run the query and prepare the first block (CSV or JSON); the rest is produced while the response is sent.
+        """Run the query and prepare the first block (CSV, JSON or XML); the rest is produced while the response is sent.
 
         Everything that can fail on the request's own data (connection, object, fields, sort, query, columns,
         normalization and serialization of the first block) fails here, before a response exists, and maps to the
