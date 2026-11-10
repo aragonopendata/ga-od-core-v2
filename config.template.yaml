@@ -27,8 +27,9 @@ common_config:
   # Optional. Rows fetched per network round trip by Oracle cursors (default: 5000).
   # Higher values cut round trips on large tables at the cost of memory per cursor.
   oracle_arraysize: 5000
-  # Optional. Send CSV/SCSV downloads while the rows are being read instead of building the whole file first
-  # (default: true). false returns to building the whole file in memory.
+  # Optional. Send `download` responses in CSV/SCSV, JSON (without `indent` or geometry) and XML while the rows
+  # are being read instead of building the whole file first (default: true). false returns to building the whole
+  # file in memory. XLSX, YAML, GeoJSON, JSON with `indent` and `preview` are always built whole.
   download_streaming: true
   # Optional. Rows read, converted and sent per block of a streamed download (default: 1000).
   download_block_rows: 1000
