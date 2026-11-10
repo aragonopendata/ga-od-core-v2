@@ -1,216 +1,102 @@
-# GAODCore
+# GA OD Core
 
-_"Gobierno de Aragón Open Data Core"_ is an app that allow to interact with public resources of _Gobierno de Aragón_.
+GA OD Core (Gobierno de Aragón Open Data Core) is a Django application that exposes data from external databases and HTTP APIs through a public, multi-format API.
 
 ![Aragón Open Data](docs/images/aragon-open-data.svg)
 
-## Terminology
+## Overview
 
-- Resource: any kind of data that user can download. Origin of this data can be produced from only one or mix of APIs,
-  database tables, database views, database functions, etc. *View* is deprecated alias of resource. Motives of this
-  deprecation are confusion with database views and use a consistent terminology with _CKAN_.
-- Connector: any way to connect with external resources.
+The application stores connection and resource definitions, retrieves data from the configured sources, and serves it as JSON, CSV, SCSV, XLSX, YAML or XML. It also includes private interfaces for managing those definitions and monitoring their health.
 
-## APPs
+Two concepts define the system:
 
-To discover all endpoints please check following
-swagger: [https://opendata.aragon.es/GA_OD_Core/ui/](https://opendata.aragon.es/GA_OD_Core/ui/)
+- **Connector**: the connection to an external database or HTTP API.
+- **Resource**: a table, view, function or remote document exposed through GA OD Core. The older term *view* is retained in some public endpoints for compatibility.
 
-- **default**: Public APP that allow that provide public data of _Gobieno de Aragón_.
-  Directory: [/GA_OD_Core/](/GA_OD_Core/)
-- **transports**: Public APP that provide different endpoints to get data of transports of _Aragón_.
-  Directory: [/GA_OD_Core/gaodcore-transports](/GA_OD_Core/gaodcore-transports)
-- **admin**: Private APP that allow to manage authentication and authorization. Directory:
-  [/admin/GA_OD_Core_admin/admin](/admin/GA_OD_Core_admin/admin)
-- **manager**: Private APP that allow to manage _gaodcore_ functionalities. This app is hidden in swagger if you are not
-  session authenticated. Directory: [/admin/GA_OD_Core_admin/manager](/admin/GA_OD_Core_admin/manager)
+## Interfaces
 
-## Despliegue
+| Interface | Path | Access |
+|---|---|---|
+| Public API | `/GA_OD_Core/` | Public |
+| Public Swagger UI | `/GA_OD_Core/ui/` | Public |
+| Transport API | `/GA_OD_Core/gaodcore-transports/` | Public |
+| Administration entry point | `/admin/GA_OD_Core_admin/` | Staff only |
+| Manager web interface | `/admin/GA_OD_Core_admin/web/manager/` | Staff only |
+| Health monitor | `/admin/GA_OD_Core_admin/health/` | Staff only |
+| Administrative API | `/admin/GA_OD_Core_admin/manager/` | Staff only |
+| Administrative Swagger UI | `/admin/GA_OD_Core_admin/ui/` | Staff only |
+| Django Admin | `/admin/GA_OD_Core_admin/admin/` | Staff only |
 
-Es importante poner un timeout generoso 4m ya que si hay alguna peticion no cacheada dara un error. Si se utiliza Apache como proxy revisar timeout https://httpd.apache.org/docs/2.4/mod/mod_proxy.html
+The administration entry point redirects to the Manager web interface, which is the default interface for managing connectors and resources. Django Admin is intended for user administration and lower-level model access. The REST API and administrative Swagger UI remain available for integrations and technical use.
 
-## Environment Variables
+Private interfaces require an active staff account. Browser access uses Django sessions; the administrative API also supports Basic Authentication and must only be used over HTTPS.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `CONFIG_PATH` | Path to the external YAML configuration file | — |
-| `DJANGO_LOG_LEVEL` | Logging level for the application (Django, gaodcore) | `WARNING` |
-| `SQLALCHEMY_LOG_LEVEL` | Logging level for SQLAlchemy (database engine logs) | `ERROR` |
+## Configuration
+
+Runtime configuration is loaded from an external YAML file selected through `CONFIG_PATH`.
+
+| Environment variable | Purpose | Default |
+|---|---|---|
+| `CONFIG_PATH` | Path to the external YAML configuration | System dependent |
+| `DJANGO_LOG_LEVEL` | Django and application log level | `WARNING` |
+| `SQLALCHEMY_LOG_LEVEL` | SQLAlchemy engine log level | `ERROR` |
+| `GAODCORE_VALIDATE_EXTERNAL_CONNECTIONS` | Probe external sources when saving connectors and resources | `true` |
+
+External validation must remain enabled in production. Disabling it is only intended for isolated development or test environments where external sources are unavailable. The explicit Manager validator always performs a real probe.
+
+See `config.template.yaml` and `.env-template` for the available settings.
 
 ## Development
 
-### Code Quality
-
-This project uses pre-commit hooks with Ruff for code linting and quality checks.
-
-#### Setup pre-commit
+The project targets Python 3.10. Create or activate a compatible environment, install the requirements, and set the test configuration before running Django commands:
 
 ```bash
-pip install pre-commit
-pre-commit install
+export CONFIG_PATH="$PWD/config-tst.yaml"
+export DJANGO_SETTINGS_MODULE=gaodcore_project.test_settings
 ```
 
-The hooks will automatically run on each commit to ensure code quality standards.
+Run the test suite with:
 
-## Usage
-
-### Authentication
-
-Currently, it is allowed Session and Basic authentication.
-
-#### Session Authentication
-
-This is util to show **manager** app in swagger. You can authenticate graphically here:
-[/admin/GA_OD_Core_admin/admin/](/admin/GA_OD_Core_admin/admin/)
-
-#### Basic Authentication
-
-This is util to deal with manager app and integrate other app with GAODCore. For more information:
-[https://en.wikipedia.org/wiki/Basic_access_authentication](https://en.wikipedia.org/wiki/Basic_access_authentication)
-
-### API Error Responses
-
-Errors are returned as an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem
-document, served with the `application/problem+json` media type. This is true for every
-format a client may ask for: an error to a CSV, SCSV, XLSX, YAML or XML request is still
-a problem document, never a table or a spreadsheet. The browsable API is the only
-exception and keeps rendering HTML.
-
-```json
-{
-  "type": "https://opendata.aragon.es/problems/connection-unavailable",
-  "title": "Connection unavailable",
-  "status": 503,
-  "detail": "Connection is not available.",
-  "error_code": "CONNECTION_UNAVAILABLE"
-}
+```bash
+pytest src --cov=.
 ```
 
-| Member | Notes |
-|--------|-------|
-| `type` | Stable identifier of the problem kind. Treat it as an opaque identifier: these URIs are **not** resolvable today, so do not dereference them. |
-| `title` | Short, human-readable summary of the problem kind. |
-| `status` | Always equal to the HTTP status code of the response. |
-| `detail` | Human-readable explanation. Always a string, never a field-error map. |
-| `error_code` | **Extension member** (project-specific). |
-| `errors` | **Extension member** (project-specific), present on validation errors only. |
+Production PostgreSQL variables (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST` and `POSTGRES_PORT`) should not be inherited by local test runs because they can interfere with testcontainers.
 
-`error_code` and `errors` are *extension members*, which RFC 9457 explicitly allows a
-problem document to add next to the standard members (the RFC itself shows an example
-carrying an `errors` extension). Adding them therefore does not make the document any
-less of an RFC 9457 problem document.
+Code quality checks are available through the configured pre-commit hooks, Ruff, Flake8, Pylint and YAPF.
 
-`error_code` gives clients a short, stable token to branch on without parsing `type`;
-clients that only understand the standard members can ignore both extensions and still
-read `type`, `title`, `status` and `detail`.
+## API errors
 
-**Validation errors** carry the structured, per-field detail under `errors`, keyed by
-field name: each leaf holds the human-readable `message` and the DRF validation `code`.
-Messages not tied to a field are grouped under `non_field_errors`. Nested serializers and
-`many=True` serializers keep their shape, so nothing is lost:
+Non-HTML API errors use the RFC 9457 problem-details format and the `application/problem+json` media type, including when the requested success format is CSV, XLSX or another tabular format. Responses include the standard `type`, `title`, `status` and `detail` members, plus the project-specific `error_code`; validation failures also include structured field errors under `errors`.
 
-```json
-{
-  "type": "https://opendata.aragon.es/problems/validation-error",
-  "title": "Validation error",
-  "status": 400,
-  "detail": "The request contains invalid fields.",
-  "error_code": "VALIDATION_ERROR",
-  "errors": {
-    "uri": [
-      {
-        "message": "Connection is not available.",
-        "code": "CONNECTION_UNAVAILABLE"
-      }
-    ]
-  }
-}
+Clients should branch on `error_code` or `type`, not on the human-readable message. The `type` URIs are stable identifiers, not documents to fetch.
+
+| Status | Typical `error_code` values |
+|---|---|
+| 400 | `VALIDATION_ERROR`, `RESOURCE_UNAVAILABLE`, `INVALID_FIELD`, `INVALID_FILTER`, `INVALID_SORT`, `INVALID_COLUMNS`, `INVALID_FORMAT`, `INVALID_JSON`, `INVALID_DELIMITER`, `NOT_A_NUMBER`, `REQUIRED`, `TOO_MANY_ROWS`, `MIME_TYPE_NOT_ALLOWED` |
+| 429 | `DOWNLOAD_IN_PROGRESS` (the same download is already running) |
+| 502 | `BAD_GATEWAY` (an external API or service failed) |
+| 503 | `CONNECTION_UNAVAILABLE`, `OBJECT_UNAVAILABLE`, `QUERY_ERROR`, `SCHEMA_NOT_IMPLEMENTED`, `SERVICE_UNAVAILABLE`, `TOO_MANY_DOWNLOADS` |
+
+A filter on a column the resource does not have is a `400 INVALID_FIELD`. An HTTP source that currently has no rows answers any filter with an empty result.
+
+## Transport API
+
+`/GA_OD_Core/gaodcore-transports/` exposes data from the Aragón and Zaragoza transport APIs (vehicles, lines, stops, routes, arrival times, notices, live positions…). Every endpoint accepts the `json`, `csv`, `xml`, `yaml` and `xlsx` suffixes, and responses are cached for `common_config.cache_ttl` seconds. In `zaragoza/arrival_time`, each row carries the stop code in `stop_id` and, with the same value, in `cod_parada`.
+
+## Locked accounts
+
+`django-axes` locks an account after repeated failed logins ("Access locked: too many login attempts"). To unlock, run one of these inside the application container:
+
+```bash
+python manage.py axes_reset                         # all lockouts and access records
+python manage.py axes_reset_ip [ip ...]             # given IP addresses
+python manage.py axes_reset_username [username ...] # given usernames
+python manage.py axes_reset_logs [age_days]         # access logs older than the age (default 30 days)
 ```
 
-On a validation problem the top-level `error_code` is always `VALIDATION_ERROR` and
-`detail` is the generic *The request contains invalid fields.*; the specific semantic code
-(here `CONNECTION_UNAVAILABLE`) lives inside `errors`, next to the field it belongs to.
+## Deployment
 
-Keeping field errors inside `errors` also means a resource with a field literally named
-`status`, `detail`, `error_code` or `errors` can never overwrite the envelope.
+Uncached requests may take several minutes. The application and its reverse proxy should use a sufficiently generous request timeout; the provided Gunicorn configuration uses 240 seconds.
 
-**HTTP status codes:**
-
-| Status | Exception | Meaning |
-|--------|-----------|---------|
-| 400 | `ValidationError` | Client error - invalid input, request or missing resource |
-| 502 | `BadGateway` | External API or service failure |
-| 503 | `ServiceUnavailable` | Database or connector unavailable |
-
-**Error codes:**
-- `VALIDATION_ERROR` - The request contains invalid fields; see `errors`
-- `CONNECTION_UNAVAILABLE` - Database/connector connection failed
-- `OBJECT_UNAVAILABLE` - Table, view, or function doesn't exist
-- `RESOURCE_UNAVAILABLE` - Resource does not exist or is not enabled
-- `QUERY_ERROR` - Query execution failed
-- `SCHEMA_NOT_IMPLEMENTED` - Requested schema type not supported
-- `BAD_GATEWAY` - Upstream service failed
-
-`type` and `title` are derived from `error_code`: the type is
-`https://opendata.aragon.es/problems/` followed by the lower-case, dash-separated code,
-and the title is the code in sentence case. The resulting URI is stable and safe to match
-on, but it is an identifier only: nothing is published at that address.
-
-### Create a new resource
-
-#### Validate a new Resource
-
-It is posible to get data without create any configuration to test if data is correct before create any configuration.
-Take care that when you create a `ConnectorConfig` or `ResourceConfig` will check if resource is available. Not availability
-of a resource will raise an error.
-
-In [/admin/GA_OD_Core_admin/manager/validator/](/admin/GA_OD_Core_admin/manager/validator/) you must send a GET
-authenticated request with following data:
-![validator](docs/images/swagger/validator.png)
-
-Swagger
-URL: [/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_validator_retrieve](/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_validator_retrieve)
-
-
-#### Create a new ConnectorConfig
-Create a `ConnectorConfig` is the way to explain how GAODCore must connect with an external resource: api or database.
-This step not include retrieval of data.
-
-In [/admin/GA_OD_Core_admin/manager/connector-config/](/admin/GA_OD_Core_admin/manager/connector-config/) you must send a POST
-authenticated request with following data:
-
-![connector config creation](docs/images/swagger/connector-config-creation.png)
-Swagger
-URL: [/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_connector_config_create](/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_connector_config_create)
-
-#### Create a new ResourceConfig
-
-Create a `ResourceConfig` is the way to explain what data GAODCore must retrieve.
-
-In [/admin/GA_OD_Core_admin/manager/resource-config/](/admin/GA_OD_Core_admin/manager/resource-config/) you must send a POST
-authenticated request with following data:
-
-![resource config creation](docs/images/swagger/resource-config-creation.png)
-Swagger
-URL: [/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_resource_config_create](/admin/GA_OD_Core_admin/ui/#operations-manager-admin_GA_OD_Core_admin_manager_resource_config_create)
-
-### Data retrieval
-
-To discover all endpoints please check following
-swagger: [GA_OD_Core/ui/](GA_OD_Core/ui/)
-
-### Reset login attempts
-
-If we try to access our account unsuccessfully multiple times, our account will be locked an the next message will appear:
-
-    Access locked: too many login attempts. Contact an admin to unlock your account.
-
-If we want to reset these attempts, we have to execute one of the next commands (depending on the case) inside the docker container:
-
-    python manage.py axes_reset
-    python manage.py axes_reset_ip [ip ...]
-    python manage.py axes_reset_username [username ...]
-    python manage.py axes_reset_logs (age)
-
-
-The first one will reset all lockouts and access records. The second one  will clear lockouts and records for the given IP addresses. The third one will clear lockouts and records for the given usernames. And finally, the last one will reset AccessLog records that are older than the given age where the default is 30 days.
+Gunicorn is configured in `src/gunicorn.conf.py` and tuned through `GUNICORN_*` environment variables (workers, threads, timeouts, worker recycling by request count and memory); the module docstring documents each one and its default. Large CSV, SCSV, XML and JSON downloads are streamed in blocks (`common_config.download_streaming` and `download_block_rows` in the YAML configuration).
