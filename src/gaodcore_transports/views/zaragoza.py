@@ -203,9 +203,11 @@ class StopsRouteView(ZaragozaTransportMixin):  # pylint: disable=too-few-public-
 
 @method_decorator(name="get", decorator=extend_schema(tags=["transports"]))
 class ArrivalTimeView(ZaragozaTransportMixin):  # pylint: disable=too-few-public-methods
-    """Returns the passing hours of each stop, for the current date."""
+    """Returns the passing hours of each stop, for the current date. Each row has the stop code in ``stop_id`` and,
+    with the same value, in ``cod_parada``."""
 
     _ENDPOINT = "arrival_time"
+    _STOP_CODE_ALIAS_FIELD = "cod_parada"
 
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(self, _: Request, **_kwargs):
@@ -216,7 +218,10 @@ class ArrivalTimeView(ZaragozaTransportMixin):  # pylint: disable=too-few-public
                     self._ENDPOINT, stop_id=stop[self._STOP_ID_FIELD]
                 ),
                 root_name=self._ENDPOINT,
-                extra_data={self._STOP_ID_FIELD: stop[self._STOP_ID_FIELD]},
+                extra_data={
+                    self._STOP_ID_FIELD: stop[self._STOP_ID_FIELD],
+                    self._STOP_CODE_ALIAS_FIELD: stop[self._STOP_ID_FIELD],
+                },
             )
             for stop in _get_stops()
         ]
