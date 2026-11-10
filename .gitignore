@@ -319,3 +319,6 @@ src/gaodcore_manager/migrations/0002_auto_20211220_1207.py
 .env.*
 docs/*
 !docs/images/
+
+# Local only: Docker Compose lab for measuring streamed downloads
+lab/
