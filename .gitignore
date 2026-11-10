@@ -314,3 +314,8 @@ src/gaodcore_manager/migrations/0002_auto_20211220_1207.py
 
 *.md
 !README.md
+
+# Local only: environment variants and project documentation (docs/images is used by README.md)
+.env.*
+docs/*
+!docs/images/
