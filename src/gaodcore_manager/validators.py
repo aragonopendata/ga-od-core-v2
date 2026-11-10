@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, Iterable, Optional
 from urllib.parse import urlparse
 
@@ -6,7 +7,9 @@ from rest_framework.exceptions import ValidationError
 
 from exceptions import ServiceUnavailable, ErrorCodes
 
+from log_sanitizer import mask_uri
 from connectors import (
+    failure_reason,
     validate_resource,
     NoObjectError,
     DriverConnectionError,
@@ -15,6 +18,8 @@ from connectors import (
     NotImplementedSchemaError,
     MimeTypeError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def uri_validator(uri):
@@ -34,6 +39,9 @@ def uri_validator(uri):
             ErrorCodes.MIME_TYPE_NOT_ALLOWED,
         ) from err
     except DriverConnectionError as err:
+        logger.warning(
+            "Connection is not available: reason=%s uri=%s", failure_reason(err), mask_uri(uri)
+        )
         raise ServiceUnavailable(
             "Connection is not available.", code=ErrorCodes.CONNECTION_UNAVAILABLE
         ) from err
@@ -136,6 +144,9 @@ def resource_validator(
             ErrorCodes.RESOURCE_UNAVAILABLE,
         ) from err
     except DriverConnectionError as err:
+        logger.warning(
+            "Connection is not available: reason=%s uri=%s", failure_reason(err), mask_uri(uri)
+        )
         raise ServiceUnavailable(
             "Connection is not available.", code=ErrorCodes.CONNECTION_UNAVAILABLE
         ) from err

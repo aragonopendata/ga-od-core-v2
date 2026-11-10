@@ -28,6 +28,7 @@ from rest_framework.settings import api_settings
 from rest_framework.utils.serializer_helpers import ReturnList
 
 from connectors import (
+    failure_reason,
     get_resource_data,
     get_resource_rows,
     get_resource_columns,
@@ -378,27 +379,31 @@ class DownloadView(APIViewMixin):
                 )
             )
         except DriverConnectionError as err:
-            logger.warning("Connection is not available%s: %s", context, err)
-            logger.warning(
-                "Resource: %s - Location: %s - Schema: %s",
-                resource_id,
-                resource_config.object_location,
-                resource_config.object_location_schema,
-            )
+            self._log_unavailable("Connection is not available", context, err, resource_id, resource_config)
             raise ServiceUnavailable(
                 "Connection is not available.", code=ErrorCodes.CONNECTION_UNAVAILABLE
             ) from err
         except NoObjectError as err:
-            logger.warning("Object is not available%s: %s", context, err)
-            logger.warning(
-                "Resource: %s - Location: %s - Schema: %s",
-                resource_id,
-                resource_config.object_location,
-                resource_config.object_location_schema,
-            )
+            self._log_unavailable("Object is not available", context, err, resource_id, resource_config)
             raise ServiceUnavailable(
                 "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
             ) from err
+
+    @staticmethod
+    def _log_unavailable(what, context, err, resource_id, resource_config) -> None:
+        """Log a connection/object failure as ONE warning with everything needed to diagnose it."""
+        location = resource_config.object_location
+        schema = resource_config.object_location_schema
+        logger.warning(
+            "%s%s: resource_id=%s reason=%s uri=%s%s%s",
+            what,
+            context,
+            resource_id,
+            failure_reason(err),
+            mask_uri(resource_config.connector_config.uri),
+            f" location={location}" if location is not None else "",
+            f" schema={schema}" if schema is not None else "",
+        )
 
     @extend_schema(
         tags=["default"],

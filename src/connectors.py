@@ -122,7 +122,29 @@ class NotImplementedSchemaError(Exception):
 
 
 class DriverConnectionError(Exception):
-    """Connection cannot be established."""
+    """Connection cannot be established.
+
+    ``reason`` optionally carries the specific cause (timeout, HTTP status, ...) for the caller to log with its own
+    context (resource id, masked URI); it is never part of the message shown to API clients.
+    """
+
+    def __init__(self, *args, reason: Optional[str] = None):
+        super().__init__(*args)
+        self.reason = reason
+
+
+def failure_reason(err: BaseException, max_length: int = 200) -> str:
+    """One-line, truncated description of why a connection/object error happened, for logging.
+
+    Uses the explicit ``reason`` when the connector provided one, else the underlying driver error (``__cause__``),
+    else the exception message.
+    """
+    reason = getattr(err, "reason", None)
+    if not reason:
+        cause = err.__cause__ or err
+        reason = f"{type(cause).__name__}: {cause}" if cause is not err else str(cause)
+    reason = " ".join(str(reason).split())
+    return reason[:max_length]
 
 
 class NoObjectError(Exception):
@@ -1975,30 +1997,32 @@ def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
                 else:
                     raise MimeTypeError()
             else:
-                raise DriverConnectionError("The url could not be reached.")
+                raise DriverConnectionError(
+                    "The url could not be reached.",
+                    reason=f"HTTP status {response.getcode()}",
+                )
     except HTTPError as err:
         # Raised immediately once the status line/headers are read, before any
         # body bytes are fetched - a non-2xx origin response is rejected without
         # waiting on a slow/large error body.
-        logger.warning(
-            "HTTP connector received error status %s from %s", err.code, mask_uri(uri)
-        )
+        status = err.code
         err.close()
-        raise DriverConnectionError("The url could not be reached.") from err
+        raise DriverConnectionError(
+            "The url could not be reached.", reason=f"HTTP status {status}"
+        ) from err
     except URLError as err:
         # Connection-level failures (DNS, refused, TLS, connect-phase timeout).
-        logger.warning("HTTP connector failed to reach %s: %s", mask_uri(uri), err.reason)
-        raise DriverConnectionError("The url could not be reached.") from err
+        raise DriverConnectionError(
+            "The url could not be reached.", reason=f"URL error: {err.reason}"
+        ) from err
     except TimeoutError as err:
         # A 200 response whose body then stalls mid-read raises a bare
         # TimeoutError (aliased to socket.timeout on Python 3.10+), which
         # urllib does NOT wrap as URLError - it must be caught separately.
-        logger.warning(
-            "HTTP connector timed out after %ss while reading response: %s",
-            timeout,
-            mask_uri(uri),
-        )
-        raise DriverConnectionError("The url could not be reached.") from err
+        raise DriverConnectionError(
+            "The url could not be reached.",
+            reason=f"timed out after {timeout}s while reading response",
+        ) from err
     if data:
         max_key = max(data, key=len).keys()
         for item in data:

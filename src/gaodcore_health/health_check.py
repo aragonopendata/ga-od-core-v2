@@ -18,6 +18,7 @@ from connectors import (
     get_resource_data,
     DriverConnectionError,
     NoObjectError,
+    failure_reason,
 )
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from gaodcore_project.config import Config
@@ -81,7 +82,10 @@ def check_connector_health_sync(
             error_type=error_type,
         )
         logger.warning(
-            "Health check failed for connector: %s - %s", connector.name, str(e)
+            "Health check failed for connector: %s - %s (reason: %s)",
+            connector.name,
+            str(e),
+            failure_reason(e),
         )
         return result
 
@@ -95,7 +99,10 @@ def check_connector_health_sync(
             error_type="object_error",
         )
         logger.warning(
-            "Health check failed for connector: %s - %s", connector.name, str(e)
+            "Health check failed for connector: %s - %s (reason: %s)",
+            connector.name,
+            str(e),
+            failure_reason(e),
         )
         return result
 
@@ -115,7 +122,10 @@ def check_connector_health_sync(
             error_type=error_type,
         )
         logger.warning(
-            "Health check failed for connector: %s - %s", connector.name, str(e)
+            "Health check failed for connector: %s - %s (reason: %s)",
+            connector.name,
+            str(e),
+            failure_reason(e),
         )
         return result
 
@@ -522,7 +532,10 @@ def check_resource_health_sync(
             error_type="connection_error",
         )
         logger.warning(
-            "Resource health check failed for resource: %s - %s", resource.name, str(e)
+            "Resource health check failed for resource: %s - %s (reason: %s)",
+            resource.name,
+            str(e),
+            failure_reason(e),
         )
         return result
 
@@ -536,7 +549,10 @@ def check_resource_health_sync(
             error_type="object_error",
         )
         logger.warning(
-            "Resource health check failed for resource: %s - %s", resource.name, str(e)
+            "Resource health check failed for resource: %s - %s (reason: %s)",
+            resource.name,
+            str(e),
+            failure_reason(e),
         )
         return result
 
@@ -572,7 +588,10 @@ def check_resource_health_sync(
             error_type=error_type,
         )
         logger.warning(
-            "Resource health check failed for resource: %s - %s", resource.name, str(e)
+            "Resource health check failed for resource: %s - %s (reason: %s)",
+            resource.name,
+            str(e),
+            failure_reason(e),
         )
         return result
 
