@@ -528,6 +528,50 @@ def test_download_pagination_page_size_error(
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    "params,unknown",
+    [
+        ({"filters": '{"no_such_column": 1}'}, "no_such_column"),
+        ({"filters": '{"no_such_column": {"$gt": 1}}'}, "no_such_column"),
+        ({"filters": '{"id": 1, "b_missing": 2, "a_missing": 3}'}, "b_missing, a_missing"),
+    ],
+    ids=["filters", "operator", "several"],
+)
+def test_download_filter_non_existent_field_error(
+    params, unknown, endpoint: str, accept_error, client: Client, full_example, caplog
+):
+    """A filter on a column the resource does not have is a client error (400), not a query error (503)."""
+    with caplog.at_level("INFO"):
+        download_response = client.get(
+            endpoint,
+            {"resource_id": full_example.resources.table.id, **params},
+            HTTP_ACCEPT=accept_error,
+        )
+    assert download_response.status_code == 400
+    validate_error(
+        download_response,
+        f"Filter field: {unknown} not exists.",
+        accept_error,
+        field_error_code="INVALID_FIELD",
+    )
+    # Nothing from the application is logged above INFO (django.request logs every 400 as a WARNING itself).
+    assert not [
+        r for r in caplog.records
+        if r.levelno >= 30 and r.name in ("connectors", "gaodcore.views", "gaodcore.exception_handlers")
+    ]
+
+
+@pytest.mark.django_db
+def test_download_filter_existing_column_still_works(endpoint: str, client: Client, full_example):
+    download_response = client.get(
+        endpoint,
+        {"resource_id": full_example.resources.table.id, "filters": '{"id": 1}'},
+    )
+    assert download_response.status_code == 200
+    assert [row["id"] for row in json.loads(download_response.content)] == [1]
+
+
+@pytest.mark.django_db
 def test_download_filters(endpoint: str, client: Client, full_example):
     download_response = client.get(
         endpoint,

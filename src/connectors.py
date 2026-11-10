@@ -1053,6 +1053,7 @@ def _build_feature_collection(
     column_dict = {column.key: column for column in model.columns}
     # columns = _get_columns(column_dict, fields)
     filters_args = _process_like_filter(like, model)
+    _validate_filter_fields(column_dict, filters)
     # The session is closed on every path, including a failed query or normalization.
     session = session_maker()
     try:
@@ -1437,6 +1438,11 @@ def _query_parts(resource, uri, filters, like, fields):
     filters_args = []
     like_filters = _process_like_filter(like, resource.model)
     filters, filters_args = _get_filter_operators(filters, filters_args)
+    _validate_filter_fields(
+        column_dict,
+        filters,
+        [name for arg in filters_args for name in arg if not name.startswith("$")],
+    )
     if "oracle" in parsed.scheme:
         filters = _process_filters_oracle_dates(filters)
     filters_args = process_filters_args(filters_args, parsed.scheme, frozenset(column_dict.keys()))
@@ -1722,6 +1728,18 @@ def _get_columns(
             raise FieldNoExistsError(f"Field: {err.args[0]} not exists.") from err
     else:
         return columns_dict.values()
+
+
+def _validate_filter_fields(column_dict: Dict[str, Column], filters: Dict[str, Any], operator_fields=()) -> None:
+    """Fail with a client error (not a query error) when a filter names a column the resource does not have.
+
+    This also covers a resource that currently has no columns (e.g. an empty HTTP source): every filter on it is
+    unknown. Checked before the query is built, so it needs no database round trip.
+    """
+    unknown = [name for name in (*filters, *operator_fields) if name not in column_dict]
+    if unknown:
+        logger.info("Filter on unknown field(s): %s (resource columns: %d)", unknown, len(column_dict))
+        raise FieldNoExistsError(f"Filter field: {', '.join(dict.fromkeys(unknown))} not exists.")
 
 
 def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
