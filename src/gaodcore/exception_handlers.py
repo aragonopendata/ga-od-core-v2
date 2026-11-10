@@ -155,7 +155,11 @@ def _log_server_error(exc, context, problem):
     resource_id = None
     path = "unknown"
     if request is not None:
-        resource_id = request.query_params.get("resource_id")
+        # Same precedence as ``DownloadView._get_resource_id``: ``view_id`` is the
+        # documented alias of ``resource_id``.
+        resource_id = request.query_params.get(
+            "resource_id"
+        ) or request.query_params.get("view_id")
         path = request.path
 
     logger.error(
@@ -196,5 +200,8 @@ def custom_exception_handler(exc, context):
 
     if response.status_code >= 500:
         _log_server_error(exc, context, problem)
+        # Django's ``log_response`` skips responses carrying this flag, so the 5xx is
+        # not logged a second time by ``django.request``.
+        response._has_been_logged = True  # pylint: disable=protected-access
 
     return response

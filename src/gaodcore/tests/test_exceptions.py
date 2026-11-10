@@ -6,6 +6,9 @@ of RFC 9457, and validation problems carry an extra ``errors`` member; neither m
 part of the RFC, so this suite pins them explicitly.
 """
 
+import logging
+from unittest import mock
+
 import pytest
 from rest_framework import serializers
 from rest_framework.exceptions import APIException, NotFound, ValidationError
@@ -568,3 +571,73 @@ class TestUpstreamAndColumnErrorCodes:
             modify_header([{"id": 1, "name": "a"}], ["only_one"])
 
         assert non_field_code(exc_info.value) == ErrorCodes.INVALID_COLUMNS
+
+
+class _Capture(logging.Handler):
+    """Collect log records. ``caplog`` cannot see ``django.request`` (propagate=False)."""
+
+    def __init__(self):
+        super().__init__(level=logging.DEBUG)
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+@pytest.fixture
+def captured_logs():
+    """Capture the handler's logger and ``django.request`` side by side."""
+    names = ("gaodcore.exception_handlers", "django.request")
+    handlers = {}
+    for name in names:
+        handlers[name] = _Capture()
+        logging.getLogger(name).addHandler(handlers[name])
+    yield {name: handler.records for name, handler in handlers.items()}
+    for name, handler in handlers.items():
+        logging.getLogger(name).removeHandler(handler)
+
+
+class TestServerErrorLogging:
+    """A 5xx is logged once, by our handler; a 4xx keeps Django's WARNING."""
+
+    @staticmethod
+    def _get_503(client, query):
+        with mock.patch(
+            "gaodcore.views._get_resource",
+            side_effect=ServiceUnavailable("Connection is not available."),
+        ):
+            return client.get(f"/GA_OD_Core/preview?{query}")
+
+    def test_5xx_logged_once_by_handler_only(self, client, captured_logs):
+        response = self._get_503(client, "resource_id=7")
+
+        assert response.status_code == 503
+        ours = captured_logs["gaodcore.exception_handlers"]
+        assert len(ours) == 1
+        assert ours[0].levelno == logging.ERROR
+        assert "resource_id=7" in ours[0].getMessage()
+        assert captured_logs["django.request"] == []
+
+    def test_view_id_alias_is_logged_as_resource_id(self, client, captured_logs):
+        self._get_503(client, "view_id=2190")
+
+        message = captured_logs["gaodcore.exception_handlers"][0].getMessage()
+        assert "resource_id=2190" in message
+
+    def test_resource_id_wins_over_view_id(self, client, captured_logs):
+        self._get_503(client, "resource_id=1&view_id=2")
+
+        message = captured_logs["gaodcore.exception_handlers"][0].getMessage()
+        assert "resource_id=1," in message
+
+    def test_4xx_still_logged_by_django_request_as_warning(self, client, captured_logs):
+        response = client.get("/GA_OD_Core/preview")  # resource_id is required
+
+        assert response.status_code == 400
+        assert captured_logs["gaodcore.exception_handlers"] == []
+        django_records = captured_logs["django.request"]
+        assert [r.levelno for r in django_records] == [logging.WARNING]
+
+    def test_only_5xx_responses_are_marked_as_logged(self):
+        assert handle(ServiceUnavailable("Nope.")).__dict__["_has_been_logged"] is True
+        assert not hasattr(handle(NotFound()), "_has_been_logged")
