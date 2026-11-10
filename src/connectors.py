@@ -51,6 +51,8 @@ from sqlalchemy import (
     REAL,
     text,
     quoted_name,
+    func,
+    select,
 )
 import warnings
 from sqlalchemy.engine import Engine
@@ -1075,7 +1077,10 @@ def _build_feature_collection(
     column_dict = {column.key: column for column in model.columns}
     # columns = _get_columns(column_dict, fields)
     filters_args = _process_like_filter(like, model)
-    _validate_filter_fields(column_dict, filters)
+    if _is_empty_http_source_filtered_by_unknown_fields(resource, uri, column_dict, filters):
+        filters = {}
+    else:
+        _validate_filter_fields(column_dict, filters)
     # The session is closed on every path, including a failed query or normalization.
     session = session_maker()
     try:
@@ -1460,11 +1465,12 @@ def _query_parts(resource, uri, filters, like, fields):
     filters_args = []
     like_filters = _process_like_filter(like, resource.model)
     filters, filters_args = _get_filter_operators(filters, filters_args)
-    _validate_filter_fields(
-        column_dict,
-        filters,
-        [name for arg in filters_args for name in arg if not name.startswith("$")],
-    )
+    operator_fields = [name for arg in filters_args for name in arg if not name.startswith("$")]
+    if _is_empty_http_source_filtered_by_unknown_fields(resource, uri, column_dict, [*filters, *operator_fields]):
+        # No rows to filter: the answer is empty whatever the filter says.
+        filters, filters_args = {}, []
+    else:
+        _validate_filter_fields(column_dict, filters, operator_fields)
     if "oracle" in parsed.scheme:
         filters = _process_filters_oracle_dates(filters)
     filters_args = process_filters_args(filters_args, parsed.scheme, frozenset(column_dict.keys()))
@@ -1755,13 +1761,34 @@ def _get_columns(
 def _validate_filter_fields(column_dict: Dict[str, Column], filters: Dict[str, Any], operator_fields=()) -> None:
     """Fail with a client error (not a query error) when a filter names a column the resource does not have.
 
-    This also covers a resource that currently has no columns (e.g. an empty HTTP source): every filter on it is
-    unknown. Checked before the query is built, so it needs no database round trip.
+    Checked before the query is built, so it needs no database round trip. An HTTP source with no rows is not
+    validated here: see ``_is_empty_http_source_filtered_by_unknown_fields``.
     """
     unknown = [name for name in (*filters, *operator_fields) if name not in column_dict]
     if unknown:
         logger.info("Filter on unknown field(s): %s (resource columns: %d)", unknown, len(column_dict))
         raise FieldNoExistsError(f"Filter field: {', '.join(dict.fromkeys(unknown))} not exists.")
+
+
+def _is_empty_http_source_filtered_by_unknown_fields(
+    resource: OpenResource, uri: str, column_dict: Dict[str, Column], filter_fields: Iterable[str]
+) -> bool:
+    """True when a filter names columns an HTTP source does not have and the source has no rows.
+
+    An HTTP source without rows and without a header has no schema (it is loaded as a table with a single ``id``
+    column), so any column the client filters by is unknown although it exists whenever there is data. With no rows
+    the answer is empty whatever the filter says, so the filter is answered with no rows instead of a 400. Only
+    counted when a filter names an unknown column, on the in-memory copy of the source.
+    """
+    if all(name in column_dict for name in filter_fields):
+        return False
+    if urlparse(uri).scheme not in _HTTP_SCHEMAS:
+        return False
+    with resource.engine.connect() as connection:
+        empty = connection.execute(select(func.count()).select_from(resource.model)).scalar() == 0
+    if empty:
+        logger.info("Filter on field(s) of an HTTP source with no rows: answered with no rows")
+    return empty
 
 
 def _get_sort_methods(column_dict: Dict[str, Column], sort: List[OrderBy]):
@@ -1918,6 +1945,11 @@ def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
 
 
 def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
+    return _csv_rows_and_fieldnames(data, charset)[0]
+
+
+def _csv_rows_and_fieldnames(data: bytes, charset: str) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """Rows of a CSV and the names of its header (empty when the CSV has no header)."""
     if not charset:
         # charset = cchardet.detect(data)['encoding']
         # pasamos a charset 8 porque sino identifica como gb18030 - o ISO15 que no es capaz de decodificar
@@ -1932,7 +1964,9 @@ def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:
     else:
         dialect = "excel"
 
-    return list(csv.DictReader(StringIO(data), dialect=dialect))
+    reader = csv.DictReader(StringIO(data), dialect=dialect)
+    rows = list(reader)
+    return rows, list(reader.fieldnames or [])
 
 
 def _get_table_from_dict(
@@ -1980,6 +2014,7 @@ def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
     """
     if timeout is None:
         timeout = DEFAULT_HTTP_TIMEOUT_SECONDS
+    fieldnames: List[str] = []
     try:
         with urllib.request.urlopen(uri, timeout=timeout) as response:
             if response.getcode() == HTTPStatus.OK:
@@ -1991,7 +2026,7 @@ def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
                     charset = None
 
                 if mime_type in MimeType.CSV.value:
-                    data = _csv_to_dict(response.read(), charset)
+                    data, fieldnames = _csv_rows_and_fieldnames(response.read(), charset)
                 elif mime_type in MimeType.JSON.value:
                     data = json.loads(response.read())
                 else:
@@ -2033,6 +2068,15 @@ def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
     metadata = MetaData()
     if data:
         table = _get_table_from_dict(data, engine, metadata)
+    elif any(fieldnames):
+        # A CSV with a header and no rows keeps its columns, so filters on them are valid and return no rows.
+        table = Table(
+            _TEMPORAL_TABLE_NAME,
+            metadata,
+            *(Column(name, Text) for name in dict.fromkeys(fieldnames) if name),
+            prefixes=["TEMPORARY"],
+        )
+        metadata.create_all(engine)
     else:
         table = Table(
             _TEMPORAL_TABLE_NAME,
