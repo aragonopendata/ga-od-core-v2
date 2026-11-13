@@ -31,6 +31,7 @@ from connectors import (
     failure_reason,
     get_resource_data,
     get_resource_rows,
+    get_feature_rows,
     get_resource_columns,
     NoObjectError,
     DriverConnectionError,
@@ -48,6 +49,7 @@ from connectors import (
 )
 from download_stream import (
     CsvEncoder,
+    GeoJsonEncoder,
     JsonEncoder,
     StreamedDownload,
     StreamedDownloadResponse,
@@ -668,20 +670,28 @@ class DownloadView(APIViewMixin):
                 format == "json" and not featureCollection and self._renders_plain_json(request)
             )
             streamed_xml = format == "xml" and type(request.accepted_renderer) is GaodXMLRenderer
+            # GeoJSON: the geometry is copied as the database wrote it, which only matches the compact renderer.
+            streamed_geojson = (
+                featureCollection and self._renders_plain_json(request) and request.accepted_renderer.compact
+            )
             if (
-                (format in ("csv", "scsv") or streamed_json or streamed_xml)
+                (format in ("csv", "scsv") or streamed_json or streamed_xml or streamed_geojson)
                 and self.is_download_endpoint(request)
                 and settings.DOWNLOAD_STREAMING
             ):
                 logger.info("Downloading resource %s in %s format, streaming.", resource_id, format)
                 disposition = self._content_disposition(request, resource_config)
-                if streamed_json or streamed_xml:
+                open_rows = get_resource_rows
+                if streamed_json or streamed_xml or streamed_geojson:
                     renderer = request.accepted_renderer
                     content_type = (
                         f"{renderer.media_type}; charset={renderer.charset}" if renderer.charset else renderer.media_type
                     )
                     if streamed_xml:
                         encoder, make_blocks = XmlEncoder(columns, timer), xml_blocks
+                    elif streamed_geojson:
+                        encoder, make_blocks = GeoJsonEncoder(renderer, timer), json_blocks
+                        open_rows = get_feature_rows
                     else:
                         encoder, make_blocks = JsonEncoder(renderer, columns, timer), json_blocks
                 else:
@@ -689,7 +699,8 @@ class DownloadView(APIViewMixin):
                     encoder, make_blocks = CsvEncoder(columns, delimiter, timer), csv_blocks
                 download = self._open_stream(
                     stack, resource_config, resource_id, limit, offset, fields, filters, like, sort, shared,
-                    whole_resource, encoder, make_blocks,
+                    # A FeatureCollection never stored the size of the resource: it still does not.
+                    whole_resource and not streamed_geojson, encoder, make_blocks, open_rows,
                 )
             elif featureCollection:
                 logger.info(
@@ -797,9 +808,10 @@ class DownloadView(APIViewMixin):
 
     def _open_stream(
         self, stack, resource_config, resource_id, limit, offset, fields, filters, like, sort,
-        shared, whole_resource, encoder, make_blocks,
+        shared, whole_resource, encoder, make_blocks, open_rows=get_resource_rows,
     ) -> StreamedDownload:
-        """Run the query and prepare the first block (CSV, JSON or XML); the rest is produced while the response is sent.
+        """Run the query and prepare the first block (CSV, JSON, GeoJSON or XML); the rest is produced while the
+        response is sent. ``open_rows`` runs the query: ``get_resource_rows``, or ``get_feature_rows`` for GeoJSON.
 
         Everything that can fail on the request's own data (connection, object, fields, sort, query, columns,
         normalization and serialization of the first block) fails here, before a response exists, and maps to the
@@ -809,7 +821,7 @@ class DownloadView(APIViewMixin):
         timer = self._timer
         block_rows = settings.DOWNLOAD_BLOCK_ROWS
         rows = _get_data_public_error(
-            get_resource_rows,
+            open_rows,
             uri=resource_config.connector_config.uri,
             object_location=resource_config.object_location,
             object_location_schema=resource_config.object_location_schema,

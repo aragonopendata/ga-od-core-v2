@@ -1,5 +1,5 @@
-"""Streaming of a download: the owner of everything a response needs while it is being sent, and the CSV, JSON and XML
-encoders.
+"""Streaming of a download: the owner of everything a response needs while it is being sent, and the CSV, JSON, GeoJSON
+and XML encoders.
 
 A download used to be built whole in memory before the first byte left. Here the response is an iterator of blocks
 (``StreamedDownload``): it is handed to ``StreamingHttpResponse``, which Django closes (``response.close()``) when the
@@ -250,6 +250,53 @@ class JsonEncoder:
     @staticmethod
     def close() -> Block:
         return b"]", 0
+
+
+class GeoJsonEncoder:
+    """Turns blocks of ``(properties, geometry)`` features into the bytes ``JSONRenderer`` gives for the whole
+    FeatureCollection (compact separators, no ``indent``).
+
+    The geometry is copied as ``ST_AsGeoJSON`` returned it, without parsing it and serializing it again: in production
+    (PostGIS 2.1) that text is byte for byte what the renderer wrote for it. ``null`` stands for a NULL geometry. The
+    properties are already normalized (``connectors.feature_properties``) and go through the renderer's ``json.dumps``
+    configuration. ``{"type":"FeatureCollection","features":[`` comes with the first block and ``]}`` is the last one
+    (``close``), so a body that is cut never ends in a valid JSON document. Use it with ``json_blocks``.
+    """
+
+    _START = '{"type":"FeatureCollection","features":['
+
+    def __init__(self, renderer, timer: Optional[PhaseTimer] = None):
+        if not renderer.compact:
+            raise ValueError("GeoJSON is only streamed with the compact JSON renderer")
+        self._dumps = renderer.encoder_class(
+            ensure_ascii=renderer.ensure_ascii, allow_nan=not renderer.strict, separators=SHORT_SEPARATORS
+        ).encode
+        self._timer = timer
+        self._started = False
+
+    def encode(self, features: List[Tuple[Dict[str, Any], Optional[str]]]) -> Block:
+        if not features:
+            return (b"" if self._started else self._START.encode()), 0
+        with phase(self._timer, "render"):
+            dumps = self._dumps
+            body = ",".join(
+                [
+                    '{"type":"Feature","geometry":' + (geometry if geometry is not None else "null")
+                    + ',"properties":' + dumps(properties) + "}"
+                    for properties, geometry in features
+                ]
+            )
+            body = body.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+            if self._started:
+                body = "," + body
+            else:
+                body = self._START + body
+                self._started = True
+        return body.encode(), len(features)
+
+    @staticmethod
+    def close() -> Block:
+        return b"]}", 0
 
 
 def json_blocks(stream: RowStream, encoder: JsonEncoder, block_rows: int, first_rows: List[Dict[str, Any]]):

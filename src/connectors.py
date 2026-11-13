@@ -1061,6 +1061,26 @@ def get_resource_data_feature(
         )
 
 
+def _feature_filters(resource: OpenResource, uri: str, filters: Dict[str, str], like: Union[str, Dict]):
+    """Columns, equality filters and ``like`` filters of a FeatureCollection query (``fields`` is not used)."""
+    column_dict = {column.key: column for column in resource.model.columns}
+    filters_args = _process_like_filter(like, resource.model)
+    if _is_empty_http_source_filtered_by_unknown_fields(resource, uri, column_dict, filters):
+        filters = {}
+    else:
+        _validate_filter_fields(column_dict, filters)
+    return column_dict, filters, filters_args
+
+
+@contextlib.contextmanager
+def _feature_query_errors():
+    """A FeatureCollection query that the database rejects is reported as an unavailable object, as it always was."""
+    try:
+        yield
+    except sqlalchemy.exc.ProgrammingError as err:
+        raise NoObjectError("Object not available.") from err
+
+
 def _build_feature_collection(
     resource: OpenResource,
     uri: str,
@@ -1074,13 +1094,7 @@ def _build_feature_collection(
     """Query and normalize the rows as a FeatureCollection. The engine is not disposed here."""
     engine, model = resource.engine, resource.model
     session_maker = sessionmaker(bind=engine)
-    column_dict = {column.key: column for column in model.columns}
-    # columns = _get_columns(column_dict, fields)
-    filters_args = _process_like_filter(like, model)
-    if _is_empty_http_source_filtered_by_unknown_fields(resource, uri, column_dict, filters):
-        filters = {}
-    else:
-        _validate_filter_fields(column_dict, filters)
+    column_dict, filters, filters_args = _feature_filters(resource, uri, filters, like)
     # The session is closed on every path, including a failed query or normalization.
     session = session_maker()
     try:
@@ -1177,9 +1191,8 @@ def _query_feature_collection(
     )
     query_started = monotonic()
     try:
-        data = query.all()
-    except sqlalchemy.exc.ProgrammingError as err:
-        raise NoObjectError("Object not available.") from err
+        with _feature_query_errors():
+            data = query.all()
     finally:
         if timer is not None:
             timer.add("query", monotonic() - query_started)
@@ -1203,6 +1216,90 @@ def _query_feature_collection(
         timer.add("normalize", monotonic() - normalize_started)
 
     return wrapped
+
+
+class FeatureStream:
+    """The features of a FeatureCollection query, read in blocks while a download is sent.
+
+    ``fetch`` returns the next block as ``(properties, geometry)`` pairs (see ``feature_properties``), empty when there
+    are no more. ``close`` closes the result and then its connection; it is safe to call more than once. The time of
+    each block is added to the ``query`` and ``normalize`` phases of the timer.
+    """
+
+    def __init__(self, connection, result, property_names: List[str], timer: Optional[PhaseTimer] = None):
+        self._connection = connection
+        self._result = result
+        self._property_names = property_names
+        self._timer = timer
+
+    def fetch(self, size: int, first: bool = False) -> List[Tuple[Dict[str, Any], Optional[str]]]:
+        """Next block of at most ``size`` features. With ``first`` a rejected query is mapped as without streaming."""
+        started = monotonic()
+        try:
+            with _feature_query_errors() if first else contextlib.nullcontext():
+                raw = self._result.fetchmany(size)
+        finally:
+            if self._timer is not None:
+                self._timer.add("query", monotonic() - started)
+        normalize_started = monotonic()
+        names = self._property_names
+        features = [feature_properties(names, row) for row in raw]
+        if self._timer is not None:
+            self._timer.add("normalize", monotonic() - normalize_started)
+        return features
+
+    def close(self) -> None:
+        try:
+            self._result.close()
+        finally:
+            self._connection.close()
+
+
+def get_feature_rows(
+    *,
+    uri: str,
+    object_location: Optional[str],
+    object_location_schema: Optional[str],
+    filters: Dict[str, str],
+    like: Union[str, Dict],
+    fields: List[str],
+    sort: List[OrderBy],
+    limit: Optional[int] = None,
+    offset: int = 0,
+    timeout: Optional[int] = None,
+    timer: Optional[PhaseTimer] = None,
+    resource: OpenResource,
+    block_rows: int = 1000,
+) -> FeatureStream:
+    """Run the query of ``get_resource_data_feature`` on the shared ``resource`` and return its features as a stream.
+
+    The query is executed here with a server-side cursor (so a bad sort, filter or object fails here) but no row is read
+    yet. ``fields`` is ignored, as in ``get_resource_data_feature``. The caller owns the stream and must close it before
+    the resource is disposed.
+    """
+    engine, model = resource.engine, resource.model
+    column_dict, filters, filters_args = _feature_filters(resource, uri, filters, like)
+    session = sessionmaker(bind=engine)()
+    connection = None
+    started = monotonic()
+    try:
+        query, property_names = _feature_collection_query(
+            session, model, uri, column_dict, filters, filters_args, sort, limit, offset
+        )
+        connection = engine.connect()
+        with _feature_query_errors():
+            result = connection.execute(
+                query.statement, execution_options={"stream_results": True, "max_row_buffer": block_rows}
+            )
+    except BaseException:
+        if connection is not None:
+            connection.close()
+        raise
+    finally:
+        if timer is not None:
+            timer.add("query", monotonic() - started)
+        session.close()
+    return FeatureStream(connection, result, property_names, timer)
 
 
 def get_session_data(

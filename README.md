@@ -99,4 +99,4 @@ python manage.py axes_reset_logs [age_days]         # access logs older than the
 
 Uncached requests may take several minutes. The application and its reverse proxy should use a sufficiently generous request timeout; the provided Gunicorn configuration uses 240 seconds.
 
-Gunicorn is configured in `src/gunicorn.conf.py` and tuned through `GUNICORN_*` environment variables (workers, threads, timeouts, worker recycling by request count and memory); the module docstring documents each one and its default. Large CSV, SCSV, XML and JSON downloads are streamed in blocks (`common_config.download_streaming` and `download_block_rows` in the YAML configuration).
+Gunicorn is configured in `src/gunicorn.conf.py` and tuned through `GUNICORN_*` environment variables (workers, threads, timeouts, worker recycling by request count and memory); the module docstring documents each one and its default. Large CSV, SCSV, XML, JSON and GeoJSON downloads are streamed in blocks (`common_config.download_streaming` and `download_block_rows` in the YAML configuration).

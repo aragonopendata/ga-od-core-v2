@@ -25,6 +25,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.test import override_settings
 from geoalchemy2 import Geometry
 from openpyxl import load_workbook
 from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, text
@@ -563,6 +564,8 @@ def _geo_model():
 
 
 def _get_geojson(client, rows, model):
+    """The FeatureCollection built whole (the mocked session answers ``query.all()``). The streamed body is compared
+    with this one against a real PostGIS in ``test_download_geojson_streaming.py``."""
     query = MagicMock()
     for method in ("filter_by", "filter", "order_by", "offset", "limit"):
         getattr(query, method).return_value = query
@@ -575,6 +578,7 @@ def _get_geojson(client, rows, model):
         patch.object(connectors, "_get_engine", return_value=MagicMock()),
         patch.object(connectors, "_get_model", return_value=model),
         patch.object(connectors, "sessionmaker", return_value=lambda: session),
+        override_settings(DOWNLOAD_STREAMING=False),
     ):
         return client.get(DOWNLOAD, {"resource_id": 1, "format": "json"})
 

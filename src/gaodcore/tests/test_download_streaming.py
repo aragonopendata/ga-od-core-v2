@@ -773,17 +773,36 @@ def test_json_preview_is_not_streamed(client, resource):
     assert not isinstance(response, download_stream.StreamedDownloadResponse) and response.status_code == 200
 
 
-def test_json_geometry_resource_goes_the_old_way(streaming_client, resource):
+def test_json_geometry_resource_is_streamed_as_a_feature_collection(streaming_client, resource):
+    """A resource with geometry streams its FeatureCollection (``get_feature_rows``), never the plain rows; the body
+    itself is tested against PostGIS in ``test_download_geojson_streaming.py``."""
+    with (
+        patch.object(gaodcore_views, "get_GeoJson_resource", return_value=True),
+        patch.object(gaodcore_views, "get_feature_rows") as features,
+        patch.object(gaodcore_views, "get_resource_rows") as rows,
+    ):
+        features.return_value.fetch.return_value = []
+        response = get(streaming_client, resource, "json")
+        body = b"".join(response.streaming_content)
+        response.close()
+    assert isinstance(response, download_stream.StreamedDownloadResponse)
+    assert body == b'{"type":"FeatureCollection","features":[]}'
+    rows.assert_not_called()
+
+
+def test_json_geometry_resource_with_indent_goes_the_old_way(streaming_client, resource):
     collection = {"type": "FeatureCollection", "features": []}
     with (
         patch.object(gaodcore_views, "get_GeoJson_resource", return_value=True),
         patch.object(gaodcore_views, "get_resource_data_feature", return_value=collection),
-        patch.object(gaodcore_views, "get_resource_rows") as rows,
+        patch.object(gaodcore_views, "get_feature_rows") as features,
     ):
-        response = get(streaming_client, resource, "json")
+        response = streaming_client.get(
+            DOWNLOAD, {"resource_id": resource.id, "format": "json"}, HTTP_ACCEPT="application/json; indent=2"
+        )
     assert not isinstance(response, download_stream.StreamedDownloadResponse)
     assert response.json() == collection
-    rows.assert_not_called()
+    features.assert_not_called()
 
 
 def test_json_timing_and_size_of_a_complete_download(streaming_client, resource, timing_lines):
