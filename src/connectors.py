@@ -1091,9 +1091,12 @@ def _build_feature_collection(
         session.close()
 
 
-def _query_feature_collection(
-    session, model, uri, column_dict, filters, filters_args, sort, limit, offset, timer
-):
+def _feature_collection_query(session, model, uri, column_dict, filters, filters_args, sort, limit, offset):
+    """Build (without running it) the query of a FeatureCollection and return it with the names of its properties.
+
+    The query selects every column but the geometry, as properties, followed by ``ST_AsGeoJSON(geometry)`` labelled
+    ``geometry`` as the last column. SQL Server ignores ``sort``, ``limit`` and ``offset`` here.
+    """
     parsed = urlparse(uri)
 
     # Get Column Geom - other fields in Properties
@@ -1101,7 +1104,7 @@ def _query_feature_collection(
     propertiesCol = []
     propertiesField = []
 
-    for i, col in enumerate(model.columns):
+    for col in model.columns:
         if str(col.type).startswith("geography") or str(col.type).startswith(
             "geometry"
         ):
@@ -1115,76 +1118,77 @@ def _query_feature_collection(
     # version of Postgress not allowed _ Postgres and A GeoJson  only _
     # https://www.postgresql.org/docs/9.2/functions-json.html"
     # https://www.postgresql.org/docs/current/functions-json.html -> to convert columns to a json in a query
+    query = (
+        session.query(*propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry"))
+        .filter_by(**filters)
+        .filter(*filters_args)
+    )
+    if parsed.scheme not in ["mssql+pyodbc"]:
+        query = query.order_by(*_get_sort_methods(column_dict, sort)).offset(offset).limit(limit)
+    property_names = [column.name for column in _get_columns(column_dict, propertiesField)]
+    return query, property_names
+
+
+def _feature_property_value(column):
+    """Normalize one property of a GeoJSON feature (not the same rules as ``_NORMALIZERS`` for plain downloads)."""
+    if isinstance(column, uuid.UUID):
+        return str(column)
+    if isinstance(column, (decimal.Decimal, Promise, float, Numeric)):
+        parte_decimal, parte_entera = math.modf(column)
+        if (parte_decimal) == 0.0:
+            try:
+                return int(column)
+            except OverflowError:  # inf / -inf are null
+                return None
+        return str(column)
+    if isinstance(column, datetime):
+        r = column.isoformat()
+        if column.microsecond:
+            r = r[:23] + r[26:]
+        if r.endswith("+00:00"):
+            r = r[:-6] + "Z"
+        return r
+    if isinstance(column, date):
+        return column.isoformat()
+    if isinstance(column, time):
+        r = column.isoformat()
+        if column.microsecond:
+            r = r[:12] + r[15:]  # milliseconds only; keep the UTC offset of an aware time, if any
+        return r
+    if isinstance(column, timedelta):
+        return duration_iso_string(column)
+    return sanitize_control_charcters(column)
+
+
+def feature_properties(property_names, row) -> Tuple[Dict[str, Any], Optional[str]]:
+    """Split a row of ``_feature_collection_query`` into its normalized properties and its GeoJSON geometry text.
+
+    The geometry is the text returned by ``ST_AsGeoJSON``, or ``None`` for a NULL geometry.
+    """
+    *values, geometry = row
+    return dict(zip(property_names, [_feature_property_value(value) for value in values])), geometry
+
+
+def _query_feature_collection(
+    session, model, uri, column_dict, filters, filters_args, sort, limit, offset, timer
+):
+    query, property_names = _feature_collection_query(
+        session, model, uri, column_dict, filters, filters_args, sort, limit, offset
+    )
     query_started = monotonic()
     try:
-        if parsed.scheme in ["mssql+pyodbc"]:
-            data = (
-                session.query(
-                    *propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")
-                )
-                .filter_by(**filters)
-                .filter(*filters_args)
-                .all()
-            )
-        else:
-            data = (
-                session.query(
-                    *propertiesCol, (GeoFunc.ST_AsGeoJSON(Geom)).label("geometry")
-                )
-                .filter_by(**filters)
-                .filter(*filters_args)
-                .order_by(*_get_sort_methods(column_dict, sort))
-                .offset(offset)
-                .limit(limit)
-                .all()
-            )
+        data = query.all()
     except sqlalchemy.exc.ProgrammingError as err:
         raise NoObjectError("Object not available.") from err
     finally:
         if timer is not None:
             timer.add("query", monotonic() - query_started)
     normalize_started = monotonic()
-    columnsProperties = _get_columns(column_dict, propertiesField)
 
     # Serializar Feature Collection
     featuresTot = []
     for item in data:
-        item = list(item)
-        geometry = item.pop()
-        for i, column in enumerate(item):
-            if isinstance(column, uuid.UUID):
-                item[i] = str(column)
-            elif isinstance(column, (decimal.Decimal, Promise, float, Numeric)):
-                parte_decimal, parte_entera = math.modf(column)
-                if (parte_decimal) == 0.0:
-                    try:
-                        item[i] = int(column)
-                    except OverflowError:  # inf / -inf are null
-                        item[i] = None
-                else:
-                    item[i] = str(column)
-            elif isinstance(column, datetime):
-                r = column.isoformat()
-                if column.microsecond:
-                    r = r[:23] + r[26:]
-                if r.endswith("+00:00"):
-                    r = r[:-6] + "Z"
-                item[i] = r
-            elif isinstance(column, date):
-                item[i] = column.isoformat()
-            elif isinstance(column, time):
-                r = column.isoformat()
-                if column.microsecond:
-                    r = r[:12] + r[15:]  # milliseconds only; keep the UTC offset of an aware time, if any
-                item[i] = r
-            elif isinstance(column, timedelta):
-                item[i] = duration_iso_string(column)
-
-            else:
-                item[i] = sanitize_control_charcters(column)
-
-        properties = dict(zip([column.name for column in columnsProperties], item))
-
+        properties, geometry = feature_properties(property_names, item)
         # create feature. ST_AsGeoJSON(NULL) is NULL: RFC 7946 §3.2 allows an
         # unlocated feature with a null geometry, so keep the row.
         featureType = {

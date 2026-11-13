@@ -79,3 +79,40 @@ def test_null_geometry_is_kept_as_unlocated_feature():
         "geometry": None,
         "properties": {"id": 2, "name": "Unknown"},
     }
+
+
+def _built_query(uri):
+    query = MagicMock()
+    for method in ("filter_by", "filter", "order_by", "offset", "limit"):
+        getattr(query, method).return_value = query
+    session = MagicMock()
+    session.query.return_value = query
+    model = _model()
+    column_dict = {column.key: column for column in model.columns}
+    built, names = connectors._feature_collection_query(session, model, uri, column_dict, {}, [], [], 10, 5)
+    return query, built, names
+
+
+def test_feature_collection_query_applies_sort_limit_and_offset():
+    query, built, names = _built_query(URI)
+    assert built is query
+    assert names == ["id", "name"]
+    query.offset.assert_called_once_with(5)
+    query.limit.assert_called_once_with(10)
+    query.order_by.assert_called_once()
+
+
+def test_feature_collection_query_on_sql_server_ignores_sort_limit_and_offset():
+    # QUIRK kept as it was: the SQL Server branch never applied sort, limit or offset to a FeatureCollection.
+    query, built, names = _built_query("mssql+pyodbc://u:p@example.invalid/db")
+    assert names == ["id", "name"]
+    query.order_by.assert_not_called()
+    query.offset.assert_not_called()
+    query.limit.assert_not_called()
+
+
+def test_feature_properties_splits_the_geometry_text_from_the_normalized_properties():
+    properties, geometry = connectors.feature_properties(["id", "name"], (1, "Zaragoza", POINT))
+    assert properties == {"id": 1, "name": "Zaragoza"}
+    assert geometry == POINT  # the ST_AsGeoJSON text, not parsed
+    assert connectors.feature_properties(["id", "name"], (2, "Unknown", None)) == ({"id": 2, "name": "Unknown"}, None)
