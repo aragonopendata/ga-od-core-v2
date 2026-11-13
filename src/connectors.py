@@ -1954,7 +1954,6 @@ def _csv_rows_and_fieldnames(data: bytes, charset: str) -> Tuple[List[Dict[str, 
         # charset = cchardet.detect(data)['encoding']
         # pasamos a charset 8 porque sino identifica como gb18030 - o ISO15 que no es capaz de decodificar
         charset = "utf-8"
-    print(charset)
     try:
         data = data.decode(charset, "ignore")
     except UnicodeDecodeError:
