@@ -69,7 +69,8 @@ class ZaragozaInternalSources(BaseModel):
     """Resources served in process from the Zaragoza API (``internal://transports/zaragoza/...`` connectors).
 
     stops: a copy of the stops catalogue shared by every worker (``transports`` cache), refreshed on demand by the
-    request that finds it old and gets the lock.
+    request that finds it old and gets the lock. arrival_time: the arrivals of one stop, read from
+    ``arrival_time/{code}`` with a cache shared by every worker and a ceiling of simultaneous calls to the API.
     """
 
     stops_max_age_seconds: int = Field(default=3600, ge=60)
@@ -80,6 +81,14 @@ class ZaragozaInternalSources(BaseModel):
     stops_min_ratio: float = Field(default=0.5, ge=0, le=1)
     refresh_backoff_min_seconds: int = Field(default=60, ge=1)
     refresh_backoff_max_seconds: int = Field(default=900, ge=1)
+    arrivals_ttl_seconds: int = Field(default=60, ge=1)
+    arrivals_unknown_ttl_seconds: int = Field(default=300, ge=1)
+    arrivals_max_stale_seconds: int = Field(default=30, ge=0)
+    arrivals_error_ttl_seconds: int = Field(default=10, ge=1)
+    arrivals_max_concurrency: int = Field(default=2, ge=1, le=64)
+    arrivals_timeout_seconds: float = Field(default=3, gt=0)
+    arrivals_busy_retry_after_seconds: int = Field(default=2, ge=1)
+    arrivals_max_bytes: int = Field(default=1_000_000, ge=1024)
 
 
 class ZaragozaTransport(BaseModel, GetURL):

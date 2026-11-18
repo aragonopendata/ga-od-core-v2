@@ -281,7 +281,7 @@ def test_engine_for_uri_serves_the_columns_for_health_checks(transports_cache, c
     assert [c.name for c in model.columns] == ["stop_id", "stop_name", "lat", "lon"]
 
 
-def test_unknown_internal_source_and_arrivals_are_clear_errors():
+def test_unknown_internal_source_and_arrivals_without_a_stop_are_clear_errors():
     with pytest.raises(connectors.NotImplementedSchemaError, match="does not exist"):
         sources.source_of("internal://transports/zaragoza/other")
     with pytest.raises(connectors.NotImplementedSchemaError, match="not supported yet"):
