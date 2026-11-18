@@ -74,6 +74,8 @@ _DATABASE_SCHEMAS = {
     "sqlite",
 }
 _HTTP_SCHEMAS = {"http", "https"}
+# Fixed set of sources computed in process, e.g. internal://transports/zaragoza/stops (gaodcore_transports.sources).
+INTERNAL_SCHEME = "internal"
 _RESOURCE_MAX_ROWS = 1048576
 _TEMPORAL_TABLE_NAME = "temporal_table"
 _SQLALCHEMY_MAP_TYPE = {
@@ -2158,6 +2160,16 @@ def _get_engine_from_api(uri: str, timeout: Optional[int] = None) -> Engine:
             "The url could not be reached.",
             reason=f"timed out after {timeout}s while reading response",
         ) from err
+    return engine_from_rows(data, fieldnames)
+
+
+def engine_from_rows(data: List[Dict[str, Any]], fieldnames: Iterable[str] = ()) -> Engine:
+    """Load rows read from an API (parsed JSON, or CSV rows and their header) into an in-memory SQLite engine.
+
+    The columns and their types follow the rows as ``_get_table_from_dict`` decides; with no rows the CSV header keeps
+    its columns, and without either the table has a single ``id`` column.
+    """
+    fieldnames = list(fieldnames)
     if data:
         max_key = max(data, key=len).keys()
         for item in data:

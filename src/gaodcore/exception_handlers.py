@@ -27,6 +27,9 @@ _SERVER_ERROR_LOG_LEVELS = {
     ErrorCodes.BAD_GATEWAY: logging.WARNING,
     # Refused on purpose by the download limiter, but kept visible in production: it is still under study.
     ErrorCodes.TOO_MANY_DOWNLOADS: logging.WARNING,
+    # Internal transport sources: refusals by design, counted in the download_timing line (``transport=``).
+    ErrorCodes.DATA_NOT_READY: logging.WARNING,
+    ErrorCodes.UPSTREAM_BUSY: logging.INFO,
 }
 
 _NON_FIELD_ERRORS_KEY = api_settings.NON_FIELD_ERRORS_KEY

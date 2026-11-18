@@ -40,6 +40,8 @@ class ErrorCodes:
     REQUIRED = "REQUIRED"
     DOWNLOAD_IN_PROGRESS = "DOWNLOAD_IN_PROGRESS"
     TOO_MANY_DOWNLOADS = "TOO_MANY_DOWNLOADS"
+    DATA_NOT_READY = "DATA_NOT_READY"
+    UPSTREAM_BUSY = "UPSTREAM_BUSY"
 
 
 #: Human readable ``detail`` used when the problem carries per-field ``errors``.
@@ -141,3 +143,34 @@ class TooManyDownloads(APIException):
         super().__init__(detail=detail, code=code)
         self.wait = wait
         self.limited = limited
+
+
+class DataNotReady(APIException):
+    """503: a resource served from a shared copy has no usable copy yet (a download is under way or backing off)."""
+
+    status_code = 503
+    default_detail = (
+        "Los datos de este recurso se están actualizando; vuelva a intentarlo en unos segundos. "
+        "The data of this resource is being refreshed; try again in a few seconds."
+    )
+    default_code = ErrorCodes.DATA_NOT_READY
+
+    def __init__(self, wait, detail=None, code=None):
+        super().__init__(detail=detail, code=code)
+        self.wait = wait
+
+
+class UpstreamBusy(APIException):
+    """503: the external API cannot be called right now (another worker is calling it, or a recent call failed) and
+    there is no recent enough value to serve."""
+
+    status_code = 503
+    default_detail = (
+        "El servicio de origen está ocupado; vuelva a intentarlo en unos segundos. "
+        "The source service is busy; try again in a few seconds."
+    )
+    default_code = ErrorCodes.UPSTREAM_BUSY
+
+    def __init__(self, wait, detail=None, code=None):
+        super().__init__(detail=detail, code=code)
+        self.wait = wait

@@ -65,10 +65,28 @@ class ZaragozaTransportEndpoints(BaseModel):
     arrival_ori_des: str
 
 
+class ZaragozaInternalSources(BaseModel):
+    """Resources served in process from the Zaragoza API (``internal://transports/zaragoza/...`` connectors).
+
+    stops: a copy of the stops catalogue shared by every worker (``transports`` cache), refreshed on demand by the
+    request that finds it old and gets the lock.
+    """
+
+    stops_max_age_seconds: int = Field(default=3600, ge=60)
+    stops_max_stale_seconds: int = Field(default=86400, ge=0)
+    stops_retry_after_seconds: int = Field(default=10, ge=1)
+    stops_timeout_seconds: float = Field(default=10, gt=0)
+    stops_lock_seconds: int = Field(default=30, ge=1)
+    stops_min_ratio: float = Field(default=0.5, ge=0, le=1)
+    refresh_backoff_min_seconds: int = Field(default=60, ge=1)
+    refresh_backoff_max_seconds: int = Field(default=900, ge=1)
+
+
 class ZaragozaTransport(BaseModel, GetURL):
     base_url: str
     max_concurrency: int
     endpoints: ZaragozaTransportEndpoints
+    internal: ZaragozaInternalSources = ZaragozaInternalSources()
 
 
 class Transport(BaseModel):

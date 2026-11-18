@@ -76,3 +76,14 @@ projects:
         stops_ori_des: foo
         arrival_ori_des: foo
         sae: foo
+      # Optional (these are the defaults). Used by the connector internal://transports/zaragoza/stops, served in process
+      # from a copy shared through the Redis "transports" cache instead of through the public URL.
+      internal:
+        stops_max_age_seconds: 3600          # the shared stops copy is fresh for this long
+        stops_max_stale_seconds: 86400       # after that it is still served (and refreshed by one request) for this long
+        stops_retry_after_seconds: 10        # Retry-After of the 503 when there is no usable copy
+        stops_timeout_seconds: 10            # timeout of the call to the stops endpoint
+        stops_lock_seconds: 30               # expiry of the refresh lock; must exceed the timeout
+        stops_min_ratio: 0.5                 # a new copy with fewer rows than this share of the previous one is rejected
+        refresh_backoff_min_seconds: 60      # wait after a failed refresh, doubled on each failure...
+        refresh_backoff_max_seconds: 900     # ...up to this
