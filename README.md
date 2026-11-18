@@ -103,17 +103,6 @@ Each `download_timing` line of these resources ends with ` transport=<descriptio
 
 The shared state lives in Redis: the `redis` service of `docker-compose.yaml` (container `redis-gaodcore`), selected with `common_config.redis_url` (for example `redis://redis-gaodcore:6379/0`). The same Redis holds the page cache of `/gaodcore-transports/`. If Redis is down, the `/gaodcore-transports/` views work without cache and resources 2187 and 2190 answer `503 DATA_NOT_READY` with `Retry-After`. Without `redis_url` the page cache stays in the database cache table and each worker keeps its own copy of the internal sources, so set it in production.
 
-#### Activation and rollback
-
-1. Deploy with the Redis service running and `common_config.redis_url` set. Nothing changes for the public API until a connector is changed.
-2. Change the URI of the two connectors, in the Manager or in Django Admin:
-   - connector 25 (stops): from `https://opendata.aragon.es/GA_OD_Core/gaodcore-transports/zaragoza/stops` to `internal://transports/zaragoza/stops`;
-   - connector 28 (arrival times): from `https://opendata.aragon.es/GA_OD_Core/gaodcore-transports/zaragoza/arrival_time.csv` to `internal://transports/zaragoza/arrival_time`.
-   Resources 2187 and 2190 must keep an empty `object_location`, as HTTP resources have.
-3. Check a preview of resource 2187 and one of resource 2190 with `filters={"cod_parada":40}`. In Loki, the `download_timing` lines of those resources must end with `transport=…`, and there must be no `HTTP connector timed out` against `gaodcore-transports`.
-
-To roll back, put the previous URI back in each connector (the two values above); no redeploy is needed.
-
 ## Locked accounts
 
 `django-axes` locks an account after repeated failed logins ("Access locked: too many login attempts"). To unlock, run one of these inside the application container:
