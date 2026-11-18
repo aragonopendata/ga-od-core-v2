@@ -139,6 +139,9 @@ class CommonConfig(BaseModel):
     download_streaming: bool = True
     download_block_rows: int = Field(default=1000, ge=1)
     download_limits: DownloadLimitsConfig = DownloadLimitsConfig()
+    # Redis for the Django caches (e.g. redis://redis-gaodcore:6379/0). Without it, `default` stays in the
+    # django_cache table and the transport sources keep their state per process.
+    redis_url: Optional[str] = None
 
 
 class Config(BaseModel):

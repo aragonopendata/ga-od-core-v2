@@ -12,6 +12,8 @@ common_config:
       HOST: '127.0.0.1'
       PORT: 5432
   cache_ttl: 600
+  # No Redis: gaodcore_project.test_settings uses local-memory caches.
+  redis_url: null
 
 projects:
   transport:

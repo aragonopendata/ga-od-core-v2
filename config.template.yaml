@@ -36,6 +36,11 @@ common_config:
   # Optional. Seconds the Django config-DB connection is kept open between requests
   # (default: 60; 0 = close after every request). PostgreSQL connections ~= workers x threads.
   conn_max_age: 60
+  # Optional. Redis for the Django caches: the cache_page responses of /gaodcore-transports/ (a Redis error is
+  # served as a cache miss) and the shared state of the internal://transports/... connectors (a Redis error is a
+  # 503). Without it, the page cache stays in the django_cache table and the internal connectors keep their state
+  # in each worker. Docker Compose starts it as redis-gaodcore.
+  redis_url: redis://redis-gaodcore:6379/0
   databases:
     default:
       ENGINE: django.db.backends.postgresql

@@ -22,6 +22,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - infraestructura_opendata
     healthcheck:
@@ -49,6 +51,22 @@ services:
       test: [ "CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB" ]
       interval: 10s
       timeout: 5s
+      retries: 5
+    networks:
+      - infraestructura_opendata
+
+  # Django caches (common_config.redis_url): /gaodcore-transports/ page cache and the shared state of the
+  # internal://transports/... connectors. Nothing is persisted: a restart only empties the caches. Only keys with an
+  # expiry are evicted when it is full (the stops copy has none).
+  redis:
+    image: redis:7-alpine
+    container_name: redis-gaodcore
+    restart: always
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
       retries: 5
     networks:
       - infraestructura_opendata

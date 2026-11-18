@@ -18,6 +18,7 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
+from gaodcore_project.cache_backends import build_caches
 from gaodcore_project.config import Config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -335,12 +336,9 @@ GAODCORE_VALIDATE_EXTERNAL_CONNECTIONS = parse_bool_env(
     "GAODCORE_VALIDATE_EXTERNAL_CONNECTIONS", True
 )
 
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
-        "LOCATION": "django_cache",
-    }
-}
+# `default` holds the cache_page responses of the transport views; `transports` the shared state of the in-process
+# transport sources. Both go to Redis when common_config.redis_url is set.
+CACHES = build_caches(CONFIG.common_config.redis_url)
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
