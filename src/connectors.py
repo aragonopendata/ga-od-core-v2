@@ -2292,6 +2292,11 @@ def _get_engine(uri: str, timeout: Optional[int] = None) -> Engine:
         return engine
     if uri_parsed.scheme in _HTTP_SCHEMAS:
         return _get_engine_from_api(uri, timeout=timeout)
+    if uri_parsed.scheme == INTERNAL_SCHEME:
+        # Sources served in process (never through our own public URL): see gaodcore_transports.sources.
+        from gaodcore_transports import sources  # pylint: disable=import-outside-toplevel
+
+        return sources.engine_for_uri(uri)
     raise NotImplementedSchemaError(
         f'Schema: "{uri_parsed.scheme}" is not implemented.'
     )

@@ -76,13 +76,43 @@ Clients should branch on `error_code` or `type`, not on the human-readable messa
 | 400 | `VALIDATION_ERROR`, `RESOURCE_UNAVAILABLE`, `INVALID_FIELD`, `INVALID_FILTER`, `INVALID_SORT`, `INVALID_COLUMNS`, `INVALID_FORMAT`, `INVALID_JSON`, `INVALID_DELIMITER`, `NOT_A_NUMBER`, `REQUIRED`, `TOO_MANY_ROWS`, `MIME_TYPE_NOT_ALLOWED` |
 | 429 | `DOWNLOAD_IN_PROGRESS` (the same download is already running) |
 | 502 | `BAD_GATEWAY` (an external API or service failed) |
-| 503 | `CONNECTION_UNAVAILABLE`, `OBJECT_UNAVAILABLE`, `QUERY_ERROR`, `SCHEMA_NOT_IMPLEMENTED`, `SERVICE_UNAVAILABLE`, `TOO_MANY_DOWNLOADS` |
+| 503 | `CONNECTION_UNAVAILABLE`, `OBJECT_UNAVAILABLE`, `QUERY_ERROR`, `SCHEMA_NOT_IMPLEMENTED`, `SERVICE_UNAVAILABLE`, `TOO_MANY_DOWNLOADS`, `DATA_NOT_READY`, `UPSTREAM_BUSY` |
+
+`DATA_NOT_READY` and `UPSTREAM_BUSY` come from the in-process transport sources (see below) and, like `TOO_MANY_DOWNLOADS`, carry a `Retry-After` header: retry after that many seconds.
 
 A filter on a column the resource does not have is a `400 INVALID_FIELD`. An HTTP source that currently has no rows answers any filter with an empty result.
 
 ## Transport API
 
 `/GA_OD_Core/gaodcore-transports/` exposes data from the Aragón and Zaragoza transport APIs (vehicles, lines, stops, routes, arrival times, notices, live positions…). Every endpoint accepts the `json`, `csv`, `xml`, `yaml` and `xlsx` suffixes, and responses are cached for `common_config.cache_ttl` seconds. In `zaragoza/arrival_time`, each row carries the stop code in `stop_id` and, with the same value, in `cod_parada`.
+
+### Zaragoza stops and arrivals served in process (`internal://`)
+
+Resources 2187 (stops) and 2190 (arrival times) used to be HTTP connectors that called our own `/gaodcore-transports/` URL: each preview held a synchronous worker while waiting for a second worker of the same pool, so a burst of previews could deadlock all of them. A connector whose URI is one of these two fixed values is served in process instead, with no request to our public URL. Any other `internal://` URI is rejected (the manager answers "Schema of the URI is not available").
+
+| URI | What `preview` and `download` read |
+|---|---|
+| `internal://transports/zaragoza/stops` | A copy of the stops catalogue shared by every worker. It is fresh for 1 hour and is still served for 24 more hours when expired; the request that gets the refresh lock downloads the new copy while the others serve the previous one. With no usable copy (none yet, or older than 25 hours) the request that gets the lock downloads it, the rest answer `503 DATA_NOT_READY`. |
+| `internal://transports/zaragoza/arrival_time` | The arrivals of the stop designated by an equality on `stop_id` or `cod_parada` (`filters={"cod_parada":40}`): one call to `arrival_time/{code}` per stop, cached for 60 seconds (300 seconds when the code is unknown), at most 2 calls at once among all workers, each bounded to 3 seconds. Nobody waits for a call in progress: the request serves the previous value (up to 30 seconds past its expiry) or answers `503 UPSTREAM_BUSY`. A failed call is not repeated for 10 seconds and is a `503` or `502`, never an empty result. Without a stop, the arrivals of every stop come from an aggregate rebuilt on demand (valid 300 seconds, the previous one is served up to 600 seconds more). |
+
+A filter on `id` without an equality on `stop_id` or `cod_parada` is a `400` (`id` is the id of the arrival in the API, not the stop), and so is any column the resource does not have, for instance `parada`; both are answered before any call. Rows, columns and formats are those of the old connector: filters, sort, pagination and every output format go through the generic code. `HEAD` on `download` and `preview` validates the request but does not read the source. `show_columns`, the health checks and the connector and resource validators never call the arrivals API (arrivals are an empty table with its columns); for stops they use the shared copy, so at most one download per hour (under the refresh lock) can come from them.
+
+Each `download_timing` line of these resources ends with ` transport=<description>` (for example `stops:fresh:age=120`, `arrivals:hit`, or the cause of a failure such as `arrivals:busy`); the lines of the other resources are unchanged. Tunables are in the `internal` block of the Zaragoza transport settings in `config.template.yaml`.
+
+#### Redis
+
+The shared state lives in Redis: the `redis` service of `docker-compose.yaml` (container `redis-gaodcore`), selected with `common_config.redis_url` (for example `redis://redis-gaodcore:6379/0`). The same Redis holds the page cache of `/gaodcore-transports/`. If Redis is down, the `/gaodcore-transports/` views work without cache and resources 2187 and 2190 answer `503 DATA_NOT_READY` with `Retry-After`. Without `redis_url` the page cache stays in the database cache table and each worker keeps its own copy of the internal sources, so set it in production.
+
+#### Activation and rollback
+
+1. Deploy with the Redis service running and `common_config.redis_url` set. Nothing changes for the public API until a connector is changed.
+2. Change the URI of the two connectors, in the Manager or in Django Admin:
+   - connector 25 (stops): from `https://opendata.aragon.es/GA_OD_Core/gaodcore-transports/zaragoza/stops` to `internal://transports/zaragoza/stops`;
+   - connector 28 (arrival times): from `https://opendata.aragon.es/GA_OD_Core/gaodcore-transports/zaragoza/arrival_time.csv` to `internal://transports/zaragoza/arrival_time`.
+   Resources 2187 and 2190 must keep an empty `object_location`, as HTTP resources have.
+3. Check a preview of resource 2187 and one of resource 2190 with `filters={"cod_parada":40}`. In Loki, the `download_timing` lines of those resources must end with `transport=…`, and there must be no `HTTP connector timed out` against `gaodcore-transports`.
+
+To roll back, put the previous URI back in each connector (the two values above); no redeploy is needed.
 
 ## Locked accounts
 

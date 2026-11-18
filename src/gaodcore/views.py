@@ -66,6 +66,7 @@ from gaodcore_manager.models import ResourceConfig
 from utils import get_return_list, modify_header
 from views import APIViewMixin
 from xml_output import GaodXMLRenderer
+from gaodcore_transports import sources as transport_sources
 
 logger = logging.getLogger(__name__)
 timing_logger = logging.getLogger("gaodcore.download_timing")
@@ -88,7 +89,8 @@ def _get_data_public_error(func: Callable, *args, **kwargs) -> List[Dict[str, An
     except FieldNoExistsError as err:
         raise ValidationError(str(err), ErrorCodes.INVALID_FIELD) from err
     except SortFieldNoExistsError as err:
-        raise ValidationError(str(err), ErrorCodes.INVALID_SORT) from err
+        # ``SortFieldNoExistsError`` keeps its text in ``message`` (``str(err)`` is empty), as the query code reads it.
+        raise ValidationError(err.message or str(err), ErrorCodes.INVALID_SORT) from err
     except NoObjectError as err:
         raise ServiceUnavailable(
             "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
@@ -360,6 +362,7 @@ class DownloadView(APIViewMixin):
                 size,
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
                 (f" limited={attrs['limited']}" if "limited" in attrs else "")
+                + (f" transport={attrs['transport']}" if "transport" in attrs else "")
                 + (
                     f" result={download.result} t_first={download.t_first:.3f} rss_kb={current_rss_kb()}"
                     if download is not None
@@ -370,9 +373,16 @@ class DownloadView(APIViewMixin):
             timing_logger.warning("download_timing could not be logged", exc_info=True)
 
     def _open_shared_resource(
-        self, stack, resource_config, resource_id, timer, is_xlsx: bool
+        self, stack, resource_config, resource_id, timer, is_xlsx: bool, query=None
     ):
-        """Open the resource (engine + reflected table) on ``stack`` and map connection errors to HTTP errors."""
+        """Open the resource (engine + reflected table) on ``stack`` and map connection errors to HTTP errors.
+
+        ``query`` (filters, like, fields, sort) is only used by the internal sources, which decide what to read from
+        it before opening anything.
+        """
+        uri = resource_config.connector_config.uri
+        if transport_sources.is_internal(uri):
+            return self._open_internal_resource(stack, uri, timer, query or ({}, {}, [], []))
         context = " during Excel validation" if is_xlsx else ""
         try:
             return stack.enter_context(
@@ -393,6 +403,25 @@ class DownloadView(APIViewMixin):
             raise ServiceUnavailable(
                 "Object is not available.", code=ErrorCodes.OBJECT_UNAVAILABLE
             ) from err
+
+    @staticmethod
+    def _open_internal_resource(stack, uri, timer, query):
+        """Open an ``internal://`` source in process (never through our public URL) and note what it did.
+
+        Unknown columns are answered with the usual 400 before any call; the refusals of the source (no copy yet,
+        busy, failed call) are API errors with their own code and ``Retry-After``.
+        """
+        filters, like, fields, sort = query
+        try:
+            opened = _get_data_public_error(
+                transport_sources.open_for_request, uri, dict(filters), like, fields, sort, timer
+            )
+        except Exception as err:
+            timer.attrs["transport"] = getattr(err, "transport", None) or type(err).__name__
+            raise
+        stack.callback(opened.resource.engine.dispose)
+        timer.attrs["transport"] = opened.description
+        return opened.resource
 
     @staticmethod
     def _log_unavailable(what, context, err, resource_id, resource_config) -> None:
@@ -552,11 +581,14 @@ class DownloadView(APIViewMixin):
                 "description": (
                     "The resource or connection is not available, or (error_code TOO_MANY_DOWNLOADS) too many large "
                     "downloads are running for this resource or in total. In the latter case retry after the number "
-                    "of seconds in the Retry-After header."
+                    "of seconds in the Retry-After header. Resources served in process from a transport API may "
+                    "also answer DATA_NOT_READY or UPSTREAM_BUSY (retry after Retry-After)."
                 ),
                 "headers": {
                     "Retry-After": {
-                        "description": "Seconds to wait before retrying (too many large downloads only).",
+                        "description": (
+                            "Seconds to wait before retrying (too many large downloads, or transport sources not ready)."
+                        ),
                         "schema": {"type": "integer"},
                     }
                 },
@@ -645,7 +677,7 @@ class DownloadView(APIViewMixin):
             # One engine and one reflected table per request, shared by every step below
             # and disposed once when the stack closes, also on errors.
             shared = self._open_shared_resource(
-                stack, resource_config, resource_id, timer, format == "xlsx"
+                stack, resource_config, resource_id, timer, format == "xlsx", (filters, like, fields, sort)
             )
             if format == "xlsx":
                 logger.info(
@@ -871,7 +903,8 @@ class DownloadView(APIViewMixin):
         parameter returns the same error. For database sources it also connects and reflects the table, as ``get``
         does before querying (median 0.2 s), so an unreachable source or a missing table returns the same 503. It
         never runs the query: field and sort names, the XLSX row limit and slow queries are not detected. HTTP
-        sources are not opened, because opening one downloads the whole remote file.
+        sources are not opened, because opening one downloads the whole remote file, and neither are the internal
+        transport sources (their state is only known to ``get``).
 
         The response has no ``Content-Length``, since the size is only known after building the file; it is a
         streaming response so that ``CommonMiddleware`` does not announce 0 bytes. ``ResourceSizeConfig`` is not
@@ -892,7 +925,8 @@ class DownloadView(APIViewMixin):
         timer.attrs["format"] = format
 
         resource_config = _get_resource(resource_id=resource_id)
-        if urlparse(resource_config.connector_config.uri).scheme not in _HTTP_SCHEMAS:
+        uri = resource_config.connector_config.uri
+        if urlparse(uri).scheme not in _HTTP_SCHEMAS and not transport_sources.is_internal(uri):
             with contextlib.ExitStack() as stack:
                 self._open_shared_resource(stack, resource_config, resource_id, timer, False)
 
