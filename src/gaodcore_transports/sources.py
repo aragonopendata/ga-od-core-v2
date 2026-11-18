@@ -15,7 +15,9 @@ stop comes from an equality on ``stop_id`` or ``cod_parada`` in ``filters``. Eac
 (``zaragoza:arrival:<code>``, expiring by itself), at most one worker calls the API for a stop at a time (a lock per
 stop) and at most ``arrivals_max_concurrency`` calls run at once among all the workers (slots). Nobody waits: a request
 that cannot call serves the previous value while it is young enough, or gets a quick 503. A query that designates no
-stop would need every row; ``open_all_arrivals`` is the single place for it and is not served yet.
+stop is the aggregate of every stop of the stops copy (``zaragoza:arrival:all``): rebuilt in the request that gets
+``lock:all`` (one call per stop, ``max_concurrency`` at a time, a failed stop is skipped and counted), served from the
+cache otherwise, or the previous aggregate / 503 while another worker rebuilds.
 """
 
 import csv
@@ -26,6 +28,7 @@ import logging
 import math
 import re
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from http import HTTPStatus
 from time import monotonic
@@ -94,6 +97,12 @@ UNKNOWN_STOP_NAME = "parada desconocida"
 _STOP_CODE_RE = re.compile(r"[1-9][0-9]{0,5}")
 _MAX_STOP_CODE = 999999
 
+# Keys of the aggregate of every stop. The value expires after its TTL plus the stale margin; the lock and the error
+# key (a rebuild where every stop failed) expire by themselves.
+ALL_KEY = "zaragoza:arrival:all"
+ALL_ERROR_KEY = "zaragoza:arrival:all:error"
+ALL_LOCK_KEY = "lock:all"
+
 
 def internal_config():
     """``projects.transport.zaragoza.internal`` of the configuration (tests replace it)."""
@@ -120,10 +129,6 @@ def source_of(uri: str) -> str:
 
 def is_internal(uri: str) -> bool:
     return urlparse(uri or "").scheme == INTERNAL_SCHEME
-
-
-def _not_supported(source: str) -> NotImplementedSchemaError:
-    return NotImplementedSchemaError(f'Internal source "{source}" without a stop is not supported yet.')
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -429,9 +434,23 @@ class ArrivalAnswer:
 def open_all_arrivals(timer=None) -> Tuple[OpenResource, str]:
     """Resource with the arrivals of every stop: the single place where the aggregate (a query without a stop) hooks in.
 
-    @raise NotImplementedSchemaError: not served yet.
+    @raise DataNotReady: no usable stops copy, or the shared cache is down.
+    @raise UpstreamBusy, ServiceUnavailable, BadGateway: no aggregate to serve and none could be built.
     """
-    raise _not_supported(SOURCE_ARRIVALS)
+    with phase(timer, "connect"):
+        aggregate, description = lookup_all_arrivals()
+    return _resource_from_rows(aggregate["fields"], aggregate["rows"], timer), description
+
+
+def _resource_from_rows(fields: List[str], rows: List[List[str]], timer=None) -> OpenResource:
+    with phase(timer, "connect"):
+        engine = engine_from_rows([dict(zip(fields, row)) for row in rows], fields)
+        try:
+            model = _get_model(engine=engine, object_location=None, object_location_schema=None)
+        except BaseException:
+            engine.dispose()
+            raise
+    return OpenResource(engine=engine, model=model)
 
 
 def arrivals_resource(plan: ArrivalPlan, timer=None) -> Tuple[OpenResource, str]:
@@ -444,14 +463,124 @@ def arrivals_resource(plan: ArrivalPlan, timer=None) -> Tuple[OpenResource, str]
         with phase(timer, "connect"):
             answer = lookup_arrivals(plan.code)
         fields, rows, description = answer.fields, answer.rows, answer.describe()
-    with phase(timer, "connect"):
-        engine = engine_from_rows([dict(zip(fields, row)) for row in rows], fields)
+    return _resource_from_rows(fields, rows, timer), description
+
+
+def _all_description(entry: Dict[str, Any], state: str, age: float) -> str:
+    return f"arrivals:all:{state}:age={age:.0f}:failures={entry['failures']}"
+
+
+def lookup_all_arrivals() -> Tuple[Dict[str, Any], str]:
+    """The aggregate of the arrivals of every stop of the stops copy and what was done to get it.
+
+    Fresh for ``arrivals_aggregate_ttl_seconds``. Older (up to ``arrivals_aggregate_max_stale_seconds`` more) it is
+    served while one request, the one that gets ``lock:all``, rebuilds it: one call per stop, ``max_concurrency`` at a
+    time, within the lock. Nobody waits for a lock: the rest serve the previous aggregate or get a quick 503
+    (``UpstreamBusy``). When every stop failed nothing is published and no new attempt is made for
+    ``arrivals_aggregate_error_ttl_seconds``. Any Redis error is ``DataNotReady``.
+    """
+    cfg = internal_config()
+    cache = transports_cache()
+    try:
+        entry = cache.get(ALL_KEY)
+        age = _arrival_age(entry)
+        if age is not None and age < cfg.arrivals_aggregate_ttl_seconds:
+            return entry, _all_description(entry, "hit", age)
+        failed = cache.get(ALL_ERROR_KEY)
+        if failed is not None:
+            remaining = cfg.arrivals_aggregate_error_ttl_seconds - (timezone.now() - failed["at"]).total_seconds()
+            return _stale_all_or_raise(entry, age, cfg, _arrival_failure(failed["kind"], remaining), "failed")
+        token = uuid4().hex
+        if not cache.add(ALL_LOCK_KEY, token, cfg.arrivals_aggregate_lock_seconds):
+            busy = UpstreamBusy(cfg.arrivals_aggregate_retry_after_seconds)
+            return _stale_all_or_raise(entry, age, cfg, busy, "busy")
         try:
-            model = _get_model(engine=engine, object_location=None, object_location_schema=None)
-        except BaseException:
-            engine.dispose()
-            raise
-    return OpenResource(engine=engine, model=model), description
+            return _rebuild_all(cache, cfg, entry, age)
+        finally:
+            _release(cache, ALL_LOCK_KEY, token)
+    except RedisError as err:
+        logger.warning("The transports cache is not available for the arrivals aggregate: %s: %s",
+                       type(err).__name__, err)
+        exc = DataNotReady(cfg.arrivals_aggregate_retry_after_seconds)
+        exc.transport = "arrivals:all:unavailable"
+        raise exc from err
+
+
+def _stale_all_or_raise(entry, age, cfg, exc, reason: str):
+    """Serve the previous aggregate if still within the stale margin, else raise ``exc``."""
+    limit = cfg.arrivals_aggregate_ttl_seconds + cfg.arrivals_aggregate_max_stale_seconds
+    if age is not None and age < limit:
+        return entry, _all_description(entry, f"stale-{reason}", age)
+    exc.transport = f"arrivals:all:{reason}"
+    raise exc
+
+
+def _rebuild_all(cache, cfg, entry, age):
+    """Call every stop under the lock and publish the aggregate; if all fail keep the previous one and back off."""
+    # Another worker may have published while this one was getting the lock.
+    current = cache.get(ALL_KEY)
+    current_age = _arrival_age(current)
+    if current_age is not None and current_age < cfg.arrivals_aggregate_ttl_seconds:
+        return current, _all_description(current, "hit", current_age)
+    started = monotonic()
+    try:
+        stops, _state = load_stops()
+    except SnapshotUnavailable as err:
+        # Without the catalogue there is nothing to ask for: serve the previous aggregate or say it is not ready.
+        exc = DataNotReady(cfg.stops_retry_after_seconds)
+        exc.transport = f"arrivals:all:{err.reason}"
+        return _stale_all_or_raise(entry, age, cfg, exc, "nostops")
+    # The lock expires ``arrivals_aggregate_lock_seconds`` after it was taken: stop calling before that.
+    deadline = started + cfg.arrivals_aggregate_lock_seconds - 5
+    items, failures, kind = _fetch_all_arrivals(cfg, stops, deadline)
+    duration = monotonic() - started
+    count = len(stops)
+    if failures == count:
+        cache.set(ALL_ERROR_KEY, {"kind": kind, "at": timezone.now()}, cfg.arrivals_aggregate_error_ttl_seconds)
+        logger.warning("transport_refresh source=%s result=failed stops=%s failures=%s duration=%.3f",
+                       f"{SOURCE_ARRIVALS}:all", count, failures, duration)
+        return _stale_all_or_raise(entry, age, cfg, _arrival_failure(kind, cfg.arrivals_aggregate_error_ttl_seconds),
+                                   "failed")
+    fields, rows = as_csv_rows(items)
+    value = {"fetched_at": timezone.now(), "fields": fields, "rows": rows, "stops": count, "failures": failures}
+    try:
+        cache.set(ALL_KEY, value, cfg.arrivals_aggregate_ttl_seconds + cfg.arrivals_aggregate_max_stale_seconds)
+    except RedisError:
+        # The rows are good: answer with them even though the others cannot reuse them.
+        logger.warning("Could not cache the arrivals aggregate", exc_info=True)
+    log = logger.warning if failures else logger.info
+    log("transport_refresh source=%s result=refreshed stops=%s rows=%s failures=%s duration=%.3f",
+        f"{SOURCE_ARRIVALS}:all", count, len(rows), failures, duration)
+    return value, _all_description(value, "rebuilt", 0.0)
+
+
+def _fetch_all_arrivals(cfg, stops, deadline: float) -> Tuple[List[Dict[str, Any]], int, str]:
+    """Rows (dicts, as the old fan-out built them) of every stop, the number of stops that failed and the kind of the
+    last failure. A failed stop (error, invalid answer or no time left) only counts: it never fails the others."""
+    from gaodcore_transports.views.zaragoza import arrival_time_configs  # pylint: disable=import-outside-toplevel
+
+    zaragoza = zaragoza_config()
+    configs = arrival_time_configs(stops, zaragoza.get_url)
+
+    def one(config) -> List[Dict[str, Any]]:
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise FetchError("error", "no time left in the rebuild")
+        data = fetch_json(config.url, min(cfg.arrivals_timeout_seconds, remaining), cfg.arrivals_max_bytes)
+        _status, items = _arrival_items(config.extra_data["stop_id"], data)
+        return items
+
+    def safe(config):
+        try:
+            return one(config), None
+        except FetchError as err:
+            return [], err.kind
+
+    with ThreadPoolExecutor(max_workers=max(1, zaragoza.max_concurrency)) as pool:
+        results = list(pool.map(safe, configs))
+    kinds = [kind for _items, kind in results if kind is not None]
+    items = [item for rows, kind in results if kind is None for item in rows]
+    return items, len(kinds), (kinds[-1] if kinds else "error")
 
 
 def _arrival_ttl(cfg, status: str) -> int:
@@ -589,6 +718,19 @@ def parse_arrivals(code: str, data: Any) -> Tuple[str, List[str], List[List[str]
 
     @raise FetchError('invalid'): the answer is not an object with a list (or object) of arrival objects.
     """
+    status, rows = _arrival_items(code, data)
+    if status != "ok":
+        return status, list(ARRIVAL_COLUMNS), []
+    fields, text_rows = as_csv_rows(rows)
+    return "ok", fields, text_rows
+
+
+def _arrival_items(code: str, data: Any) -> Tuple[str, List[Dict[str, Any]]]:
+    """Status (``ok``, ``empty``, ``unknown``) and the arrival objects of an answer, each with the stop code in
+    ``stop_id`` and ``cod_parada``.
+
+    @raise FetchError('invalid'): the answer is not an object with a list (or object) of arrival objects.
+    """
     if not isinstance(data, dict):
         raise FetchError("invalid", "the answer is not an object")
     arrivals = data.get("arrival_time")
@@ -600,12 +742,10 @@ def parse_arrivals(code: str, data: Any) -> Tuple[str, List[str], List[List[str]
         raise FetchError("invalid", "arrival_time is not a list of objects")
     name = data.get("nombre")
     if isinstance(name, str) and name.strip().casefold() == UNKNOWN_STOP_NAME:
-        return "unknown", list(ARRIVAL_COLUMNS), []
+        return "unknown", []
     if not arrivals:
-        return "empty", list(ARRIVAL_COLUMNS), []
-    rows = [{**item, "stop_id": code, "cod_parada": code} for item in arrivals]
-    fields, text_rows = as_csv_rows(rows)
-    return "ok", fields, text_rows
+        return "empty", []
+    return "ok", [{**item, "stop_id": code, "cod_parada": code} for item in arrivals]
 
 
 def as_csv_rows(rows: List[Dict[str, Any]]) -> Tuple[List[str], List[List[str]]]:
@@ -656,7 +796,7 @@ def open_for_request(uri: str, filters, like, fields, sort, timer=None) -> Opene
     @raise DataNotReady: stops without a usable copy, or the shared cache down (503 with Retry-After).
     @raise FieldNoExistsError, SortFieldNoExistsError: arrivals with an unknown column or ``id`` without a stop (400).
     @raise UpstreamBusy, ServiceUnavailable, BadGateway: arrivals that cannot be called or whose call failed.
-    @raise NotImplementedSchemaError: arrivals without a stop (the aggregate is not served yet).
+    @raise UpstreamBusy, BadGateway, ...: see ``open_all_arrivals`` for arrivals without a stop.
     """
     source = source_of(uri)
     if source == SOURCE_STOPS:

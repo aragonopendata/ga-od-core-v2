@@ -16,7 +16,7 @@ from rest_framework.views import APIView
 
 import connectors
 from gaodcore_transports import sources
-from gaodcore_transports.tests.conftest import ARRIVALS_URI, STOPS_URI
+from gaodcore_transports.tests.conftest import STOPS_URI
 
 pytestmark = pytest.mark.usefixtures("stops_source")
 
@@ -284,6 +284,4 @@ def test_engine_for_uri_serves_the_columns_for_health_checks(transports_cache, c
 def test_unknown_internal_source_and_arrivals_without_a_stop_are_clear_errors():
     with pytest.raises(connectors.NotImplementedSchemaError, match="does not exist"):
         sources.source_of("internal://transports/zaragoza/other")
-    with pytest.raises(connectors.NotImplementedSchemaError, match="not supported yet"):
-        sources.open_for_request(ARRIVALS_URI, {}, {}, [], [])
     assert sources.is_internal(STOPS_URI) and not sources.is_internal("https://example.org/")

@@ -6,7 +6,7 @@ from typing import Optional, Dict, List, Union
 from urllib.parse import urljoin
 from sys import platform
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 try:
     _CONFIG_PATH = os.environ['CONFIG_PATH']
@@ -71,6 +71,8 @@ class ZaragozaInternalSources(BaseModel):
     stops: a copy of the stops catalogue shared by every worker (``transports`` cache), refreshed on demand by the
     request that finds it old and gets the lock. arrival_time: the arrivals of one stop, read from
     ``arrival_time/{code}`` with a cache shared by every worker and a ceiling of simultaneous calls to the API.
+    arrivals_aggregate_*: the arrivals of every stop (a query without a stop), rebuilt in the request that gets the
+    lock; the rebuild stops calling ``arrivals_aggregate_lock_seconds`` - 5 s after it starts, so the lock outlives it.
     """
 
     stops_max_age_seconds: int = Field(default=3600, ge=60)
@@ -89,6 +91,18 @@ class ZaragozaInternalSources(BaseModel):
     arrivals_timeout_seconds: float = Field(default=3, gt=0)
     arrivals_busy_retry_after_seconds: int = Field(default=2, ge=1)
     arrivals_max_bytes: int = Field(default=1_000_000, ge=1024)
+    arrivals_aggregate_ttl_seconds: int = Field(default=300, ge=1)
+    arrivals_aggregate_max_stale_seconds: int = Field(default=600, ge=0)
+    arrivals_aggregate_lock_seconds: int = Field(default=60, ge=1)
+    arrivals_aggregate_error_ttl_seconds: int = Field(default=30, ge=1)
+    arrivals_aggregate_retry_after_seconds: int = Field(default=5, ge=1)
+
+    @model_validator(mode="after")
+    def _aggregate_lock_outlives_a_call(self):
+        """The aggregate lock must outlive the slowest call it protects, or two workers could rebuild at once."""
+        if self.arrivals_aggregate_lock_seconds <= self.arrivals_timeout_seconds + 5:
+            raise ValueError("arrivals_aggregate_lock_seconds must exceed arrivals_timeout_seconds + 5")
+        return self
 
 
 class ZaragozaTransport(BaseModel, GetURL):

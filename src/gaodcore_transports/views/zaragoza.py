@@ -32,6 +32,19 @@ class DownloadProcessorConfig:
     extra_data: Dict[str, Any]
 
 
+def arrival_time_configs(stops: List[Dict[str, Any]], get_url) -> List[DownloadProcessorConfig]:
+    """One download per stop of ``arrival_time``; every row carries the stop in ``stop_id`` and ``cod_parada``. Shared
+    by ``ArrivalTimeView`` and the in-process aggregate of the internal sources (``get_url`` builds the URL)."""
+    return [
+        DownloadProcessorConfig(
+            url=get_url("arrival_time", stop_id=stop["stop_id"]),
+            root_name="arrival_time",
+            extra_data={"stop_id": stop["stop_id"], "cod_parada": stop["stop_id"]},
+        )
+        for stop in stops
+    ]
+
+
 async def _download_processor_item(
     session: aiohttp.ClientSession, url: str, root_name: str, extra_data
 ) -> List[Dict[str, Any]]:
@@ -212,19 +225,7 @@ class ArrivalTimeView(ZaragozaTransportMixin):  # pylint: disable=too-few-public
     @method_decorator(cache_page(CONFIG.common_config.cache_ttl))
     def get(self, _: Request, **_kwargs):
         """Implementation of get of APIViewMixin."""
-        configs = [
-            DownloadProcessorConfig(
-                url=CONFIG.projects.transport.zaragoza.get_url(
-                    self._ENDPOINT, stop_id=stop[self._STOP_ID_FIELD]
-                ),
-                root_name=self._ENDPOINT,
-                extra_data={
-                    self._STOP_ID_FIELD: stop[self._STOP_ID_FIELD],
-                    self._STOP_CODE_ALIAS_FIELD: stop[self._STOP_ID_FIELD],
-                },
-            )
-            for stop in _get_stops()
-        ]
+        configs = arrival_time_configs(_get_stops(), CONFIG.projects.transport.zaragoza.get_url)
         data = asyncio.run(_download_processor(configs))
         return Response(get_return_list(data))
 

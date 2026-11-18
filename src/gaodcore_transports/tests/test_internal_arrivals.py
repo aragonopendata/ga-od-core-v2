@@ -202,12 +202,12 @@ def test_equalities_no_row_can_match_are_empty_without_calling(consorcio, filter
     "filters", [{}, {"id_linea": "111"}, {"stop_id": [40, 55]}, {"cod_parada": {"$gt": 1}}],
     ids=["no-filter", "other-column", "list-of-stops", "operator"],
 )
-def test_query_without_a_stop_is_the_aggregate_hook_and_does_not_call(consorcio, filters):
+def test_query_without_a_stop_is_the_aggregate_hook(consorcio, filters):
     with mock.patch.object(sources, "open_all_arrivals", wraps=sources.open_all_arrivals) as hook:
-        with pytest.raises(connectors.NotImplementedSchemaError, match="without a stop"):
-            open_arrivals(filters)
+        opened = open_arrivals(filters)
+    opened.resource.engine.dispose()
     hook.assert_called_once()
-    assert consorcio.total_hits() == 0
+    assert opened.description.startswith("arrivals:all:rebuilt")
 
 
 def test_network_error_is_a_503_not_an_empty_success(arrivals_source, consorcio):

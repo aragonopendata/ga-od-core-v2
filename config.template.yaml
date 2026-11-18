@@ -96,3 +96,8 @@ projects:
         arrivals_timeout_seconds: 3          # bound of one call to arrival_time (locks expire 5 s after it)
         arrivals_busy_retry_after_seconds: 2 # Retry-After of the 503 when no call is possible or the cache is down
         arrivals_max_bytes: 1000000          # larger answers are rejected as invalid
+        arrivals_aggregate_ttl_seconds: 300  # arrivals of every stop (query without a stop) are reused for this long
+        arrivals_aggregate_max_stale_seconds: 600  # an expired aggregate may still be served this long
+        arrivals_aggregate_lock_seconds: 60  # one worker rebuilds at a time; must exceed arrivals_timeout_seconds + 5
+        arrivals_aggregate_error_ttl_seconds: 30  # after a rebuild where every stop failed, no new attempt for this long
+        arrivals_aggregate_retry_after_seconds: 5 # Retry-After of the 503 while another worker rebuilds
