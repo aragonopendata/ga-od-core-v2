@@ -338,6 +338,8 @@ DJANGO_EASY_AUDIT_REGISTERED_URLS = [
 # The WSGI wrapper in gaodcore_project.wsgi rewrites it from X-Forwarded-For when
 # the request comes through a reverse proxy, so the real client IP is audited.
 DJANGO_EASY_AUDIT_REMOTE_ADDR_HEADER = "REMOTE_ADDR"
+# Rewritten by every connector health check: auditing it would only add noise.
+DJANGO_EASY_AUDIT_UNREGISTERED_CLASSES_EXTRA = ["gaodcore_health.ConnectorServerInfo"]
 
 # During testing, disable audit logging to avoid database constraint issues
 if "test" in sys.argv or "pytest" in sys.modules:

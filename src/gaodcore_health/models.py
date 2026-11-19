@@ -359,3 +359,57 @@ class ResourceHealthCheckAlert(models.Model):
         """Mark that an alert has been sent"""
         self.last_alert_time = timezone.now()
         self.save()
+
+
+class ConnectorServerInfo(models.Model):
+    """
+    Last database version observed for a connector.
+
+    One row per database connector, written by its health check when the
+    connection succeeds. A failed check leaves the row untouched, so it keeps
+    the last known version (``last_seen_at`` tells how old it is). Connectors
+    that are not database servers (HTTP APIs) have no row.
+    """
+
+    connector = models.OneToOneField(
+        ConnectorConfig,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="server_info",
+        verbose_name=_("Connector"),
+    )
+    dialect = models.CharField(
+        max_length=50,
+        verbose_name=_("Database"),
+        help_text=_("Database engine reported by the server (oracle, postgresql, mssql, mysql, mariadb, sqlite)"),
+    )
+    version = models.CharField(
+        max_length=50,
+        verbose_name=_("Version"),
+        help_text=_("Numeric server version reported when connecting"),
+    )
+    first_seen_at = models.DateTimeField(
+        verbose_name=_("Version first seen at"),
+        help_text=_("First health check that observed this version"),
+    )
+    last_seen_at = models.DateTimeField(
+        verbose_name=_("Version last seen at"),
+        help_text=_("Last health check that observed this version"),
+    )
+    previous_dialect = models.CharField(
+        max_length=50, null=True, blank=True,
+        verbose_name=_("Previous database"),
+    )
+    previous_version = models.CharField(
+        max_length=50, null=True, blank=True,
+        verbose_name=_("Previous version"),
+        help_text=_("Version observed before the current one"),
+    )
+
+    class Meta:
+        ordering = ["connector__name"]
+        verbose_name = _("Connector Server Info")
+        verbose_name_plural = _("Connector Server Info")
+
+    def __str__(self):
+        return f"{self.connector.name} - {self.dialect} {self.version}"

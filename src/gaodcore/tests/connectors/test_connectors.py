@@ -319,3 +319,13 @@ def test_get_not_or(configs, car_table):
     assert len(result) == 2
     for r in result:
         assert r["name"] in ["Corsa", "Clio"]
+
+
+@pytest.mark.django_db
+def test_probe_uri_reports_postgresql_version(configs):
+    from connectors import probe_uri
+
+    server_version = probe_uri(configs["uri"])
+
+    assert server_version.dialect == "postgresql"
+    assert server_version.version.startswith("16.")

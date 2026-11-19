@@ -35,6 +35,32 @@
             </span>
         </div>
         <div class="health-field-row">
+            <span class="health-field-label">{% trans "Database version" %}</span>
+            <span class="health-field-value">
+                {% if server_info %}
+                    {{ server_info.dialect }} {{ server_info.version }}
+                {% elif is_database %}
+                    {% trans "Unknown" %}
+                {% else %}
+                    {% trans "N/A" %}
+                {% endif %}
+            </span>
+        </div>
+        {% if server_info %}
+        <div class="health-field-row">
+            <span class="health-field-label">{% trans "Version seen" %}</span>
+            <span class="health-field-value">
+                {% blocktrans with first=server_info.first_seen_at|date:"M d, Y H:i" last=server_info.last_seen_at|date:"M d, Y H:i" %}from {{ first }} to {{ last }}{% endblocktrans %}
+            </span>
+        </div>
+        {% if server_info.previous_version %}
+        <div class="health-field-row">
+            <span class="health-field-label">{% trans "Previous version" %}</span>
+            <span class="health-field-value">{{ server_info.previous_dialect }} {{ server_info.previous_version }}</span>
+        </div>
+        {% endif %}
+        {% endif %}
+        <div class="health-field-row">
             <span class="health-field-label">{% trans "Created at" %}</span>
             <span class="health-field-value">{{ connector.created_at|date:"M d, Y H:i" }}</span>
         </div>

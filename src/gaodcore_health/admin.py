@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from .models import (
+    ConnectorServerInfo,
     HealthCheckResult,
     HealthCheckSchedule,
     HealthCheckAlert,
@@ -272,3 +273,31 @@ try:
 
 except ImportError:
     pass
+
+
+@admin.register(ConnectorServerInfo)
+class ConnectorServerInfoAdmin(admin.ModelAdmin):
+    """Read-only inventory of the database versions observed by the connector health checks."""
+
+    list_display = [
+        "connector",
+        "dialect",
+        "version",
+        "first_seen_at",
+        "last_seen_at",
+        "previous_dialect",
+        "previous_version",
+    ]
+    list_filter = ["dialect", "version"]
+    search_fields = ["connector__name"]
+    list_select_related = ["connector"]
+    ordering = ["dialect", "version", "connector__name"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
