@@ -16,6 +16,7 @@ from rest_framework import status
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 
+from connectors import is_database_uri
 from gaodcore_manager.auth import staff_required
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from .models import HealthCheckResult, ResourceHealthCheckResult
@@ -437,7 +438,7 @@ class ConnectorHealthListView(
                 latest_checks.values("response_time_ms")[:1]
             ),
             latest_error_message=Subquery(latest_checks.values("error_message")[:1]),
-        )
+        ).select_related("server_info")
 
         # Apply status filter at queryset level
         if status_filter == "healthy":
@@ -491,6 +492,9 @@ class ConnectorHealthListView(
                 if latest_is_healthy is False
                 else None,
                 "enabled": connector.enabled,
+                # Missing reverse one-to-one raises a subclass of AttributeError.
+                "server_info": getattr(connector, "server_info", None),
+                "is_database": is_database_uri(connector.uri),
                 "object": connector,  # Include the full object for template use
             }
             paginated_health_data.append(connector_data)
@@ -748,7 +752,7 @@ class ConnectorHealthDetailView(
 
     def get_queryset(self):
         """Return enabled connectors only."""
-        return ConnectorConfig.objects.filter(enabled=True)
+        return ConnectorConfig.objects.filter(enabled=True).select_related("server_info")
 
     def get_context_data(self, **kwargs):
         """Add health data and resources to context."""
@@ -766,6 +770,8 @@ class ConnectorHealthDetailView(
             {
                 "connector_health_data": connector_health,
                 "resource_health_data": resources_health,
+                "server_info": getattr(connector, "server_info", None),
+                "is_database": is_database_uri(connector.uri),
                 "page_title": f"Connector Details - {connector.name}",
                 "breadcrumbs": [
                     {"name": _("Connectors"), "url": "gaodcore_health:connector_list"},

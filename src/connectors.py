@@ -2023,8 +2023,48 @@ def check_network_connectivity(uri: str, timeout: Optional[int] = None) -> bool:
         ) from e
 
 
-def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
-    """Validate if URI is available as resource."""
+@dataclass(frozen=True)
+class ServerVersion:
+    """Database engine and version reported by a server when connecting to it."""
+
+    dialect: str
+    version: str
+
+
+# Schemes that _get_engine accepts and rewrites to the driver-qualified scheme it uses.
+_DATABASE_SCHEME_ALIASES = {"oracle": "oracle+oracledb", "mssql": "mssql+pyodbc"}
+
+
+def is_database_uri(uri: str) -> bool:
+    """Whether the URI points to a database server (not to an HTTP API or an internal source)."""
+    scheme = urlparse(uri).scheme
+    return _DATABASE_SCHEME_ALIASES.get(scheme, scheme) in _DATABASE_SCHEMAS
+
+
+def _server_version(connection) -> Optional[ServerVersion]:
+    """Version that SQLAlchemy read from the server when the connection was opened (no extra query).
+
+    Only the numeric components are kept (MySQL reports e.g. ``5.7.44-log``). Never raises: the
+    version is informative and must not turn a working connection into a failed one.
+    """
+    try:
+        dialect = connection.dialect
+        numbers = [str(part) for part in (dialect.server_version_info or ()) if isinstance(part, int)]
+        if not numbers:
+            return None
+        name = "mariadb" if getattr(dialect, "is_mariadb", False) else dialect.name
+        return ServerVersion(dialect=name, version=".".join(numbers))
+    except Exception as err:  # pylint: disable=broad-except
+        logger.warning("Could not read the server version: %s", err)
+        return None
+
+
+def probe_uri(uri: str, timeout: Optional[int] = None) -> Optional[ServerVersion]:
+    """Validate that the URI is available as a resource and return its server version.
+
+    Raises the same errors as :func:`validate_uri`. The version is ``None`` for sources that are not
+    database servers (HTTP APIs are loaded into a local SQLite) and when the server reports none.
+    """
     # Perform network connectivity pre-check for database URIs
     try:
         check_network_connectivity(uri)
@@ -2037,14 +2077,19 @@ def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
 
     engine = _get_engine(uri, timeout=timeout)
     try:
-        with engine.connect() as _:
-            pass
+        with engine.connect() as connection:
+            return _server_version(connection) if is_database_uri(uri) else None
     except sqlalchemy.exc.DatabaseError as err:
         # Log connection failure as warning - expected in health checks
         logger.warning(
             "Connection not available for URI: %s - %s", mask_uri(uri), str(err)
         )
         raise DriverConnectionError("Connection not available.") from err
+
+
+def validate_uri(uri: str, timeout: Optional[int] = None) -> None:
+    """Validate if URI is available as resource."""
+    probe_uri(uri, timeout=timeout)
 
 
 def _csv_to_dict(data: bytes, charset: str) -> List[Dict[str, Any]]:

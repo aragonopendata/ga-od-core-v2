@@ -11,10 +11,12 @@ from datetime import timedelta
 from typing import List, Optional
 
 from django.utils import timezone
-from django.db import models
+from django.db import models, transaction
 
 from connectors import (
-    validate_uri,
+    ServerVersion,
+    is_database_uri,
+    probe_uri,
     get_resource_data,
     DriverConnectionError,
     NoObjectError,
@@ -22,7 +24,12 @@ from connectors import (
 )
 from gaodcore_manager.models import ConnectorConfig, ResourceConfig
 from gaodcore_project.config import Config
-from .models import HealthCheckResult, HealthCheckAlert, ResourceHealthCheckResult
+from .models import (
+    ConnectorServerInfo,
+    HealthCheckAlert,
+    HealthCheckResult,
+    ResourceHealthCheckResult,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -51,13 +58,14 @@ def check_connector_health_sync(
 
     try:
         # Run validation synchronously
-        validate_uri(connector.uri, timeout=timeout)
+        server_version = probe_uri(connector.uri, timeout=timeout)
 
         response_time = int((time.time() - start_time) * 1000)
 
         result = HealthCheckResult(
             connector=connector, is_healthy=True, response_time_ms=response_time
         )
+        _store_server_version(connector, server_version, observed_at=timezone.now())
 
         logger.info(
             "Health check passed for connector: %s (%sms)",
@@ -128,6 +136,68 @@ def check_connector_health_sync(
             failure_reason(e),
         )
         return result
+
+
+def record_server_version(
+    connector: ConnectorConfig, server_version: ServerVersion, observed_at
+) -> None:
+    """Record the version observed by a successful health check of a database connector.
+
+    The same version only moves ``last_seen_at``; a different one becomes the current version and the
+    one it replaces is kept as the previous one.
+    """
+    with transaction.atomic():
+        rows = ConnectorServerInfo.objects.filter(connector=connector)
+        if rows.filter(
+            dialect=server_version.dialect, version=server_version.version
+        ).update(last_seen_at=observed_at):
+            return
+        current = rows.first()
+        if current is None:
+            ConnectorServerInfo.objects.create(
+                connector=connector,
+                dialect=server_version.dialect,
+                version=server_version.version,
+                first_seen_at=observed_at,
+                last_seen_at=observed_at,
+            )
+            return
+        logger.info(
+            "Server version of connector %s changed from %s %s to %s %s",
+            connector.name,
+            current.dialect,
+            current.version,
+            server_version.dialect,
+            server_version.version,
+        )
+        rows.update(
+            previous_dialect=current.dialect,
+            previous_version=current.version,
+            dialect=server_version.dialect,
+            version=server_version.version,
+            first_seen_at=observed_at,
+            last_seen_at=observed_at,
+        )
+
+
+def _store_server_version(
+    connector: ConnectorConfig, server_version: Optional[ServerVersion], observed_at
+) -> None:
+    """Keep the server version of a connector that has just passed its health check.
+
+    Never raises: the version is informative and must not change the result of the check. A connector
+    that is no longer a database (its URI now points to an API) loses its stale row; a database that
+    reported no version keeps the last known one.
+    """
+    try:
+        if server_version is not None:
+            record_server_version(connector, server_version, observed_at)
+        elif not is_database_uri(connector.uri):
+            ConnectorServerInfo.objects.filter(connector=connector).delete()
+    except Exception as err:  # pylint: disable=broad-except
+        logger.warning(
+            "Could not store the server version of connector %s: %s", connector.name, err
+        )
 
 
 def check_all_connectors_health_sync(

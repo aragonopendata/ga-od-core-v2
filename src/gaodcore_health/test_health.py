@@ -140,7 +140,7 @@ class HealthCheckFunctionTests(TransactionTestCase):
             enabled=True,
         )
 
-    @patch("gaodcore_health.health_check.validate_uri")
+    @patch("gaodcore_health.health_check.probe_uri")
     def test_check_connector_health_success(self, mock_validate):
         """Test successful connector health check."""
         mock_validate.return_value = None
@@ -153,7 +153,7 @@ class HealthCheckFunctionTests(TransactionTestCase):
         self.assertIsNone(result.error_message)
         mock_validate.assert_called_once_with(self.connector.uri, timeout=7)
 
-    @patch("gaodcore_health.health_check.validate_uri")
+    @patch("gaodcore_health.health_check.probe_uri")
     def test_check_connector_health_failure(self, mock_validate):
         """Test failed connector health check."""
         from connectors import DriverConnectionError
@@ -168,7 +168,7 @@ class HealthCheckFunctionTests(TransactionTestCase):
         self.assertEqual(result.error_message, "Connection failed")
         self.assertEqual(result.error_type, "connection_error")
 
-    @patch("gaodcore_health.health_check.validate_uri")
+    @patch("gaodcore_health.health_check.probe_uri")
     def test_check_all_connectors_health(self, mock_validate):
         """Test checking all connectors health."""
         # Create another connector
