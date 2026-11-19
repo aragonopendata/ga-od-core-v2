@@ -6,7 +6,7 @@ GA OD Core (Gobierno de Aragón Open Data Core) is a Django application that exp
 
 ## Overview
 
-The application stores connection and resource definitions, retrieves data from the configured sources, and serves it as JSON, CSV, SCSV, XLSX, YAML or XML. It also includes private interfaces for managing those definitions and monitoring their health.
+The application stores connection and resource definitions, retrieves data from the configured sources, and serves it as JSON, CSV, SCSV, XLSX, YAML or XML. It also includes private interfaces for managing those definitions and monitoring their health, including the version of each source database.
 
 Two concepts define the system:
 
