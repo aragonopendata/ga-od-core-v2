@@ -97,4 +97,17 @@ def test_probe_http_source_keeps_its_errors():
 
 def test_probe_unknown_scheme_still_fails():
     with pytest.raises(NotImplementedSchemaError):
-        validate_uri("internal://transports/zaragoza/stops")
+        validate_uri("ftp://example.org/data.csv")
+
+
+def test_probe_internal_source_has_no_version():
+    """Internal sources are served from a local SQLite too: no server version."""
+    assert probe_uri("internal://transports/zaragoza/arrival_time") is None
+
+
+def test_probe_internal_source_keeps_its_errors():
+    from gaodcore_transports import sources
+
+    with patch.object(sources, "stops_resource", side_effect=sources.SnapshotUnavailable("no copy")):
+        with pytest.raises(sources.SnapshotUnavailable):
+            probe_uri("internal://transports/zaragoza/stops")
