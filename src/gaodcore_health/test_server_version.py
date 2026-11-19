@@ -3,7 +3,9 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from connectors import DriverConnectionError, ServerVersion
@@ -119,3 +121,43 @@ class HealthCheckStoresServerVersionTests(TestCase):
         self.assertTrue(result.is_healthy)
         result.save()  # the caller can still persist the healthy result
         self.assertTrue(HealthCheckResult.objects.filter(connector=self.connector, is_healthy=True).exists())
+
+
+class ServerVersionPagesTests(TestCase):
+    def setUp(self):
+        self.oracle = ConnectorConfig.objects.create(
+            name="oracle-conn", uri="oracle://u:p@db:1521/?service_name=X", enabled=True
+        )
+        self.unknown = ConnectorConfig.objects.create(
+            name="pg-conn", uri="postgresql://u:p@pg/db", enabled=True
+        )
+        self.api = ConnectorConfig.objects.create(
+            name="api-conn", uri="https://example.org/data.csv", enabled=True
+        )
+        record_server_version(self.oracle, ORACLE_19, timezone.now() - timedelta(days=2))
+        # The last check failed: the page must still show the version seen before.
+        HealthCheckResult.objects.create(connector=self.oracle, is_healthy=False, error_message="down")
+        self.client.force_login(User.objects.create_user("staff", password="pw", is_staff=True))
+
+    def test_list_shows_versions(self):
+        response = self.client.get(reverse("gaodcore_health:connector_list"))
+
+        self.assertEqual(response.status_code, 200)
+        rows = {c["name"]: c for c in response.context["connector_health_data"]["connectors"]}
+        self.assertEqual(rows["oracle-conn"]["server_info"].version, "19.0.0.0.0")
+        self.assertIsNone(rows["pg-conn"]["server_info"])
+        self.assertTrue(rows["pg-conn"]["is_database"])
+        self.assertFalse(rows["api-conn"]["is_database"])
+        self.assertContains(response, "oracle 19.0.0.0.0")
+
+    def test_detail_shows_version_after_a_failure(self):
+        response = self.client.get(reverse("gaodcore_health:connector_detail", args=[self.oracle.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "oracle 19.0.0.0.0")
+
+    def test_detail_without_version(self):
+        response = self.client.get(reverse("gaodcore_health:connector_detail", args=[self.unknown.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["server_info"])

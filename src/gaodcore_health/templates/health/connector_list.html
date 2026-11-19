@@ -47,6 +47,7 @@
                 <th scope="col">{% trans "Name" %}</th>
                 <th scope="col">{% trans "Status" %}</th>
                 <th scope="col">{% trans "Last Check" %}</th>
+                <th scope="col">{% trans "Database version" %}</th>
             </tr>
         </thead>
         <tbody>
@@ -78,6 +79,16 @@
                             {% trans "Never" %}
                         {% endif %}
                     </span>
+                </td>
+                <td>
+                    {% if connector.server_info %}
+                        <span class="item-name">{{ connector.server_info.dialect }} {{ connector.server_info.version }}</span>
+                        <br><small title="{% trans "Version last seen at" %}">{{ connector.server_info.last_seen_at|date:"M d, H:i" }}</small>
+                    {% elif connector.is_database %}
+                        {% trans "Unknown" %}
+                    {% else %}
+                        {% trans "N/A" %}
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
